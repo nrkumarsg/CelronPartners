@@ -8,6 +8,7 @@ import 'react-quill-new/dist/quill.snow.css';
 export default function VesselForm() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const isNew = id === 'new';
     const { vessels, fetchVessels, addVessel, updateVessel, deleteVessel } = useVesselsStore();
 
     const [loading, setLoading] = useState(false);
@@ -22,19 +23,19 @@ export default function VesselForm() {
 
     useEffect(() => {
         // Ensure store has data
-        if (vessels.length === 0 && id) {
+        if (vessels.length === 0 && id && !isNew) {
             fetchVessels();
         }
-    }, [id, fetchVessels, vessels.length]);
+    }, [id, isNew, fetchVessels, vessels.length]);
 
     useEffect(() => {
-        if (id) {
+        if (id && !isNew) {
             const existingVessel = vessels.find(v => v.id === id);
             if (existingVessel) {
                 setFormData(existingVessel);
             }
         }
-    }, [id, vessels]);
+    }, [id, isNew, vessels]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -55,7 +56,7 @@ export default function VesselForm() {
             delete payload.id;
         }
 
-        if (id) {
+        if (id && !isNew) {
             result = await updateVessel(id, payload);
         } else {
             result = await addVessel(payload);
@@ -108,7 +109,7 @@ export default function VesselForm() {
                         <div style={{ background: 'var(--accent)', color: 'white', padding: '10px', borderRadius: '12px' }}>
                             <Ship size={24} />
                         </div>
-                        <h2 className="page-title">{id ? 'Edit Vessel' : 'New Vessel Entry'}</h2>
+                        <h2 className="page-title">{id && !isNew ? 'Edit Vessel' : 'New Vessel Entry'}</h2>
                     </div>
                 </div>
 
@@ -122,7 +123,7 @@ export default function VesselForm() {
                         <Search size={18} />
                         Google Search
                     </button>
-                    {id && (
+                    {id && !isNew && (
                         <button
                             className="btn btn-danger"
                             onClick={handleDelete}

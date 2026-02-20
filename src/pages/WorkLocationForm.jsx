@@ -8,6 +8,7 @@ import 'react-quill-new/dist/quill.snow.css';
 export default function WorkLocationForm() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const isNew = id === 'new';
     const { workLocations, fetchWorkLocations, addWorkLocation, updateWorkLocation, deleteWorkLocation } = useWorkLocationsStore();
 
     const [loading, setLoading] = useState(false);
@@ -18,19 +19,19 @@ export default function WorkLocationForm() {
     });
 
     useEffect(() => {
-        if (workLocations.length === 0 && id) {
+        if (workLocations.length === 0 && id && !isNew) {
             fetchWorkLocations();
         }
-    }, [id, fetchWorkLocations, workLocations.length]);
+    }, [id, isNew, fetchWorkLocations, workLocations.length]);
 
     useEffect(() => {
-        if (id) {
+        if (id && !isNew) {
             const existingLoc = workLocations.find(l => l.id === id);
             if (existingLoc) {
                 setFormData(existingLoc);
             }
         }
-    }, [id, workLocations]);
+    }, [id, isNew, workLocations]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -51,7 +52,7 @@ export default function WorkLocationForm() {
         }
 
         let result;
-        if (id) {
+        if (id && !isNew) {
             result = await updateWorkLocation(id, payload);
         } else {
             result = await addWorkLocation(payload);
@@ -113,7 +114,7 @@ export default function WorkLocationForm() {
                         <div style={{ background: 'var(--accent)', color: 'white', padding: '10px', borderRadius: '12px' }}>
                             <MapPin size={24} />
                         </div>
-                        <h2 className="page-title">{id ? 'Edit Location' : 'New Work Location'}</h2>
+                        <h2 className="page-title">{id && !isNew ? 'Edit Location' : 'New Work Location'}</h2>
                     </div>
                 </div>
 
@@ -127,7 +128,7 @@ export default function WorkLocationForm() {
                         <Search size={18} />
                         Google Location Search
                     </button>
-                    {id && (
+                    {id && !isNew && (
                         <button
                             className="btn btn-danger"
                             onClick={handleDelete}
