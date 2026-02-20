@@ -11,7 +11,7 @@ export default function Sidebar() {
                     alt="Cel-Ron Logo"
                     className="sidebar-logo"
                 />
-                <h1>Partners</h1>
+                <h1>Cel-Ron Hub</h1>
             </div>
 
             <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -29,7 +29,7 @@ export default function Sidebar() {
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                     <Users size={20} />
-                    Partners Entry
+                    Partners
                 </NavLink>
 
                 <NavLink
@@ -37,7 +37,7 @@ export default function Sidebar() {
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                     <FileText size={20} />
-                    Contacts Directory
+                    Contacts
                 </NavLink>
 
                 <NavLink
