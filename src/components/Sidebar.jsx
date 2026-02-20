@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Ship } from 'lucide-react';
 
 export default function Sidebar() {
     return (
@@ -38,6 +38,14 @@ export default function Sidebar() {
                 >
                     <FileText size={20} />
                     Contacts Directory
+                </NavLink>
+
+                <NavLink
+                    to="/vessels"
+                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                >
+                    <Ship size={20} />
+                    Vessels
                 </NavLink>
 
                 <NavLink

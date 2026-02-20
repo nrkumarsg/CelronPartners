@@ -5,7 +5,8 @@ import Partners from './pages/Partners';
 import PartnerForm from './pages/PartnerForm';
 import ContactsForm from './pages/ContactsForm';
 import ContactsDirectory from './pages/ContactsDirectory';
-
+import VesselsDirectory from './pages/VesselsDirectory';
+import VesselForm from './pages/VesselForm';
 function App() {
   return (
     <div className="app-container">
@@ -17,6 +18,8 @@ function App() {
           <Route path="/partners/:id" element={<PartnerForm />} />
           <Route path="/contacts" element={<ContactsDirectory />} />
           <Route path="/contacts/:id" element={<ContactsForm />} />
+          <Route path="/vessels" element={<VesselsDirectory />} />
+          <Route path="/vessels/:id" element={<VesselForm />} />
           <Route path="*" element={<div style={{ textAlign: 'center', marginTop: '100px' }}><h1>Working on this feature...</h1></div>} />
         </Routes>
       </main>

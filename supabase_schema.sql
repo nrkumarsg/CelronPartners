@@ -50,3 +50,24 @@ CREATE POLICY "Allow anonymous read access on contacts" ON public.contacts FOR S
 CREATE POLICY "Allow anonymous insert access on contacts" ON public.contacts FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow anonymous update access on contacts" ON public.contacts FOR UPDATE USING (true);
 CREATE POLICY "Allow anonymous delete access on contacts" ON public.contacts FOR DELETE USING (true);
+
+-- Create Vessels Table
+CREATE TABLE IF NOT EXISTS public.vessels (
+  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+  vessel_name text NOT NULL,
+  imo_number text,
+  vessel_type text,
+  vessel_management text,
+  vessel_owner text,
+  other_details text,
+  created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- Enable RLS for vessels
+ALTER TABLE public.vessels ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow anonymous read access on vessels" ON public.vessels FOR SELECT USING (true);
+CREATE POLICY "Allow anonymous insert access on vessels" ON public.vessels FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow anonymous update access on vessels" ON public.vessels FOR UPDATE USING (true);
+CREATE POLICY "Allow anonymous delete access on vessels" ON public.vessels FOR DELETE USING (true);
