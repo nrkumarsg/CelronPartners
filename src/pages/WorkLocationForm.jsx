@@ -149,14 +149,18 @@ export default function WorkLocationForm() {
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="form-grid">
-                <div className="glass-panel form-section" style={{ gridColumn: '1 / -1' }}>
-                    <h3 className="form-section-title">Core Location Data</h3>
-                    <div className="form-grid">
-                        <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                            <label>Location Name (City / Branch) *</label>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div className="glass-panel">
+                    <h3 style={{ marginBottom: '24px', fontSize: '1.2rem', color: 'var(--accent)', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                        Location Data
+                    </h3>
+
+                    <div className="grid-2">
+                        <div className="form-group">
+                            <label className="form-label">Location Name (City / Branch) *</label>
                             <input
                                 type="text"
+                                className="form-input"
                                 name="location_name"
                                 value={formData.location_name}
                                 onChange={handleChange}
@@ -165,10 +169,11 @@ export default function WorkLocationForm() {
                             />
                         </div>
 
-                        <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                            <label>Pincode / Zip Code</label>
+                        <div className="form-group">
+                            <label className="form-label">Pincode / Zip Code</label>
                             <input
                                 type="text"
+                                className="form-input"
                                 name="pincode"
                                 value={formData.pincode}
                                 onChange={handleChange}
@@ -179,9 +184,9 @@ export default function WorkLocationForm() {
                 </div>
 
                 {/* Google Map Viewer */}
-                <div className="glass-panel form-section" style={{ gridColumn: '1 / -1', padding: '24px' }}>
-                    <h3 className="form-section-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <MapPin size={18} color="#eab308" /> Location Viewer
+                <div className="glass-panel">
+                    <h3 style={{ marginBottom: '16px', fontSize: '1.2rem', color: '#eab308', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <MapPin size={20} /> Location Viewer
                     </h3>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
                         The map will dynamically update based on the Location Name and Pincode entered above.
@@ -208,8 +213,10 @@ export default function WorkLocationForm() {
                     </div>
                 </div>
 
-                <div className="glass-panel form-section" style={{ gridColumn: '1 / -1' }}>
-                    <h3 className="form-section-title">Other Details</h3>
+                <div className="glass-panel">
+                    <h3 style={{ marginBottom: '24px', fontSize: '1.2rem', color: 'var(--accent)', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                        Other Details
+                    </h3>
                     <div className="form-group">
                         <ReactQuill
                             theme="snow"

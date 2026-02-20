@@ -121,7 +121,7 @@ export default function VesselForm() {
                         disabled={!formData.vessel_name && !formData.imo_number}
                     >
                         <Search size={18} />
-                        Google Search
+                        Vessel Search
                     </button>
                     {id && !isNew && (
                         <button
@@ -144,26 +144,31 @@ export default function VesselForm() {
                 </div>
             </div>
 
-            <form onSubmit={handleSubmit} className="form-grid">
-                <div className="glass-panel form-section" style={{ gridColumn: '1 / -1' }}>
-                    <h3 className="form-section-title">Core Vessel Information</h3>
-                    <div className="form-grid">
-                        <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                            <label>Vessel Name *</label>
-                            <input
-                                type="text"
-                                name="vessel_name"
-                                value={formData.vessel_name}
-                                onChange={handleChange}
-                                placeholder="Enter vessel name"
-                                required
-                            />
-                        </div>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div className="glass-panel">
+                    <h3 style={{ marginBottom: '24px', fontSize: '1.2rem', color: 'var(--accent)', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                        Vessel Information
+                    </h3>
 
+                    <div className="form-group">
+                        <label className="form-label">Vessel Name *</label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            name="vessel_name"
+                            value={formData.vessel_name}
+                            onChange={handleChange}
+                            placeholder="Enter vessel name"
+                            required
+                        />
+                    </div>
+
+                    <div className="grid-2">
                         <div className="form-group">
-                            <label>IMO Number</label>
+                            <label className="form-label">IMO Number</label>
                             <input
                                 type="text"
+                                className="form-input"
                                 name="imo_number"
                                 value={formData.imo_number}
                                 onChange={handleChange}
@@ -172,9 +177,10 @@ export default function VesselForm() {
                         </div>
 
                         <div className="form-group">
-                            <label>Vessel Type</label>
+                            <label className="form-label">Vessel Type</label>
                             <input
                                 type="text"
+                                className="form-input"
                                 name="vessel_type"
                                 value={formData.vessel_type}
                                 onChange={handleChange}
@@ -182,10 +188,11 @@ export default function VesselForm() {
                             />
                         </div>
 
-                        <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                            <label>Vessel Management</label>
+                        <div className="form-group">
+                            <label className="form-label">Vessel Management</label>
                             <input
                                 type="text"
+                                className="form-input"
                                 name="vessel_management"
                                 value={formData.vessel_management}
                                 onChange={handleChange}
@@ -193,10 +200,11 @@ export default function VesselForm() {
                             />
                         </div>
 
-                        <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                            <label>Vessel Owner</label>
+                        <div className="form-group">
+                            <label className="form-label">Vessel Owner</label>
                             <input
                                 type="text"
+                                className="form-input"
                                 name="vessel_owner"
                                 value={formData.vessel_owner}
                                 onChange={handleChange}
@@ -206,8 +214,10 @@ export default function VesselForm() {
                     </div>
                 </div>
 
-                <div className="glass-panel form-section" style={{ gridColumn: '1 / -1' }}>
-                    <h3 className="form-section-title">Other Details</h3>
+                <div className="glass-panel">
+                    <h3 style={{ marginBottom: '24px', fontSize: '1.2rem', color: 'var(--accent)', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px' }}>
+                        Other Details
+                    </h3>
                     <div className="form-group">
                         <ReactQuill
                             theme="snow"
