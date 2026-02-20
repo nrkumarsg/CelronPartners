@@ -53,7 +53,7 @@ export default function Sidebar() {
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                     <FileText size={20} />
-                    Reports (Coming Soon)
+                    Reports
                 </NavLink>
 
                 <NavLink
