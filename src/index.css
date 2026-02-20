@@ -395,6 +395,9 @@ tr:hover {
 
   .sidebar-brand {
     justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 8px;
     padding-bottom: 12px;
     margin-bottom: 24px;
   }
@@ -407,7 +410,10 @@ tr:hover {
   }
 
   .sidebar-brand h1 {
-    display: none;
+    display: block;
+    font-size: 1rem !important;
+    text-align: center;
+    letter-spacing: 0.05em;
   }
 
   .nav-text {
