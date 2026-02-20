@@ -11,7 +11,7 @@ export default function Sidebar() {
                     alt="Cel-Ron Logo"
                     className="sidebar-logo"
                 />
-                <h1 style={{ fontSize: '2.4rem' }}>HUB</h1>
+                <h1 style={{ fontSize: '1.8rem', letterSpacing: '0.05em' }}>HUB</h1>
             </div>
 
             <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

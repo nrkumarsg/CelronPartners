@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Users, DollarSign, Activity, FileSpreadsheet } from 'lucide-react';
+import { Search, Users, DollarSign, Activity, FileSpreadsheet, Ship, MapPin } from 'lucide-react';
 import { getPartners, getContacts } from '../lib/store';
+import { supabase } from '../lib/supabase';
 
 export default function Dashboard() {
     const [searchTerm, setSearchTerm] = useState('');
@@ -8,7 +9,9 @@ export default function Dashboard() {
         totalPartners: 0,
         customers: 0,
         suppliers: 0,
-        totalContacts: 0
+        totalContacts: 0,
+        totalVessels: 0,
+        totalLocations: 0
     });
 
     const [partners, setPartners] = useState([]);
@@ -28,11 +31,16 @@ export default function Dashboard() {
                 if (pt.types?.includes('Supplier') || pt.types?.includes('Supplier Related')) suppliers++;
             });
 
+            const { count: vesselsCount } = await supabase.from('vessels').select('*', { count: 'exact', head: true });
+            const { count: locationsCount } = await supabase.from('work_locations').select('*', { count: 'exact', head: true });
+
             setStats({
                 totalPartners: p.length,
                 customers,
                 suppliers,
-                totalContacts: c.length
+                totalContacts: c.length,
+                totalVessels: vesselsCount || 0,
+                totalLocations: locationsCount || 0
             });
             setLoading(false);
         }
@@ -59,7 +67,7 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '24px', marginBottom: '32px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '24px', marginBottom: '32px' }}>
                 <div className="stat-card">
                     <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
                         <span>Total Partners</span>
@@ -90,6 +98,22 @@ export default function Dashboard() {
                         <FileSpreadsheet size={20} color="#c084fc" />
                     </div>
                     <div className="stat-value">{loading ? '...' : stats.totalContacts}</div>
+                </div>
+
+                <div className="stat-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                        <span>Total Vessels</span>
+                        <Ship size={20} color="#3b82f6" />
+                    </div>
+                    <div className="stat-value">{loading ? '...' : stats.totalVessels}</div>
+                </div>
+
+                <div className="stat-card">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
+                        <span>Work Locations</span>
+                        <MapPin size={20} color="#f97316" />
+                    </div>
+                    <div className="stat-value">{loading ? '...' : stats.totalLocations}</div>
                 </div>
             </div>
 
