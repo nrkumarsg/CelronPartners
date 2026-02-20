@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, Settings, Ship } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin } from 'lucide-react';
 
 export default function Sidebar() {
     return (
@@ -46,6 +46,14 @@ export default function Sidebar() {
                 >
                     <Ship size={20} />
                     Vessels
+                </NavLink>
+
+                <NavLink
+                    to="/work-locations"
+                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                >
+                    <MapPin size={20} />
+                    Work Locations
                 </NavLink>
 
                 <NavLink
