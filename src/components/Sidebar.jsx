@@ -21,7 +21,7 @@ export default function Sidebar() {
                     end
                 >
                     <LayoutDashboard size={20} />
-                    Dashboard
+                    <span className="nav-text">Dashboard</span>
                 </NavLink>
 
                 <NavLink
@@ -29,7 +29,7 @@ export default function Sidebar() {
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                     <Users size={20} />
-                    Partners
+                    <span className="nav-text">Partners</span>
                 </NavLink>
 
                 <NavLink
@@ -37,7 +37,7 @@ export default function Sidebar() {
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                     <FileText size={20} />
-                    Contacts
+                    <span className="nav-text">Contacts</span>
                 </NavLink>
 
                 <NavLink
@@ -45,7 +45,7 @@ export default function Sidebar() {
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                     <Ship size={20} />
-                    Vessels
+                    <span className="nav-text">Vessels</span>
                 </NavLink>
 
                 <NavLink
@@ -53,7 +53,7 @@ export default function Sidebar() {
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                     <MapPin size={20} />
-                    Work Locations
+                    <span className="nav-text">Work Locations</span>
                 </NavLink>
 
                 <NavLink
@@ -61,7 +61,7 @@ export default function Sidebar() {
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                     <FileText size={20} />
-                    Reports
+                    <span className="nav-text">Reports</span>
                 </NavLink>
 
                 <NavLink
@@ -69,13 +69,13 @@ export default function Sidebar() {
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
                     <Settings size={20} />
-                    Module Settings
+                    <span className="nav-text">Module Settings</span>
                 </NavLink>
             </nav>
 
-            <div style={{ marginTop: 'auto', padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px' }}>
+            <div className="integration-status" style={{ marginTop: 'auto', padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', textAlign: 'center' }}>
                 <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Integration Status: <span style={{ color: '#4ade80' }}>Connected</span>
+                    <span className="nav-text">Integration Status: </span><span style={{ color: '#4ade80', fontWeight: 'bold' }}>•</span>
                 </p>
             </div>
         </aside>

@@ -385,3 +385,55 @@ tr:hover {
   outline: none;
   margin-left: 12px;
 }
+
+/* Responsive Design Overrides */
+@media (max-width: 900px) {
+  .sidebar {
+    width: 80px;
+    padding: 24px 12px;
+  }
+
+  .sidebar-brand {
+    justify-content: center;
+    padding-bottom: 12px;
+    margin-bottom: 24px;
+  }
+
+  .sidebar-logo {
+    width: 48px;
+    height: 48px;
+    padding: 4px;
+    border-radius: 8px;
+  }
+
+  .sidebar-brand h1 {
+    display: none;
+  }
+
+  .nav-text {
+    display: none;
+  }
+
+  .nav-link {
+    justify-content: center;
+    padding: 14px 0;
+  }
+
+  .integration-status {
+    padding: 12px 0 !important;
+  }
+
+  .main-content {
+    padding: 20px;
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+}
