@@ -54,13 +54,14 @@ export default function Dashboard() {
     );
 
     return (
-        <div className="animate-fade-in">
-            <div className="page-header">
-                <h2 className="page-title">Dashboard</h2>
-                <div className="search-bar">
-                    <Search size={20} color="var(--text-secondary)" />
+        <div style={{ background: '#f8fafc', minHeight: '100%', padding: '32px', color: '#334155', borderRadius: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                <h2 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>Dashboard</h2>
+                <div style={{ display: 'flex', alignItems: 'center', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 12px', width: '100%', maxWidth: '350px' }}>
+                    <Search size={18} color="#94a3b8" />
                     <input
                         type="text"
+                        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '10px 0', marginLeft: '8px', fontSize: '0.95rem', color: '#334155' }}
                         placeholder="Global Search Partners..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
