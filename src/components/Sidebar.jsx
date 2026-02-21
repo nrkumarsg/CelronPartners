@@ -1,8 +1,18 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, LogOut, ShieldCheck } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function Sidebar() {
+    const { profile, signOut } = useAuth();
+
+    // Check if user has access to a specific module
+    const hasAccess = (moduleName) => {
+        if (!profile) return false;
+        if (profile.role === 'superadmin') return true;
+        return profile.accessible_modules?.includes(moduleName);
+    };
+
     return (
         <aside className="sidebar">
             <div className="sidebar-brand">
@@ -24,64 +34,109 @@ export default function Sidebar() {
                     <span className="nav-text">Dashboard</span>
                 </NavLink>
 
-                <NavLink
-                    to="/partners"
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                    <Building2 size={20} />
-                    <span className="nav-text">Partners</span>
-                </NavLink>
+                {hasAccess('partners') && (
+                    <NavLink
+                        to="/partners"
+                        className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                    >
+                        <Building2 size={20} />
+                        <span className="nav-text">Partners</span>
+                    </NavLink>
+                )}
 
-                <NavLink
-                    to="/contacts"
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                    <Users size={20} />
-                    <span className="nav-text">Contacts</span>
-                </NavLink>
+                {hasAccess('contacts') && (
+                    <NavLink
+                        to="/contacts"
+                        className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                    >
+                        <Users size={20} />
+                        <span className="nav-text">Contacts</span>
+                    </NavLink>
+                )}
 
-                <NavLink
-                    to="/vessels"
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                    <Ship size={20} />
-                    <span className="nav-text">Vessels</span>
-                </NavLink>
+                {hasAccess('vessels') && (
+                    <NavLink
+                        to="/vessels"
+                        className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                    >
+                        <Ship size={20} />
+                        <span className="nav-text">Vessels</span>
+                    </NavLink>
+                )}
 
-                <NavLink
-                    to="/work-locations"
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                    <MapPin size={20} />
-                    <span className="nav-text">Work Locations</span>
-                </NavLink>
+                {hasAccess('work-locations') && (
+                    <NavLink
+                        to="/work-locations"
+                        className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                    >
+                        <MapPin size={20} />
+                        <span className="nav-text">Work Locations</span>
+                    </NavLink>
+                )}
 
-                <NavLink
-                    to="/catalog"
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                    <Package size={20} />
-                    <span className="nav-text">Catalog</span>
-                </NavLink>
+                {hasAccess('catalog') && (
+                    <NavLink
+                        to="/catalog"
+                        className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                    >
+                        <Package size={20} />
+                        <span className="nav-text">Catalog</span>
+                    </NavLink>
+                )}
 
-                <NavLink
-                    to="/reports"
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                    <FileText size={20} />
-                    <span className="nav-text">Reports</span>
-                </NavLink>
+                {hasAccess('reports') && (
+                    <NavLink
+                        to="/reports"
+                        className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                    >
+                        <FileText size={20} />
+                        <span className="nav-text">Reports</span>
+                    </NavLink>
+                )}
 
-                <NavLink
-                    to="/settings"
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                    <Settings size={20} />
-                    <span className="nav-text">Module Settings</span>
-                </NavLink>
+                {/* Always explicitly check if they are an admin or superadmin to show settings/user management */}
+                {(profile?.role === 'superadmin' || profile?.role === 'admin') && (
+                    <>
+                        <NavLink
+                            to="/admin/users"
+                            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                            style={{ marginTop: 'auto' }}
+                        >
+                            <ShieldCheck size={20} color="#60a5fa" />
+                            <span className="nav-text" style={{ color: '#93c5fd' }}>User Control</span>
+                        </NavLink>
+
+                        <NavLink
+                            to="/settings"
+                            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                        >
+                            <Settings size={20} />
+                            <span className="nav-text">Module Settings</span>
+                        </NavLink>
+                    </>
+                )}
             </nav>
 
             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {profile && (
+                    <div className="user-profile-badge" style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <div style={{ overflow: 'hidden' }}>
+                            <p style={{ fontSize: '0.85rem', color: '#fff', margin: 0, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
+                                {profile.email}
+                            </p>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--accent)', textTransform: 'uppercase', fontWeight: 600 }}>
+                                {profile.role}
+                            </span>
+                        </div>
+                        <button
+                            onClick={() => signOut()}
+                            title="Sign Out"
+                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
+                        >
+                            <LogOut size={18} />
+                        </button>
+                    </div>
+                )}
                 <div className="integration-status" style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', textAlign: 'center' }}>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
                         <span className="nav-text">Integration Status: </span><span style={{ color: '#4ade80', fontWeight: 'bold' }}>•</span>
