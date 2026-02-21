@@ -1,12 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, Download, Upload, Search, Ship } from 'lucide-react';
+import { Plus, Edit2, Trash2, Download, Upload, Search, Ship, Printer } from 'lucide-react';
 import Papa from 'papaparse';
 import { useVesselsStore } from '../lib/vesselsStore';
+import Pagination from '../components/Pagination';
 
 export default function VesselsDirectory() {
     const { vessels, loading, fetchVessels, deleteVessel, addVessel } = useVesselsStore();
     const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
 
@@ -77,6 +80,16 @@ export default function VesselsDirectory() {
         );
     });
 
+    const paginatedVessels = filteredVessels.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
+
+    // Reset pagination when searching
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
+
     return (
         <div className="animate-fade-in">
             <div className="page-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
@@ -115,6 +128,11 @@ export default function VesselsDirectory() {
                         Export CSV
                     </button>
 
+                    <button className="btn btn-secondary" onClick={() => window.print()} disabled={loading}>
+                        <Printer size={18} />
+                        Print
+                    </button>
+
                     <button className="btn btn-primary" onClick={() => navigate('/vessels/new')} disabled={loading}>
                         <Plus size={18} />
                         Add Vessel
@@ -148,7 +166,7 @@ export default function VesselsDirectory() {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredVessels.map(v => (
+                                paginatedVessels.map(v => (
                                     <tr key={v.id}>
                                         <td>
                                             <div style={{ fontWeight: 600 }}>{v.vessel_name}</div>
@@ -159,7 +177,7 @@ export default function VesselsDirectory() {
                                             <div style={{ fontSize: '0.9rem' }}>{v.vessel_management || '-'}</div>
                                             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Owner: {v.vessel_owner || '-'}</div>
                                         </td>
-                                        <td style={{ textAlign: 'right' }}>
+                                        <td style={{ textAlign: 'right' }} className="hide-on-print">
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                                                 <button
                                                     className="btn btn-secondary"
@@ -185,6 +203,15 @@ export default function VesselsDirectory() {
                         </tbody>
                     </table>
                 </div>
+
+                {!loading && filteredVessels.length > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalItems={filteredVessels.length}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={setCurrentPage}
+                    />
+                )}
             </div>
         </div>
     );

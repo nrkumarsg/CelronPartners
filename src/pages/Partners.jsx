@@ -1,13 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, Download, Upload, ExternalLink, Search } from 'lucide-react';
+import { Plus, Edit2, Trash2, Download, Upload, ExternalLink, Search, Printer } from 'lucide-react';
 import Papa from 'papaparse';
 import { getPartners, deletePartner, savePartner } from '../lib/store';
+import Pagination from '../components/Pagination';
 
 export default function Partners() {
     const [partners, setPartners] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
 
@@ -96,6 +99,16 @@ export default function Partners() {
         );
     });
 
+    const paginatedPartners = filteredPartners.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
+
+    // Reset pagination when searching
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
+
     return (
         <div className="animate-fade-in">
             <div className="page-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
@@ -137,6 +150,11 @@ export default function Partners() {
                         Export CSV
                     </button>
 
+                    <button className="btn btn-secondary" onClick={() => window.print()} disabled={loading}>
+                        <Printer size={18} />
+                        Print
+                    </button>
+
                     <button className="btn btn-primary" onClick={() => navigate('/partners/new')} disabled={loading}>
                         <Plus size={18} />
                         Add Partner
@@ -170,7 +188,7 @@ export default function Partners() {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredPartners.map(p => (
+                                paginatedPartners.map(p => (
                                     <tr key={p.id}>
                                         <td>
                                             <div style={{ fontWeight: 600 }}>{p.name}</div>
@@ -178,6 +196,7 @@ export default function Partners() {
                                                 <a href={p.weblink.startsWith('http') ? p.weblink : `https://${p.weblink}`}
                                                     target="_blank"
                                                     rel="noreferrer"
+                                                    className="hide-on-print"
                                                     style={{ fontSize: '0.8rem', color: 'var(--accent)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '4px' }}>
                                                     <ExternalLink size={12} /> Website
                                                 </a>
@@ -195,7 +214,7 @@ export default function Partners() {
                                             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{p.phone1 || '-'}</div>
                                         </td>
                                         <td>{p.country || '-'}</td>
-                                        <td style={{ textAlign: 'right' }}>
+                                        <td style={{ textAlign: 'right' }} className="hide-on-print">
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                                                 <button
                                                     className="btn btn-secondary"
@@ -221,6 +240,15 @@ export default function Partners() {
                         </tbody>
                     </table>
                 </div>
+
+                {!loading && filteredPartners.length > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalItems={filteredPartners.length}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={setCurrentPage}
+                    />
+                )}
             </div>
         </div>
     );

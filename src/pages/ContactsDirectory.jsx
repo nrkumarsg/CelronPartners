@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Edit2, Trash2 } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Printer } from 'lucide-react';
 import { getContacts, deleteContact, getPartners } from '../lib/store';
+import Pagination from '../components/Pagination';
 
 export default function ContactsDirectory() {
     const [contacts, setContacts] = useState([]);
     const [partners, setPartners] = useState({});
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -53,6 +56,16 @@ export default function ContactsDirectory() {
         );
     });
 
+    const paginatedContacts = filteredContacts.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
+
+    // Reset pagination when searching
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
+
     return (
         <div className="animate-fade-in">
             <div className="page-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
@@ -69,6 +82,10 @@ export default function ContactsDirectory() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px' }}>
+                    <button className="btn btn-secondary" onClick={() => window.print()} disabled={loading}>
+                        <Printer size={18} />
+                        Print
+                    </button>
                     <button className="btn btn-primary" onClick={() => navigate('/contacts/new')} disabled={loading}>
                         <Plus size={18} />
                         Add Contact
@@ -102,7 +119,7 @@ export default function ContactsDirectory() {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredContacts.map(c => (
+                                paginatedContacts.map(c => (
                                     <tr key={c.id}>
                                         <td style={{ fontWeight: 600 }}>{c.name}</td>
                                         <td style={{ color: 'var(--accent)', fontWeight: 500 }}>
@@ -113,7 +130,7 @@ export default function ContactsDirectory() {
                                             <div style={{ fontSize: '0.9rem' }}>{c.email || '-'}</div>
                                             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{c.handphone || '-'}</div>
                                         </td>
-                                        <td style={{ textAlign: 'right' }}>
+                                        <td style={{ textAlign: 'right' }} className="hide-on-print">
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                                                 <button
                                                     className="btn btn-secondary"
@@ -139,6 +156,15 @@ export default function ContactsDirectory() {
                         </tbody>
                     </table>
                 </div>
+
+                {!loading && filteredContacts.length > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalItems={filteredContacts.length}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={setCurrentPage}
+                    />
+                )}
             </div>
         </div>
     );

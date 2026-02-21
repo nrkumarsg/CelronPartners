@@ -264,8 +264,9 @@ tr:hover {
 }
 
 .tag {
-  background: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.15);
+  color: #1d4ed8;
+  font-weight: 500;
   padding: 4px 12px;
   border-radius: 9999px;
   font-size: 0.85rem;
@@ -441,5 +442,113 @@ tr:hover {
     flex-direction: column;
     align-items: flex-start;
     gap: 16px;
+  }
+}
+
+/* --- Pagination Styles --- */
+.pagination-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-top: 1px solid var(--border-color);
+  background: var(--input-bg);
+  border-radius: 0 0 16px 16px;
+}
+
+.pagination-info {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pagination-pages {
+  display: flex;
+  gap: 4px;
+}
+
+.pagination-page {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.pagination-page:hover {
+  background: var(--input-bg);
+}
+
+.pagination-page.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+/* --- Print Styles --- */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  .sidebar {
+    display: none !important;
+  }
+
+  .main-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  .hide-on-print,
+  .btn,
+  .search-bar {
+    display: none !important;
+  }
+
+  .glass-panel {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  th,
+  td {
+    padding: 8px !important;
+    border: 1px solid #ddd !important;
+    color: black !important;
+  }
+
+  th {
+    background-color: #f3f4f6 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page-title {
+    margin-bottom: 20px !important;
+    color: black !important;
   }
 }

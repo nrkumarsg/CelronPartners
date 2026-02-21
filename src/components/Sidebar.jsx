@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package } from 'lucide-react';
 
 export default function Sidebar() {
     return (
@@ -28,7 +28,7 @@ export default function Sidebar() {
                     to="/partners"
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
-                    <Users size={20} />
+                    <Building2 size={20} />
                     <span className="nav-text">Partners</span>
                 </NavLink>
 
@@ -36,7 +36,7 @@ export default function Sidebar() {
                     to="/contacts"
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
-                    <FileText size={20} />
+                    <Users size={20} />
                     <span className="nav-text">Contacts</span>
                 </NavLink>
 
@@ -57,6 +57,14 @@ export default function Sidebar() {
                 </NavLink>
 
                 <NavLink
+                    to="/catalog"
+                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                >
+                    <Package size={20} />
+                    <span className="nav-text">Catalog</span>
+                </NavLink>
+
+                <NavLink
                     to="/reports"
                     className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
                 >
@@ -73,10 +81,18 @@ export default function Sidebar() {
                 </NavLink>
             </nav>
 
-            <div className="integration-status" style={{ marginTop: 'auto', padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', textAlign: 'center' }}>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    <span className="nav-text">Integration Status: </span><span style={{ color: '#4ade80', fontWeight: 'bold' }}>•</span>
-                </p>
+            <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div className="integration-status" style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', textAlign: 'center' }}>
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
+                        <span className="nav-text">Integration Status: </span><span style={{ color: '#4ade80', fontWeight: 'bold' }}>•</span>
+                    </p>
+                </div>
+
+                <div style={{ textAlign: 'center', paddingBottom: '8px' }}>
+                    <p className="nav-text" style={{ fontSize: '0.75rem', color: 'rgba(148, 163, 184, 0.7)', margin: 0, letterSpacing: '0.02em' }}>
+                        &copy; 2026 Cel-Ron Enterprises.<br />Global Maritime Excellence.
+                    </p>
+                </div>
             </div>
         </aside>
     );

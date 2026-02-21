@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Upload, Download, Trash2, Edit2, MapPin } from 'lucide-react';
+import { Plus, Search, Upload, Download, Trash2, Edit2, MapPin, Printer } from 'lucide-react';
 import { useWorkLocationsStore } from '../lib/workLocationsStore';
 import Papa from 'papaparse';
+import Pagination from '../components/Pagination';
 
 export default function WorkLocationsDirectory() {
     const navigate = useNavigate();
     const { workLocations, loading, fetchWorkLocations, deleteWorkLocation, addWorkLocation } = useWorkLocationsStore();
     const [searchTerm, setSearchTerm] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
     const [isImporting, setIsImporting] = useState(false);
 
     useEffect(() => {
@@ -21,6 +24,16 @@ export default function WorkLocationsDirectory() {
             (loc.pincode || '').toLowerCase().includes(searchStr)
         );
     });
+
+    const paginatedLocations = filteredLocations.slice(
+        (currentPage - 1) * itemsPerPage,
+        currentPage * itemsPerPage
+    );
+
+    // Reset pagination when searching
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm]);
 
     const handleExportCSV = () => {
         if (workLocations.length === 0) {
@@ -146,6 +159,10 @@ export default function WorkLocationsDirectory() {
                             <Download size={18} />
                             <span className="hide-on-mobile">Export</span>
                         </button>
+                        <button className="btn btn-secondary" onClick={() => window.print()} title="Print">
+                            <Printer size={18} />
+                            <span className="hide-on-mobile">Print</span>
+                        </button>
                         <button className="btn btn-primary" onClick={() => navigate('/work-locations/new')}>
                             <Plus size={18} />
                             <span>Add Location</span>
@@ -180,7 +197,7 @@ export default function WorkLocationsDirectory() {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredLocations.map(loc => (
+                                paginatedLocations.map(loc => (
                                     <tr key={loc.id}>
                                         <td>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -198,7 +215,7 @@ export default function WorkLocationsDirectory() {
                                                 </span>
                                             ) : '-'}
                                         </td>
-                                        <td>
+                                        <td className="hide-on-print">
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                                                 <button
                                                     className="action-btn"
@@ -222,6 +239,15 @@ export default function WorkLocationsDirectory() {
                         </tbody>
                     </table>
                 </div>
+
+                {!loading && filteredLocations.length > 0 && (
+                    <Pagination
+                        currentPage={currentPage}
+                        totalItems={filteredLocations.length}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={setCurrentPage}
+                    />
+                )}
             </div>
         </div>
     );

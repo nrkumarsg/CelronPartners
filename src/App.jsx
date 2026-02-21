@@ -11,6 +11,9 @@ import ModuleSettings from './pages/ModuleSettings';
 import Reports from './pages/Reports';
 import WorkLocationsDirectory from './pages/WorkLocationsDirectory';
 import WorkLocationForm from './pages/WorkLocationForm';
+import CatalogDirectory from './pages/CatalogDirectory';
+import CatalogForm from './pages/CatalogForm';
+
 function App() {
   return (
     <div className="app-container">
@@ -26,6 +29,8 @@ function App() {
           <Route path="/vessels/:id" element={<VesselForm />} />
           <Route path="/work-locations" element={<WorkLocationsDirectory />} />
           <Route path="/work-locations/:id" element={<WorkLocationForm />} />
+          <Route path="/catalog" element={<CatalogDirectory />} />
+          <Route path="/catalog/:id" element={<CatalogForm />} />
           <Route path="/settings" element={<ModuleSettings />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="*" element={<div style={{ textAlign: 'center', marginTop: '100px' }}><h1>Working on this feature...</h1></div>} />
