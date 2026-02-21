@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
+import { useAuth } from '../contexts/AuthContext';
 import {
     getCatalogItemById,
     createCatalogItem,
@@ -28,6 +29,7 @@ import { supabase } from '../lib/supabase';
 const CatalogForm = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { profile } = useAuth();
     const isNewItem = id === 'new';
 
     const [loading, setLoading] = useState(!isNewItem);
@@ -112,12 +114,15 @@ const CatalogForm = () => {
         if (e) e.preventDefault();
         setSaving(true);
 
-        // Convert empty string to null for quantity if needed by DB schema
         const dataToSave = {
             ...formData,
             quantity: formData.quantity === '' ? null : parseInt(formData.quantity, 10),
             selling_price: formData.selling_price === '' ? null : parseFloat(formData.selling_price)
         };
+
+        if (isNewItem && profile?.company_id) {
+            dataToSave.company_id = profile.company_id;
+        }
 
         let result;
         if (isNewItem) {
@@ -202,6 +207,10 @@ const CatalogForm = () => {
             item_id: id,
             last_purchase_price: purchaseFormData.last_purchase_price === '' ? null : parseFloat(purchaseFormData.last_purchase_price)
         };
+
+        if (!editingPurchaseId && profile?.company_id) {
+            dataToSave.company_id = profile.company_id;
+        }
 
         if (editingPurchaseId) {
             const { error } = await updatePurchaseHistory(editingPurchaseId, dataToSave);
