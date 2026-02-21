@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { getJobById, updateJob, getPurchaseOrders, createPurchaseOrder } from '../../lib/workflowService';
+import { generateDocumentPDF } from '../../lib/pdfGenerator';
 import DocumentManager from '../../components/workflows/DocumentManager';
 import { ArrowLeft, FileText, CheckCircle, ShieldCheck, DollarSign, Plus, Printer, Truck } from 'lucide-react';
 
@@ -70,9 +71,16 @@ export default function JobDetails() {
         }
     };
 
-    const handleGenerateDoc = (docType) => {
-        // Mock generation logic. Future enhancement: populate html2pdf template using `job.enquiries.catalog_items`
-        alert(`Generating template for ${docType} (Job: ${job.job_no}).\n\nPDF Builder will be opened to map ${job.enquiries?.catalog_items?.length || 0} items!`);
+    const handleGenerateDoc = async (docType) => {
+        setLoading(true);
+        try {
+            await generateDocumentPDF(job, docType);
+        } catch (error) {
+            console.error("PDF generation failed:", error);
+            alert("Failed to generate PDF. Please try again.");
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleCompleteJob = async () => {
