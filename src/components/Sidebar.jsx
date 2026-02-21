@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, LogOut, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, LogOut, ShieldCheck, Search } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Sidebar() {
@@ -83,6 +83,22 @@ export default function Sidebar() {
                         <span className="nav-text">Catalog</span>
                     </NavLink>
                 )}
+
+                <NavLink
+                    to="/workflows"
+                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                >
+                    <FileText size={20} />
+                    <span className="nav-text">Workflows</span>
+                </NavLink>
+
+                <NavLink
+                    to="/workflows/finder"
+                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                >
+                    <Search size={20} />
+                    <span className="nav-text">Universal Finder</span>
+                </NavLink>
 
                 {hasAccess('reports') && (
                     <NavLink

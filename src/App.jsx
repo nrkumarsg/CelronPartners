@@ -13,6 +13,8 @@ import WorkLocationsDirectory from './pages/WorkLocationsDirectory';
 import WorkLocationForm from './pages/WorkLocationForm';
 import CatalogDirectory from './pages/CatalogDirectory';
 import CatalogForm from './pages/CatalogForm';
+import WorkflowBoard from './pages/workflows/WorkflowBoard';
+import UniversalFinder from './pages/workflows/UniversalFinder';
 
 // Authentication & RBAC Components
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -85,6 +87,10 @@ function App() {
               {/* Catalog Module */}
               <Route path="/catalog" element={<ProtectedRoute requiredModule="catalog"><CatalogDirectory /></ProtectedRoute>} />
               <Route path="/catalog/:id" element={<ProtectedRoute requiredModule="catalog"><CatalogForm /></ProtectedRoute>} />
+
+              {/* Workflows & Universal Finder Module */}
+              <Route path="/workflows" element={<ProtectedRoute><WorkflowBoard /></ProtectedRoute>} />
+              <Route path="/workflows/finder" element={<ProtectedRoute><UniversalFinder /></ProtectedRoute>} />
 
               {/* Reports */}
               <Route path="/reports" element={<ProtectedRoute requiredModule="reports"><Reports /></ProtectedRoute>} />
