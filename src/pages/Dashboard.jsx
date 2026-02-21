@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, Users, DollarSign, Activity, FileSpreadsheet, Ship, MapPin } from 'lucide-react';
 import { getPartners, getContacts } from '../lib/store';
 import { supabase } from '../lib/supabase';
+import StageReminders from '../components/dashboard/StageReminders';
 
 export default function Dashboard() {
     const [searchTerm, setSearchTerm] = useState('');
@@ -116,6 +117,9 @@ export default function Dashboard() {
                     <div className="stat-value">{loading ? '...' : stats.totalLocations}</div>
                 </div>
             </div>
+
+            {/* AI Workflow Action Reminders */}
+            {!searchTerm && <StageReminders />}
 
             {searchTerm && (
                 <div className="glass-panel">
