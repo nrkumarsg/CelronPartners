@@ -40,6 +40,7 @@ const CatalogForm = () => {
         name: '',
         specification: '',
         quantity: '',
+        selling_price: '',
         stored_location: '',
         details: ''
     });
@@ -73,6 +74,7 @@ const CatalogForm = () => {
                 name: data.name || '',
                 specification: data.specification || '',
                 quantity: data.quantity !== null ? data.quantity : '',
+                selling_price: data.selling_price !== null ? data.selling_price : '',
                 stored_location: data.stored_location || '',
                 details: data.details || ''
             });
@@ -113,7 +115,8 @@ const CatalogForm = () => {
         // Convert empty string to null for quantity if needed by DB schema
         const dataToSave = {
             ...formData,
-            quantity: formData.quantity === '' ? null : parseInt(formData.quantity, 10)
+            quantity: formData.quantity === '' ? null : parseInt(formData.quantity, 10),
+            selling_price: formData.selling_price === '' ? null : parseFloat(formData.selling_price)
         };
 
         let result;
@@ -385,6 +388,23 @@ const CatalogForm = () => {
                                     rows="3"
                                     placeholder="Make, Model, Serial, Technical Specs..."
                                 />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Selling Price</label>
+                                <div style={{ position: 'relative' }}>
+                                    <span style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>$</span>
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        className="form-input"
+                                        style={{ paddingLeft: '32px' }}
+                                        name="selling_price"
+                                        value={formData.selling_price}
+                                        onChange={handleInputChange}
+                                        placeholder="0.00"
+                                    />
+                                </div>
                             </div>
 
                             <div className="form-group">

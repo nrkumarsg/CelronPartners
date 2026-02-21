@@ -74,6 +74,7 @@ const CatalogDirectory = () => {
             'Name': item.name,
             'Specification': item.specification,
             'Quantity Available': item.quantity,
+            'Selling Price': item.selling_price,
             'Stored Location': item.stored_location
         }));
 
@@ -154,6 +155,7 @@ const CatalogDirectory = () => {
                                 <th>Item Name</th>
                                 <th>Location</th>
                                 <th>Qty</th>
+                                <th>Price</th>
                                 <th>Specification</th>
                                 <th className="no-print">Actions</th>
                             </tr>
@@ -188,6 +190,7 @@ const CatalogDirectory = () => {
                                         <td className="font-medium">{item.name}</td>
                                         <td>{item.stored_location || '-'}</td>
                                         <td>{item.quantity !== null && item.quantity !== undefined ? item.quantity : '-'}</td>
+                                        <td>{item.selling_price ? `$${item.selling_price}` : '-'}</td>
                                         <td style={{ maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.specification}>{item.specification || '-'}</td>
                                         <td className="hide-on-print">
                                             <button
