@@ -116,7 +116,6 @@ export default function Sidebar() {
                         <NavLink
                             to="/admin/users"
                             className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                            style={{ marginTop: 'auto' }}
                         >
                             <ShieldCheck size={20} color="#60a5fa" />
                             <span className="nav-text" style={{ color: '#93c5fd' }}>User Control</span>
