@@ -26,7 +26,7 @@ export default function StageReminders() {
             const newReminders = [];
 
             // Stage Logic for Enquiries
-            if (enqRes.data) {
+            if (enqRes && enqRes.data) {
                 enqRes.data.forEach(enq => {
                     if (enq.status !== 'Converted') {
                         if (!enq.catalog_items || enq.catalog_items.length === 0) {
@@ -53,7 +53,7 @@ export default function StageReminders() {
             }
 
             // Stage Logic for Jobs (POs)
-            if (jobRes.data) {
+            if (jobRes && jobRes.data) {
                 jobRes.data.forEach(job => {
                     if (job.status === 'Active') {
                         newReminders.push({
@@ -71,6 +71,7 @@ export default function StageReminders() {
             setReminders(newReminders);
         } catch (error) {
             console.error('Error fetching reminders:', error);
+            setReminders([]); // ensure array is empty on fail
         } finally {
             setLoading(false);
         }
