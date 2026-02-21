@@ -83,8 +83,8 @@ export default function StageReminders() {
         return (
             <div className="glass-panel" style={{ textAlign: 'center', padding: '32px 20px', borderLeft: '4px solid #10b981' }}>
                 <CheckCircle size={32} color="#10b981" style={{ marginBottom: '16px' }} />
-                <h3 style={{ margin: '0 0 8px 0', color: '#fff' }}>All Caught Up!</h3>
-                <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.9rem' }}>There are no pending actions in your workflow stages.</p>
+                <h3 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>All Caught Up!</h3>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>There are no pending actions in your workflow stages.</p>
             </div>
         );
     }
@@ -93,33 +93,33 @@ export default function StageReminders() {
         <div className="glass-panel" style={{ borderTop: '4px solid #f59e0b', marginBottom: '32px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
                 <Bell size={24} color="#f59e0b" />
-                <h3 className="form-section-title" style={{ margin: 0, padding: 0, border: 'none' }}>Stage-wise Action Reminders</h3>
-                <span style={{ background: 'rgba(245, 158, 11, 0.1)', color: '#f59e0b', padding: '2px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600 }}>
+                <h3 className="form-section-title" style={{ margin: 0, padding: 0, border: 'none', color: '#1e293b' }}>Stage-wise Action Reminders</h3>
+                <span style={{ background: '#fef3c7', color: '#d97706', padding: '2px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 600 }}>
                     {reminders.length} Pending
                 </span>
             </div>
 
-            <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '20px' }}>
+            <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '20px' }}>
                 Automated alerts driving you to the next workflow stage (Enquiry ➜ Quotation ➜ PO ➜ Delivery ➜ Invoice).
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {reminders.map(rem => (
-                    <div key={rem.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    <div key={rem.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#ffffff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <div style={{ padding: '10px', background: 'rgba(255,255,255,0.05)', borderRadius: '50%' }}>
+                            <div style={{ padding: '10px', background: '#f8fafc', borderRadius: '50%', border: '1px solid #e2e8f0' }}>
                                 {rem.icon}
                             </div>
                             <div>
-                                <h4 style={{ margin: 0, color: '#e2e8f0', fontSize: '1rem' }}>{rem.title}</h4>
+                                <h4 style={{ margin: 0, color: '#1e293b', fontSize: '1rem', fontWeight: 600 }}>{rem.title}</h4>
                             </div>
                         </div>
                         {rem.link ? (
-                            <Link to={rem.link} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Link to={rem.link} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', fontSize: '0.85rem' }}>
                                 {rem.actionText} <ArrowRight size={14} />
                             </Link>
                         ) : (
-                            <button className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <button className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', fontSize: '0.85rem' }}>
                                 {rem.actionText} <ArrowRight size={14} />
                             </button>
                         )}
