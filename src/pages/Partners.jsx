@@ -19,7 +19,7 @@ export default function Partners() {
     // Modal state
     const [showModal, setShowModal] = useState(false);
     const [newSupplier, setNewSupplier] = useState({
-        name: '', email1: '', phone1: '', weblink: '', country: '', address: '', notes: '',
+        name: '', email1: '', phone1: '', weblink: '', country: '', city: '', address: '', notes: '', brand: '',
         types: [],
         rating: 0
     });
@@ -39,10 +39,30 @@ export default function Partners() {
     const handleSaveNewSupplier = async (e) => {
         e.preventDefault();
         try {
-            const dataToSave = { ...newSupplier };
+            // Map fields that match the db schema
+            const dataToSave = {
+                name: newSupplier.name,
+                email1: newSupplier.email1,
+                phone1: newSupplier.phone1,
+                weblink: newSupplier.weblink,
+                country: newSupplier.country,
+                address: newSupplier.address,
+                types: newSupplier.types,
+                info: newSupplier.notes || ''
+            };
+
+            if (newSupplier.city) {
+                dataToSave.address = `${newSupplier.city}, ${dataToSave.address}`;
+            }
+
+            if (newSupplier.brand) {
+                dataToSave.info += ` | Brands: ${newSupplier.brand}`;
+            }
+
             if (profile?.company_id) {
                 dataToSave.company_id = profile.company_id;
             }
+
             await savePartner(dataToSave);
             setShowModal(false);
             loadPartners(); // reload the grid
@@ -263,7 +283,7 @@ export default function Partners() {
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>City</label>
-                                    <input placeholder="City" style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <input placeholder="City" value={newSupplier.city} onChange={e => setNewSupplier({ ...newSupplier, city: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                                 </div>
                             </div>
 
@@ -290,7 +310,7 @@ export default function Partners() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Brands Supported</label>
                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input placeholder="Add brand name" style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <input placeholder="Add brand name" value={newSupplier.brand} onChange={e => setNewSupplier({ ...newSupplier, brand: e.target.value })} style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                                     <button type="button" style={{ padding: '10px 16px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}><Plus size={16} /></button>
                                 </div>
                             </div>
