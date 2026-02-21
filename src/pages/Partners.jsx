@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Search, MapPin, Globe, Building2, Mail, Phone, Star, Filter, ChevronDown, CheckCircle2, Circle, X, UploadCloud } from 'lucide-react';
 import Papa from 'papaparse';
 import { getPartners, deletePartner, savePartner } from '../lib/store';
+import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
 
 export default function Partners() {
+    const { profile } = useAuth();
     const [partners, setPartners] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -37,7 +39,11 @@ export default function Partners() {
     const handleSaveNewSupplier = async (e) => {
         e.preventDefault();
         try {
-            await savePartner(newSupplier);
+            const dataToSave = { ...newSupplier };
+            if (profile?.company_id) {
+                dataToSave.company_id = profile.company_id;
+            }
+            await savePartner(dataToSave);
             setShowModal(false);
             loadPartners(); // reload the grid
             alert('Supplier added successfully!');
