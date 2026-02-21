@@ -246,27 +246,28 @@ const CatalogForm = () => {
     };
 
     return (
-        <div className="form-container">
-            <div className="form-header">
-                <div className="flex items-center gap-4">
+        <div className="animate-fade-in">
+            <div className="page-header">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     <button
-                        className="btn btn-circular"
+                        className="btn btn-secondary"
+                        style={{ padding: '8px', borderRadius: '50%' }}
                         onClick={() => navigate('/catalog')}
                         title="Back to Directory"
                     >
                         <ArrowLeft size={20} />
                     </button>
                     <div>
-                        <h1 className="form-title">
+                        <h1 className="page-title">
                             {isNewItem ? 'New Item' : `Editing: ${formData.name}`}
                         </h1>
-                        <p className="form-subtitle">
+                        <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>
                             {isNewItem ? 'Add a new product or service to the catalog' : 'Update details and view purchase history'}
                         </p>
                     </div>
                 </div>
 
-                <div className="form-actions">
+                <div style={{ display: 'flex', gap: '12px' }}>
                     {!isNewItem && (
                         <button
                             className="btn btn-danger"
@@ -293,17 +294,37 @@ const CatalogForm = () => {
                 </div>
             </div>
 
-            <div className="tabs-container">
-                <div className="tabs">
+            <div style={{ borderBottom: '1px solid var(--border-color)', marginBottom: '24px' }}>
+                <div style={{ display: 'flex', gap: '2px' }}>
                     <button
-                        className={`tab ${activeTab === 'details' ? 'active' : ''}`}
+                        style={{
+                            padding: '12px 24px',
+                            background: activeTab === 'details' ? '#ffffff' : 'transparent',
+                            border: '1px solid',
+                            borderColor: activeTab === 'details' ? 'var(--border-color) var(--border-color) transparent' : 'transparent',
+                            borderRadius: '8px 8px 0 0',
+                            fontWeight: activeTab === 'details' ? 600 : 500,
+                            color: activeTab === 'details' ? 'var(--accent)' : 'var(--text-secondary)',
+                            marginBottom: '-1px',
+                            cursor: 'pointer'
+                        }}
                         onClick={() => setActiveTab('details')}
                     >
                         Item Details
                     </button>
                     {!isNewItem && (
                         <button
-                            className={`tab ${activeTab === 'purchaseHistory' ? 'active' : ''}`}
+                            style={{
+                                padding: '12px 24px',
+                                background: activeTab === 'purchaseHistory' ? '#ffffff' : 'transparent',
+                                border: '1px solid',
+                                borderColor: activeTab === 'purchaseHistory' ? 'var(--border-color) var(--border-color) transparent' : 'transparent',
+                                borderRadius: '8px 8px 0 0',
+                                fontWeight: activeTab === 'purchaseHistory' ? 600 : 500,
+                                color: activeTab === 'purchaseHistory' ? 'var(--accent)' : 'var(--text-secondary)',
+                                marginBottom: '-1px',
+                                cursor: 'pointer'
+                            }}
                             onClick={() => setActiveTab('purchaseHistory')}
                         >
                             Purchase History ({purchaseHistory.length})
@@ -313,117 +334,118 @@ const CatalogForm = () => {
             </div>
 
             {activeTab === 'details' && (
-                <div className="card form-card shadow-sm">
-                    <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
+                <div className="glass-panel">
+                    <form onSubmit={handleSave}>
 
-                        <div className="form-group grid-col-span-2">
-                            <div className="flex justify-between items-end">
+                        <div className="grid-2">
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                                 <label className="form-label">Type</label>
-                            </div>
-                            <select
-                                className="form-input"
-                                name="type"
-                                value={formData.type}
-                                onChange={handleInputChange}
-                            >
-                                <option value="Supply Part">Supply Part</option>
-                                <option value="Service">Service</option>
-                            </select>
-                        </div>
-
-                        <div className="form-group grid-col-span-2 md:grid-cols-2">
-                            <div className="flex justify-between items-end mb-1">
-                                <label className="form-label mb-0">Item Name *</label>
-                                <button
-                                    type="button"
-                                    className="btn btn-sm btn-secondary flex items-center gap-1"
-                                    onClick={handleWebSearch}
-                                    title="Search Web for this item"
+                                <select
+                                    className="form-select"
+                                    name="type"
+                                    value={formData.type}
+                                    onChange={handleInputChange}
                                 >
-                                    <Globe size={14} /> Search Web
-                                </button>
+                                    <option value="Supply Part">Supply Part</option>
+                                    <option value="Service">Service</option>
+                                </select>
                             </div>
-                            <input
-                                type="text"
-                                className="form-input w-full"
-                                name="name"
-                                value={formData.name}
-                                onChange={handleInputChange}
-                                required
-                                placeholder="e.g. Cummins KTA50 Fuel Injector"
-                            />
-                        </div>
 
-                        <div className="form-group grid-col-span-2">
-                            <label className="form-label">Specification</label>
-                            <textarea
-                                className="form-input"
-                                name="specification"
-                                value={formData.specification}
-                                onChange={handleInputChange}
-                                rows="3"
-                                placeholder="Make, Model, Serial, Technical Specs..."
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Quantity Available</label>
-                            <input
-                                type="number"
-                                className="form-input"
-                                name="quantity"
-                                value={formData.quantity}
-                                onChange={handleInputChange}
-                                placeholder="e.g. 5"
-                            />
-                            <span className="text-xs text-slate-500 mt-1 block">Leave empty for services.</span>
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Stored Location</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                name="stored_location"
-                                value={formData.stored_location}
-                                onChange={handleInputChange}
-                                placeholder="e.g. Warehouse A, Shelf 3"
-                            />
-                        </div>
-
-                        <div className="form-group grid-col-span-2">
-                            <label className="form-label">Additional Details & Photos</label>
-                            <div className="quill-container border border-slate-300 rounded-md overflow-hidden pb-12 bg-white" style={{ minHeight: '300px' }}>
-                                <ReactQuill
-                                    theme="snow"
-                                    value={formData.details}
-                                    onChange={handleDetailsChange}
-                                    modules={quillModules}
-                                    style={{ height: '300px' }}
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                    <label className="form-label" style={{ marginBottom: 0 }}>Item Name *</label>
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary"
+                                        style={{ padding: '4px 12px', fontSize: '0.85rem' }}
+                                        onClick={handleWebSearch}
+                                        title="Search Web for this item"
+                                    >
+                                        <Globe size={14} /> Search Web
+                                    </button>
+                                </div>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    name="name"
+                                    value={formData.name}
+                                    onChange={handleInputChange}
+                                    required
+                                    placeholder="e.g. Cummins KTA50 Fuel Injector"
                                 />
                             </div>
+
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                <label className="form-label">Specification</label>
+                                <textarea
+                                    className="form-textarea"
+                                    name="specification"
+                                    value={formData.specification}
+                                    onChange={handleInputChange}
+                                    rows="3"
+                                    placeholder="Make, Model, Serial, Technical Specs..."
+                                />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Quantity Available</label>
+                                <input
+                                    type="number"
+                                    className="form-input"
+                                    name="quantity"
+                                    value={formData.quantity}
+                                    onChange={handleInputChange}
+                                    placeholder="e.g. 5"
+                                />
+                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>Leave empty for services.</span>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Stored Location</label>
+                                <input
+                                    type="text"
+                                    className="form-input"
+                                    name="stored_location"
+                                    value={formData.stored_location}
+                                    onChange={handleInputChange}
+                                    placeholder="e.g. Warehouse A, Shelf 3"
+                                />
+                            </div>
+
+                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                <label className="form-label">Additional Details & Photos</label>
+                                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-secondary)', overflow: 'hidden' }}>
+                                    <ReactQuill
+                                        theme="snow"
+                                        value={formData.details}
+                                        onChange={handleDetailsChange}
+                                        modules={quillModules}
+                                        style={{ height: '300px', borderBottom: 'none' }}
+                                    />
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Hidden submit button to allow Enter key submisison */}
                         <button type="submit" style={{ display: 'none' }}>Submit</button>
                     </form>
                 </div>
             )}
 
             {activeTab === 'purchaseHistory' && !isNewItem && (
-                <div className="card shadow-sm p-6">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-medium text-slate-800">Past Purchases</h3>
+                <div className="glass-panel">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Past Purchases</h3>
                         <button
-                            className="btn btn-primary btn-sm flex items-center gap-1"
+                            className="btn btn-primary"
+                            style={{ padding: '6px 16px', fontSize: '0.9rem' }}
                             onClick={openNewPurchaseModal}
                         >
                             <Plus size={16} /> Record Purchase
                         </button>
                     </div>
 
-                    <div className="table-responsive">
-                        <table className="data-table">
+                    <div className="table-container">
+                        <table>
                             <thead>
                                 <tr>
                                     <th>Date</th>
@@ -435,7 +457,7 @@ const CatalogForm = () => {
                             <tbody>
                                 {purchaseHistory.length === 0 ? (
                                     <tr>
-                                        <td colSpan="4" className="text-center py-6 text-slate-500">
+                                        <td colSpan="4" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-secondary)' }}>
                                             No purchase history recorded yet.
                                         </td>
                                     </tr>
@@ -446,15 +468,15 @@ const CatalogForm = () => {
                                             <td>{purchase.supplier?.name || 'Unknown Supplier'}</td>
                                             <td>{purchase.last_purchase_price ? `$${purchase.last_purchase_price}` : '-'}</td>
                                             <td>
-                                                <div className="flex gap-2">
+                                                <div style={{ display: 'flex', gap: '16px' }}>
                                                     <button
-                                                        className="text-primary hover:text-primary-dark"
+                                                        style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}
                                                         onClick={() => openEditPurchaseModal(purchase)}
                                                     >
                                                         Edit
                                                     </button>
                                                     <button
-                                                        className="text-red-500 hover:text-red-700"
+                                                        style={{ color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}
                                                         onClick={() => handleDeletePurchase(purchase.id)}
                                                     >
                                                         Delete
@@ -472,83 +494,84 @@ const CatalogForm = () => {
 
             {/* Purchase Modal */}
             {showPurchaseModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-                        <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
-                            <h3 className="text-lg font-semibold text-slate-800">
+                <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', padding: '24px' }}>
+                    <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', background: 'var(--bg-secondary)' }}>
+                        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>
                                 {editingPurchaseId ? 'Edit Purchase Record' : 'Add Purchase Record'}
                             </h3>
                             <button
                                 onClick={() => setShowPurchaseModal(false)}
-                                className="text-slate-400 hover:text-slate-600"
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
                             >
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <div className="p-6 overflow-y-auto flex-1">
-                            <form id="purchaseForm" onSubmit={handleSavePurchase} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                                <div className="form-group grid-col-span-2">
-                                    <label className="form-label">Supplier *</label>
-                                    <select
-                                        className="form-input"
-                                        name="supplier_id"
-                                        value={purchaseFormData.supplier_id}
-                                        onChange={handlePurchaseInputChange}
-                                        required
-                                    >
-                                        <option value="">Select a supplier...</option>
-                                        {partners.map(p => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="form-group">
-                                    <label className="form-label">Purchase Date</label>
-                                    <input
-                                        type="date"
-                                        className="form-input"
-                                        name="purchase_date"
-                                        value={purchaseFormData.purchase_date}
-                                        onChange={handlePurchaseInputChange}
-                                    />
-                                </div>
-
-                                <div className="form-group">
-                                    <label className="form-label">Price per pc</label>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-2.5 text-slate-500">$</span>
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            className="form-input pl-8"
-                                            name="last_purchase_price"
-                                            value={purchaseFormData.last_purchase_price}
+                        <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+                            <form id="purchaseForm" onSubmit={handleSavePurchase}>
+                                <div className="grid-2">
+                                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                        <label className="form-label">Supplier *</label>
+                                        <select
+                                            className="form-select"
+                                            name="supplier_id"
+                                            value={purchaseFormData.supplier_id}
                                             onChange={handlePurchaseInputChange}
-                                            placeholder="0.00"
+                                            required
+                                        >
+                                            <option value="">Select a supplier...</option>
+                                            {partners.map(p => (
+                                                <option key={p.id} value={p.id}>{p.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="form-group">
+                                        <label className="form-label">Purchase Date</label>
+                                        <input
+                                            type="date"
+                                            className="form-input"
+                                            name="purchase_date"
+                                            value={purchaseFormData.purchase_date}
+                                            onChange={handlePurchaseInputChange}
                                         />
                                     </div>
-                                </div>
 
-                                <div className="form-group grid-col-span-2">
-                                    <label className="form-label">Purchase Details / Invoice Snippets</label>
-                                    <div className="border border-slate-300 rounded-md overflow-hidden pb-12 bg-white" style={{ minHeight: '200px' }}>
-                                        <ReactQuill
-                                            theme="snow"
-                                            value={purchaseFormData.details}
-                                            onChange={handlePurchaseDetailsChange}
-                                            modules={quillModules}
-                                            style={{ height: '200px' }}
-                                        />
+                                    <div className="form-group">
+                                        <label className="form-label">Price per pc</label>
+                                        <div style={{ position: 'relative' }}>
+                                            <span style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>$</span>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                className="form-input"
+                                                style={{ paddingLeft: '32px' }}
+                                                name="last_purchase_price"
+                                                value={purchaseFormData.last_purchase_price}
+                                                onChange={handlePurchaseInputChange}
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                        <label className="form-label">Purchase Details / Invoice Snippets</label>
+                                        <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                                            <ReactQuill
+                                                theme="snow"
+                                                value={purchaseFormData.details}
+                                                onChange={handlePurchaseDetailsChange}
+                                                modules={quillModules}
+                                                style={{ height: '200px' }}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
-
                             </form>
                         </div>
 
-                        <div className="p-4 border-t bg-slate-50 rounded-b-lg flex justify-end gap-3 mt-auto">
+                        <div style={{ padding: '20px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: 'var(--bg-primary)' }}>
                             <button
                                 type="button"
                                 className="btn btn-secondary"
