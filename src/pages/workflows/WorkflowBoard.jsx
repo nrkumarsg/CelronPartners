@@ -101,9 +101,13 @@ export default function WorkflowBoard() {
                     </div>
                     {enquiries.filter(e => e.status !== 'Converted').map(e => (
                         <div key={e.id} style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                                <h4 style={{ margin: 0, color: '#93c5fd' }}>{e.enquiry_no}</h4>
-                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1' }}>Type: {e.type} | Partner: {e.partners?.name || 'Unknown'}</p>
+                            <div style={{ flex: 1 }}>
+                                <Link to={`/workflows/enquiry/${e.id}`} style={{ textDecoration: 'none', display: 'block' }}>
+                                    <h4 style={{ margin: 0, color: '#93c5fd', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        {e.enquiry_no} <ArrowRight size={14} />
+                                    </h4>
+                                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1' }}>Type: {e.type} | Partner: {e.partners?.name || 'Unknown'}</p>
+                                </Link>
                             </div>
                             <button className="btn btn-sm btn-outline" onClick={() => convertToJob(e)} title="Convert to Job (Received PO)">
                                 Convert to Job <ArrowRight size={14} />

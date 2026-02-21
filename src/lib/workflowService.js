@@ -80,8 +80,23 @@ export const getEnquiries = async (companyId) => {
     return { data, error };
 };
 
+export const getEnquiryById = async (companyId, enquiryId) => {
+    const { data, error } = await supabase
+        .from('enquiries')
+        .select(`*, partners(name), contacts(name)`)
+        .eq('company_id', companyId)
+        .eq('id', enquiryId)
+        .single();
+    return { data, error };
+};
+
 export const createEnquiry = async (enquiryData) => {
     const { data, error } = await supabase.from('enquiries').insert([enquiryData]).select().single();
+    return { data, error };
+};
+
+export const updateEnquiry = async (id, updateData) => {
+    const { data, error } = await supabase.from('enquiries').update(updateData).eq('id', id).select().single();
     return { data, error };
 };
 

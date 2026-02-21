@@ -15,6 +15,7 @@ import CatalogDirectory from './pages/CatalogDirectory';
 import CatalogForm from './pages/CatalogForm';
 import WorkflowBoard from './pages/workflows/WorkflowBoard';
 import UniversalFinder from './pages/workflows/UniversalFinder';
+import EnquiryDetails from './pages/workflows/EnquiryDetails';
 
 // Authentication & RBAC Components
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -90,6 +91,7 @@ function App() {
 
               {/* Workflows & Universal Finder Module */}
               <Route path="/workflows" element={<ProtectedRoute><WorkflowBoard /></ProtectedRoute>} />
+              <Route path="/workflows/enquiry/:id" element={<ProtectedRoute><EnquiryDetails /></ProtectedRoute>} />
               <Route path="/workflows/finder" element={<ProtectedRoute><UniversalFinder /></ProtectedRoute>} />
 
               {/* Reports */}
