@@ -140,7 +140,7 @@ export default function Sidebar() {
                             <p style={{ fontSize: '0.85rem', color: '#fff', margin: 0, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                                 {profile.email}
                             </p>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--accent)', textTransform: 'uppercase', fontWeight: 600 }}>
+                            <span style={{ fontSize: '0.7rem', color: '#6366f1', textTransform: 'uppercase', fontWeight: 600 }}>
                                 {profile.role}
                             </span>
                         </div>
@@ -153,6 +153,7 @@ export default function Sidebar() {
                         </button>
                     </div>
                 )}
+
                 <div className="integration-status" style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', textAlign: 'center' }}>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
                         <span className="nav-text">Integration Status: </span><span style={{ color: '#4ade80', fontWeight: 'bold' }}>•</span>
