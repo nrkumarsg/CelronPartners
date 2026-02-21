@@ -110,10 +110,48 @@ export const getJobs = async (companyId) => {
     return { data, error };
 };
 
-export const createJob = async (jobData) => {
-    const { data, error } = await supabase.from('jobs').insert([jobData]).select().single();
+export const getJobById = async (companyId, jobId) => {
+    const { data, error } = await supabase
+        .from('jobs')
+        .select(`*, enquiries(enquiry_no, type, catalog_items, partner_id, partners(name, address, email1))`)
+        .eq('company_id', companyId)
+        .eq('id', jobId)
+        .single();
     return { data, error };
 };
+
+export const createJob = async (jobData) => {
+    const { data, error } = await supabase.from('jobs').insert([jobData]).select().single();
+
+    // Also mark the original enquiry as Converted
+    if (jobData.enquiry_id && !error) {
+        await supabase.from('enquiries').update({ status: 'Converted' }).eq('id', jobData.enquiry_id);
+    }
+
+    return { data, error };
+};
+
+export const updateJob = async (id, updateData) => {
+    const { data, error } = await supabase.from('jobs').update(updateData).eq('id', id).select().single();
+    return { data, error };
+};
+
+// Purchase Orders (Finance Tracking for Jobs)
+export const getPurchaseOrders = async (companyId, jobId) => {
+    const { data, error } = await supabase
+        .from('purchase_orders')
+        .select('*')
+        .eq('company_id', companyId)
+        .eq('job_id', jobId)
+        .order('created_at', { ascending: true });
+    return { data, error };
+};
+
+export const createPurchaseOrder = async (poData) => {
+    const { data, error } = await supabase.from('purchase_orders').insert([poData]).select().single();
+    return { data, error };
+};
+
 
 // Documents Manager
 export const getDocuments = async (companyId, referenceType, referenceId) => {

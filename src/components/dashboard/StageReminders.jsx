@@ -61,7 +61,7 @@ export default function StageReminders() {
                             type: 'action',
                             title: `Job ${job.job_no} requires Delivery/Invoicing`,
                             actionText: 'Process Job',
-                            link: `/workflows`, // Assuming workflow board handles jobs for now
+                            link: `/workflows/job/${job.id}`, // Proper Job URL
                             icon: <FileText size={18} color="#34d399" />
                         });
                     }

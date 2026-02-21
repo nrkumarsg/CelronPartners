@@ -126,10 +126,14 @@ export default function WorkflowBoard() {
                     </div>
                     {jobs.map(j => (
                         <div key={j.id} style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', marginBottom: '8px', borderLeft: '4px solid #34d399' }}>
-                            <h4 style={{ margin: 0, color: '#34d399' }}>{j.job_no}</h4>
-                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1' }}>
-                                From: {j.enquiries?.enquiry_no} | Type: {j.type} | {j.enquiries?.partners?.name}
-                            </p>
+                            <Link to={`/workflows/job/${j.id}`} style={{ textDecoration: 'none', display: 'block' }}>
+                                <h4 style={{ margin: 0, color: '#34d399', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    {j.job_no} <ArrowRight size={14} />
+                                </h4>
+                                <p style={{ margin: 0, fontSize: '0.85rem', color: '#cbd5e1' }}>
+                                    From: {j.enquiries?.enquiry_no} | Type: {j.type} | {j.enquiries?.partners?.name}
+                                </p>
+                            </Link>
                         </div>
                     ))}
                     {jobs.length === 0 && <p style={{ color: '#64748b' }}>No active jobs.</p>}
