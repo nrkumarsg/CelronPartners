@@ -91,23 +91,16 @@ export default function VesselsDirectory() {
     }, [searchTerm]);
 
     return (
-        <div className="animate-fade-in">
-            <div className="page-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ background: 'var(--accent)', color: 'white', padding: '10px', borderRadius: '12px' }}>
+        <div style={{ background: '#f8fafc', minHeight: '100%', padding: '32px', color: '#334155', borderRadius: '16px' }}>
+            <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '48px', height: '48px', background: '#e0e7ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
                         <Ship size={24} />
                     </div>
-                    <h2 className="page-title">Vessels Directory</h2>
-                </div>
-
-                <div className="search-bar" style={{ maxWidth: '300px', margin: '0 auto 0 24px' }}>
-                    <Search size={18} color="var(--text-secondary)" />
-                    <input
-                        type="text"
-                        placeholder="Search all fields..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
+                    <div>
+                        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', margin: '0 0 4px 0' }}>Vessels Directory</h1>
+                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Manage fleets and individual vessel profiles</p>
+                    </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px' }}>
@@ -119,24 +112,36 @@ export default function VesselsDirectory() {
                         onChange={handleImportCSV}
                     />
                     <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={loading}>
-                        <Upload size={18} />
-                        Import CSV
+                        <Upload size={18} /> Import CSV
                     </button>
 
                     <button className="btn btn-secondary" onClick={handleExportCSV} disabled={loading || vessels.length === 0}>
-                        <Download size={18} />
-                        Export CSV
+                        <Download size={18} /> Export CSV
                     </button>
 
                     <button className="btn btn-secondary" onClick={() => window.print()} disabled={loading}>
-                        <Printer size={18} />
-                        Print
+                        <Printer size={18} /> Print
                     </button>
 
-                    <button className="btn btn-primary" onClick={() => navigate('/vessels/new')} disabled={loading}>
-                        <Plus size={18} />
-                        Add Vessel
+                    <button onClick={() => navigate('/vessels/new')} disabled={loading} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.2)' }}>
+                        <Plus size={18} /> Add Vessel
                     </button>
+                </div>
+            </header>
+
+            {/* Filter Bar */}
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '32px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flex: 1, minWidth: '400px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', color: '#94a3b8' }}>
+                        <Search size={18} />
+                    </div>
+                    <input
+                        type="text"
+                        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '8px 0', fontSize: '0.95rem', color: '#334155' }}
+                        placeholder="Search vessels by name, IMO, type, or management..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
                 </div>
             </div>
 

@@ -67,29 +67,36 @@ export default function ContactsDirectory() {
     }, [searchTerm]);
 
     return (
-        <div className="animate-fade-in">
-            <div className="page-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
-                <h2 className="page-title">Contacts Directory</h2>
-
-                <div className="search-bar" style={{ maxWidth: '300px', margin: '0 auto 0 24px' }}>
-                    <Search size={18} color="var(--text-secondary)" />
-                    <input
-                        type="text"
-                        placeholder="Search contacts..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
+        <div style={{ background: '#f8fafc', minHeight: '100%', padding: '32px', color: '#334155', borderRadius: '16px' }}>
+            <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                    <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', margin: '0 0 8px 0' }}>Contacts Directory</h1>
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Manage all your partner contacts and individuals</p>
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <button className="btn btn-secondary" onClick={() => window.print()} disabled={loading}>
-                        <Printer size={18} />
-                        Print
+                        <Printer size={18} /> Print
                     </button>
-                    <button className="btn btn-primary" onClick={() => navigate('/contacts/new')} disabled={loading}>
-                        <Plus size={18} />
-                        Add Contact
+                    <button onClick={() => navigate('/contacts/new')} disabled={loading} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.2)' }}>
+                        <Plus size={18} /> Add Contact
                     </button>
+                </div>
+            </header>
+
+            {/* Filter Bar */}
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '32px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flex: 1, minWidth: '400px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', color: '#94a3b8' }}>
+                        <Search size={18} />
+                    </div>
+                    <input
+                        type="text"
+                        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '8px 0', fontSize: '0.95rem', color: '#334155' }}
+                        placeholder="Search contacts by name, email, or partner..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
                 </div>
             </div>
 

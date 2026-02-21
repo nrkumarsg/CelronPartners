@@ -113,61 +113,58 @@ export default function WorkLocationsDirectory() {
     };
 
     return (
-        <div className="animate-fade-in">
-            <div className="page-header">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ background: 'var(--accent)', color: 'white', padding: '10px', borderRadius: '12px' }}>
-                        <MapPin size={28} />
+        <div style={{ background: '#f8fafc', minHeight: '100%', padding: '32px', color: '#334155', borderRadius: '16px' }}>
+            <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ width: '48px', height: '48px', background: '#e0e7ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
+                        <MapPin size={24} />
                     </div>
                     <div>
-                        <h2 className="page-title">Work Locations</h2>
-                        <p style={{ color: 'var(--text-secondary)', margin: 0 }}>Manage global branches and operational centers</p>
+                        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', margin: '0 0 4px 0' }}>Work Locations</h1>
+                        <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Manage global branches and operational centers</p>
                     </div>
                 </div>
 
-                <div className="header-actions">
-                    <div className="search-bar">
-                        <Search size={20} color="var(--text-secondary)" />
-                        <input
-                            type="text"
-                            placeholder="Search locations or pincodes..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <input
+                        type="file"
+                        accept=".csv"
+                        id="csvImport"
+                        style={{ display: 'none' }}
+                        onChange={handleImportCSV}
+                        disabled={isImporting}
+                    />
+                    <button className="btn btn-secondary" onClick={() => document.getElementById('csvImport').click()} disabled={isImporting}>
+                        <Upload size={18} /> <span className="hide-on-mobile">{isImporting ? 'Importing...' : 'Import CSV'}</span>
+                    </button>
 
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                        {/* Hidden file input for CSV Import */}
-                        <input
-                            type="file"
-                            accept=".csv"
-                            id="csvImport"
-                            style={{ display: 'none' }}
-                            onChange={handleImportCSV}
-                            disabled={isImporting}
-                        />
-                        <button
-                            className="btn btn-secondary"
-                            onClick={() => document.getElementById('csvImport').click()}
-                            disabled={isImporting}
-                            title="Import CSV"
-                        >
-                            <Upload size={18} />
-                            <span className="hide-on-mobile">{isImporting ? 'Importing...' : 'Import'}</span>
-                        </button>
-                        <button className="btn btn-secondary" onClick={handleExportCSV} title="Export CSV">
-                            <Download size={18} />
-                            <span className="hide-on-mobile">Export</span>
-                        </button>
-                        <button className="btn btn-secondary" onClick={() => window.print()} title="Print">
-                            <Printer size={18} />
-                            <span className="hide-on-mobile">Print</span>
-                        </button>
-                        <button className="btn btn-primary" onClick={() => navigate('/work-locations/new')}>
-                            <Plus size={18} />
-                            <span>Add Location</span>
-                        </button>
+                    <button className="btn btn-secondary" onClick={handleExportCSV}>
+                        <Download size={18} /> <span className="hide-on-mobile">Export CSV</span>
+                    </button>
+
+                    <button className="btn btn-secondary" onClick={() => window.print()}>
+                        <Printer size={18} /> <span className="hide-on-mobile">Print</span>
+                    </button>
+
+                    <button onClick={() => navigate('/work-locations/new')} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.2)' }}>
+                        <Plus size={18} /> <span>Add Location</span>
+                    </button>
+                </div>
+            </header>
+
+            {/* Filter Bar */}
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '32px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', flex: 1, minWidth: '400px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', color: '#94a3b8' }}>
+                        <Search size={18} />
                     </div>
+                    <input
+                        type="text"
+                        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '8px 0', fontSize: '0.95rem', color: '#334155' }}
+                        placeholder="Search locations or pincodes..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
                 </div>
             </div>
 
