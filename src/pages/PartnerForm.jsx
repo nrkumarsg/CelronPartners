@@ -5,12 +5,14 @@ import 'react-quill-new/dist/quill.snow.css';
 import { Save, ArrowLeft, X, Plus } from 'lucide-react';
 import { getPartners, savePartner } from '../lib/store';
 import { getContactsByPartner, deleteContact } from '../lib/store';
+import { useAuth } from '../contexts/AuthContext';
 
 const PARTNER_TYPES = ['Customer', 'Supplier', 'Customer Related', 'Supplier Related', 'Freelancer', 'Service Company'];
 
 export default function PartnerForm() {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { profile } = useAuth();
     const isNew = id === 'new';
 
     const [formData, setFormData] = useState({
@@ -80,10 +82,11 @@ export default function PartnerForm() {
 
         setLoading(true);
         try {
-            await savePartner({
-                ...formData,
-                id: isNew ? undefined : id
-            });
+            const dataToSave = { ...formData, id: isNew ? undefined : id };
+            if (isNew && profile?.company_id) {
+                dataToSave.company_id = profile.company_id;
+            }
+            await savePartner(dataToSave);
             navigate('/partners');
         } catch (err) {
             console.error("SUPABASE SAVE ERROR:", err);
