@@ -94,13 +94,13 @@ const CatalogDirectory = () => {
     };
 
     return (
-        <div className="directory-container">
-            <div className="directory-header">
+        <div className="animate-fade-in">
+            <div className="page-header">
                 <div>
-                    <h1 className="directory-title">Products & Services Catalog</h1>
-                    <p className="directory-subtitle">Manage your supply parts and services</p>
+                    <h1 className="page-title">Products & Services Catalog</h1>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Manage your supply parts and services</p>
                 </div>
-                <div className="directory-actions no-print">
+                <div style={{ display: 'flex', gap: '12px' }} className="hide-on-print">
                     <button className="btn btn-secondary" onClick={handleExportCSV}>
                         <Download size={18} /> Export CSV
                     </button>
@@ -113,135 +113,139 @@ const CatalogDirectory = () => {
                 </div>
             </div>
 
-            <div className="directory-controls no-print">
-                <form onSubmit={handleSearch} className="search-bar">
-                    <Search size={20} className="search-icon" />
-                    <input
-                        type="text"
-                        placeholder="Search by name, specification, location..."
-                        className="search-input"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    <button type="submit" className="btn btn-secondary">Search</button>
-                </form>
+            <div className="glass-panel" style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }} className="hide-on-print">
+                    <form onSubmit={handleSearch} className="search-bar">
+                        <Search size={20} style={{ color: 'var(--text-secondary)' }} />
+                        <input
+                            type="text"
+                            placeholder="Search by name, specification, location..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        <button type="submit" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>Search</button>
+                    </form>
 
-                <div className="filter-group">
-                    <div className="filter-label">
-                        <Filter size={16} /> Filter:
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500 }}>
+                            <Filter size={16} /> Filter:
+                        </div>
+                        <select
+                            className="form-select"
+                            style={{ width: '180px', padding: '8px 12px' }}
+                            value={typeFilter}
+                            onChange={(e) => {
+                                setTypeFilter(e.target.value);
+                                setCurrentPage(1);
+                            }}
+                        >
+                            <option value="">All Types</option>
+                            <option value="Supply Part">Supply Parts</option>
+                            <option value="Service">Services</option>
+                        </select>
                     </div>
-                    <select
-                        className="filter-select"
-                        value={typeFilter}
-                        onChange={(e) => {
-                            setTypeFilter(e.target.value);
-                            setCurrentPage(1);
-                        }}
-                    >
-                        <option value="">All Types</option>
-                        <option value="Supply Part">Supply Parts</option>
-                        <option value="Service">Services</option>
-                    </select>
                 </div>
-            </div>
 
-            <div className="table-responsive printable-area">
-                <table className="data-table">
-                    <thead>
-                        <tr>
-                            <th>Type</th>
-                            <th>Item Name</th>
-                            <th>Location</th>
-                            <th>Qty</th>
-                            <th>Specification</th>
-                            <th className="no-print">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {loading ? (
+                <div className="table-container printable-area">
+                    <table>
+                        <thead>
                             <tr>
-                                <td colSpan="6" className="text-center py-8">Loading catalog...</td>
+                                <th>Type</th>
+                                <th>Item Name</th>
+                                <th>Location</th>
+                                <th>Qty</th>
+                                <th>Specification</th>
+                                <th className="no-print">Actions</th>
                             </tr>
-                        ) : items.length === 0 ? (
-                            <tr>
-                                <td colSpan="6" className="text-center py-8">
-                                    <div className="empty-state">
-                                        <Package size={48} className="empty-icon" />
-                                        <h3>No items found</h3>
-                                        <p>Get started by adding a new product or service.</p>
-                                        <button className="btn btn-primary mt-4 no-print" onClick={() => navigate('/catalog/new')}>
-                                            Add Item
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ) : (
-                            items.map((item) => (
-                                <tr key={item.id} className="table-row">
-                                    <td>
-                                        <span className={`status-badge ${item.type === 'Service' ? 'status-active' : 'status-pending'}`}>
-                                            {item.type === 'Service' ? <Wrench size={12} className="mr-1" inline="true" /> : <Package size={12} className="mr-1" inline="true" />}
-                                            {item.type}
-                                        </span>
-                                    </td>
-                                    <td className="font-medium">{item.name}</td>
-                                    <td>{item.stored_location || '-'}</td>
-                                    <td>{item.quantity !== null && item.quantity !== undefined ? item.quantity : '-'}</td>
-                                    <td className="truncate-cell" title={item.specification}>{item.specification || '-'}</td>
-                                    <td className="no-print">
-                                        <button
-                                            className="btn btn-sm btn-secondary"
-                                            onClick={() => navigate(`/catalog/${item.id}`)}
-                                        >
-                                            View / Edit
-                                        </button>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="6" className="text-center py-8">Loading catalog...</td>
+                                </tr>
+                            ) : items.length === 0 ? (
+                                <tr>
+                                    <td colSpan="6" className="text-center py-8">
+                                        <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-secondary)' }}>
+                                            <Package size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
+                                            <h3 style={{ fontSize: '1.2rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>No items found</h3>
+                                            <p style={{ marginBottom: '24px' }}>Get started by adding a new product or service.</p>
+                                            <button className="btn btn-primary hide-on-print" onClick={() => navigate('/catalog/new')}>
+                                                <Plus size={18} /> Add Item
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            </div>
-
-            {/* Pagination */}
-            {!loading && totalPages > 1 && (
-                <div className="pagination no-print">
-                    <div className="pagination-info">
-                        Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} items
-                    </div>
-                    <div className="pagination-controls">
-                        <button
-                            className="pagination-btn"
-                            disabled={currentPage === 1}
-                            onClick={() => setCurrentPage(prev => prev - 1)}
-                        >
-                            <ChevronLeft size={16} /> Prev
-                        </button>
-                        <div className="pagination-numbers">
-                            {Array.from({ length: totalPages }, (_, i) => i + 1)
-                                .filter(num => num === 1 || num === totalPages || Math.abs(num - currentPage) <= 1)
-                                .map((num, i, arr) => (
-                                    <React.Fragment key={num}>
-                                        {i > 0 && num - arr[i - 1] > 1 && <span className="pagination-ellipsis">...</span>}
-                                        <button
-                                            className={`pagination-num ${currentPage === num ? 'active' : ''}`}
-                                            onClick={() => setCurrentPage(num)}
-                                        >
-                                            {num}
-                                        </button>
-                                    </React.Fragment>
-                                ))}
-                        </div>
-                        <button
-                            className="pagination-btn"
-                            disabled={currentPage === totalPages}
-                            onClick={() => setCurrentPage(prev => prev + 1)}
-                        >
-                            Next <ChevronRight size={16} />
-                        </button>
-                    </div>
+                            ) : (
+                                items.map((item) => (
+                                    <tr key={item.id} className="table-row">
+                                        <td>
+                                            <span className="tag" style={{ background: item.type === 'Service' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(59, 130, 246, 0.1)', color: item.type === 'Service' ? '#059669' : '#2563eb' }}>
+                                                {item.type === 'Service' ? <Wrench size={12} /> : <Package size={12} />}
+                                                {item.type}
+                                            </span>
+                                        </td>
+                                        <td className="font-medium">{item.name}</td>
+                                        <td>{item.stored_location || '-'}</td>
+                                        <td>{item.quantity !== null && item.quantity !== undefined ? item.quantity : '-'}</td>
+                                        <td style={{ maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.specification}>{item.specification || '-'}</td>
+                                        <td className="hide-on-print">
+                                            <button
+                                                className="btn btn-sm btn-secondary"
+                                                onClick={() => navigate(`/catalog/${item.id}`)}
+                                            >
+                                                View / Edit
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 </div>
-            )}
+
+                {/* Pagination */}
+                {!loading && totalPages > 1 && (
+                    <div className="pagination-container hide-on-print">
+                        <div className="pagination-info">
+                            Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, totalItems)} of {totalItems} items
+                        </div>
+                        <div className="pagination-controls">
+                            <button
+                                className="btn btn-secondary"
+                                style={{ padding: '6px 12px' }}
+                                disabled={currentPage === 1}
+                                onClick={() => setCurrentPage(prev => prev - 1)}
+                            >
+                                <ChevronLeft size={16} /> Prev
+                            </button>
+                            <div className="pagination-pages">
+                                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                    .filter(num => num === 1 || num === totalPages || Math.abs(num - currentPage) <= 1)
+                                    .map((num, i, arr) => (
+                                        <React.Fragment key={num}>
+                                            {i > 0 && num - arr[i - 1] > 1 && <span style={{ padding: '0 8px', color: 'var(--text-secondary)' }}>...</span>}
+                                            <button
+                                                className={`pagination-page ${currentPage === num ? 'active' : ''}`}
+                                                onClick={() => setCurrentPage(num)}
+                                            >
+                                                {num}
+                                            </button>
+                                        </React.Fragment>
+                                    ))}
+                            </div>
+                            <button
+                                className="btn btn-secondary"
+                                style={{ padding: '6px 12px' }}
+                                disabled={currentPage === totalPages}
+                                onClick={() => setCurrentPage(prev => prev + 1)}
+                            >
+                                Next <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     );
 };
