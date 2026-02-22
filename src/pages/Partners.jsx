@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, MapPin, Globe, Building2, Mail, Phone, Star, Filter, ChevronDown, CheckCircle2, Circle, X, UploadCloud } from 'lucide-react';
+import { Plus, Search, MapPin, Globe, Building2, Mail, Phone, Star, Filter, ChevronDown, CheckCircle2, Circle, X, UploadCloud, Upload, Download } from 'lucide-react';
 import Papa from 'papaparse';
 import { getPartners, deletePartner, savePartner } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
@@ -49,7 +49,7 @@ export default function Partners() {
 
     // Modal state
     const [showModal, setShowModal] = useState(false);
-    const [newSupplier, setNewSupplier] = useState({
+    const [newPartner, setNewPartner] = useState({
         name: '', email1: '', phone1: '', weblink: '', country: '', city: '', address: '', notes: '', brand: '',
         types: [],
         rating: 0
@@ -68,27 +68,27 @@ export default function Partners() {
         setLoading(false);
     };
 
-    const handleSaveNewSupplier = async (e) => {
+    const handleSaveNewPartner = async (e) => {
         e.preventDefault();
         try {
             // Map fields that match the db schema
             const dataToSave = {
-                name: newSupplier.name,
-                email1: newSupplier.email1,
-                phone1: newSupplier.phone1,
-                weblink: newSupplier.weblink,
-                country: newSupplier.country,
-                address: newSupplier.address,
-                types: newSupplier.types,
-                info: newSupplier.notes || ''
+                name: newPartner.name,
+                email1: newPartner.email1,
+                phone1: newPartner.phone1,
+                weblink: newPartner.weblink,
+                country: newPartner.country,
+                address: newPartner.address,
+                types: newPartner.types,
+                info: newPartner.notes || ''
             };
 
-            if (newSupplier.city) {
-                dataToSave.address = `${newSupplier.city}, ${dataToSave.address}`;
+            if (newPartner.city) {
+                dataToSave.address = `${newPartner.city}, ${dataToSave.address}`;
             }
 
-            if (newSupplier.brand) {
-                dataToSave.info += ` | Brands: ${newSupplier.brand}`;
+            if (newPartner.brand) {
+                dataToSave.info += ` | Brands: ${newPartner.brand}`;
             }
 
             if (profile?.company_id) {
@@ -98,9 +98,9 @@ export default function Partners() {
             await savePartner(dataToSave);
             setShowModal(false);
             loadPartners(); // reload the grid
-            alert('Supplier added successfully!');
+            alert('Partner added successfully!');
         } catch (error) {
-            console.error('Failed to save supplier', error);
+            console.error('Failed to save partner', error);
             alert('Failed to save. Check inputs.');
         }
     };
@@ -137,6 +137,28 @@ export default function Partners() {
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
+    const handleExportCSV = () => {
+        const csvData = filteredPartners.map(p => ({
+            name: p.name || '',
+            email1: p.email1 || '',
+            phone1: p.phone1 || '',
+            country: p.country || '',
+            address: p.address || '',
+            weblink: p.weblink || '',
+            types: p.types ? p.types.join(';') : '',
+            brand: p.brand || '',
+            info: p.info || ''
+        }));
+        const csv = Papa.unparse(csvData);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute('download', 'partners_export.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
     const filteredPartners = partners.filter(p => {
         const term = searchTerm.toLowerCase();
         const matchesSearch = !searchTerm || (
@@ -161,11 +183,11 @@ export default function Partners() {
         setCurrentPage(1);
     }, [searchTerm, selectedCountry, selectedCategory]);
 
-    const defaultCategories = ['Supplier', 'Spare Parts', 'Service', 'Calibration', 'Automation', 'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment', 'Industrial Supplies'];
+    const defaultCategories = ['Partner', 'Spare Parts', 'Service', 'Calibration', 'Automation', 'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment', 'Industrial Supplies'];
     const availableCategories = Array.from(new Set([...defaultCategories, ...partners.flatMap(p => p.types || [])])).filter(Boolean).sort();
 
     const handleCategoryToggle = (cat) => {
-        setNewSupplier(prev => ({
+        setNewPartner(prev => ({
             ...prev,
             types: prev.types.includes(cat)
                 ? prev.types.filter(t => t !== cat)
@@ -174,8 +196,8 @@ export default function Partners() {
     };
 
     const handleAddCustomCategory = () => {
-        if (customCategory.trim() && !newSupplier.types.includes(customCategory.trim())) {
-            setNewSupplier(prev => ({
+        if (customCategory.trim() && !newPartner.types.includes(customCategory.trim())) {
+            setNewPartner(prev => ({
                 ...prev,
                 types: [...prev.types, customCategory.trim()]
             }));
@@ -187,12 +209,21 @@ export default function Partners() {
         <div style={{ background: '#f8fafc', minHeight: '100%', padding: '32px', color: '#334155', borderRadius: '16px', position: 'relative' }}>
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
                 <div>
-                    <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', margin: '0 0 8px 0' }}>Suppliers</h1>
-                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Manage your global supplier network</p>
+                    <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', margin: '0 0 8px 0' }}>Partners</h1>
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Manage your global partner network</p>
                 </div>
-                <button onClick={() => setShowModal(true)} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.2)' }}>
-                    <Plus size={18} /> Add Supplier
-                </button>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                    <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} style={{ display: 'none' }} />
+                    <button onClick={() => fileInputRef.current.click()} style={{ background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                        <Upload size={18} /> Add CSV
+                    </button>
+                    <button onClick={handleExportCSV} style={{ background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                        <Download size={18} /> Export
+                    </button>
+                    <button onClick={() => setShowModal(true)} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.2)' }}>
+                        <Plus size={18} /> Add Partner
+                    </button>
+                </div>
             </header>
 
             {/* Filter Bar */}
@@ -245,9 +276,9 @@ export default function Partners() {
 
             {/* Results Grid Based on Partners.jsx list data */}
             {loading ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading suppliers...</div>
+                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading partners...</div>
             ) : filteredPartners.length === 0 ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No suppliers found.</div>
+                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No partners found.</div>
             ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '24px' }}>
                     {paginatedPartners.map(res => (
@@ -258,7 +289,14 @@ export default function Partners() {
                                     <Building2 size={24} />
                                 </div>
                                 <div style={{ flex: 1, paddingRight: '24px' }}>
-                                    <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{res.name}</h3>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{res.name}</h3>
+                                        {res.weblink && (
+                                            <a href={res.weblink.startsWith('http') ? res.weblink : `https://${res.weblink}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#6366f1', display: 'flex', alignItems: 'center' }} title="Visit Website">
+                                                <Globe size={16} />
+                                            </a>
+                                        )}
+                                    </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748b', fontSize: '0.85rem' }}>
                                         <MapPin size={14} /> {res.country || 'No Location'}
                                     </div>
@@ -317,9 +355,9 @@ export default function Partners() {
                             <X size={24} />
                         </div>
 
-                        <h2 style={{ margin: '0 0 24px 0', fontSize: '1.25rem', fontWeight: 600, color: '#1e293b' }}>Add New Supplier</h2>
+                        <h2 style={{ margin: '0 0 24px 0', fontSize: '1.25rem', fontWeight: 600, color: '#1e293b' }}>Add New Partner</h2>
 
-                        <form onSubmit={handleSaveNewSupplier} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <form onSubmit={handleSaveNewPartner} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
                             <div style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '24px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc', marginBottom: '16px' }}>
                                 <div style={{ width: '64px', height: '64px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -327,31 +365,31 @@ export default function Partners() {
                                 </div>
                                 <div style={{ flex: 1 }}>
                                     <label style={{ fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '6px' }}>Company Website</label>
-                                    <input placeholder="https://supplier.com" value={newSupplier.weblink} onChange={e => setNewSupplier({ ...newSupplier, weblink: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Enter the primary website URL for the supplier.</div>
+                                    <input placeholder="https://partner.com" value={newPartner.weblink} onChange={e => setNewPartner({ ...newPartner, weblink: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Enter the primary website URL for the partner.</div>
                                 </div>
                             </div>
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Company Name *</label>
-                                    <input required placeholder="Supplier company name" value={newSupplier.name} onChange={e => setNewSupplier({ ...newSupplier, name: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <input required placeholder="Partner company name" value={newPartner.name} onChange={e => setNewPartner({ ...newPartner, name: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Email *</label>
-                                    <input required type="email" placeholder="contact@supplier.com" value={newSupplier.email1} onChange={e => setNewSupplier({ ...newSupplier, email1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <input required type="email" placeholder="contact@partner.com" value={newPartner.email1} onChange={e => setNewPartner({ ...newPartner, email1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Phone</label>
-                                    <input placeholder="+1 234 567 8900" value={newSupplier.phone1} onChange={e => setNewSupplier({ ...newSupplier, phone1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <input placeholder="+1 234 567 8900" value={newPartner.phone1} onChange={e => setNewPartner({ ...newPartner, phone1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                                 </div>
 
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Country *</label>
                                     <select
                                         required
-                                        value={newSupplier.country}
-                                        onChange={e => setNewSupplier({ ...newSupplier, country: e.target.value })}
+                                        value={newPartner.country}
+                                        onChange={e => setNewPartner({ ...newPartner, country: e.target.value })}
                                         style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: '#fff', cursor: 'pointer' }}
                                     >
                                         <option value="" disabled>Select Country</option>
@@ -362,23 +400,23 @@ export default function Partners() {
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>City</label>
-                                    <input placeholder="City" value={newSupplier.city} onChange={e => setNewSupplier({ ...newSupplier, city: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <input placeholder="City" value={newPartner.city} onChange={e => setNewPartner({ ...newPartner, city: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                                 </div>
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Address</label>
-                                <input placeholder="Full address" value={newSupplier.address} onChange={e => setNewSupplier({ ...newSupplier, address: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                <input placeholder="Full address" value={newPartner.address} onChange={e => setNewPartner({ ...newPartner, address: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Categories</label>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                    {Array.from(new Set([...defaultCategories, ...availableCategories, ...newSupplier.types])).map(cat => (
+                                    {Array.from(new Set([...defaultCategories, ...availableCategories, ...newPartner.types])).map(cat => (
                                         <div
                                             key={cat}
                                             onClick={() => handleCategoryToggle(cat)}
-                                            style={{ padding: '6px 14px', borderRadius: '24px', border: newSupplier.types.includes(cat) ? '1px solid #6366f1' : '1px solid #e2e8f0', background: newSupplier.types.includes(cat) ? '#e0e7ff' : '#fff', color: newSupplier.types.includes(cat) ? '#6366f1' : '#475569', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer' }}
+                                            style={{ padding: '6px 14px', borderRadius: '24px', border: newPartner.types.includes(cat) ? '1px solid #6366f1' : '1px solid #e2e8f0', background: newPartner.types.includes(cat) ? '#e0e7ff' : '#fff', color: newPartner.types.includes(cat) ? '#6366f1' : '#475569', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer' }}
                                         >
                                             {cat}
                                         </div>
@@ -401,14 +439,14 @@ export default function Partners() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Brands Supported</label>
                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input placeholder="Add brand name" value={newSupplier.brand} onChange={e => setNewSupplier({ ...newSupplier, brand: e.target.value })} style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <input placeholder="Add brand name" value={newPartner.brand} onChange={e => setNewPartner({ ...newPartner, brand: e.target.value })} style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                                     <button type="button" style={{ padding: '10px 16px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}><Plus size={16} /></button>
                                 </div>
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Notes</label>
-                                <textarea rows="3" placeholder="Internal notes about this supplier..." value={newSupplier.notes} onChange={e => setNewSupplier({ ...newSupplier, notes: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical' }} />
+                                <textarea rows="3" placeholder="Internal notes about this partner..." value={newPartner.notes} onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical' }} />
                             </div>
 
                             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
@@ -416,7 +454,7 @@ export default function Partners() {
                                     Cancel
                                 </button>
                                 <button type="submit" style={{ padding: '10px 24px', background: '#6366f1', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>
-                                    Add Supplier
+                                    Add Partner
                                 </button>
                             </div>
                         </form>
