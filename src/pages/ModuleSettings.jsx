@@ -132,9 +132,7 @@ export default function ModuleSettings() {
                                     <UploadCloud size={16} /> Upload Logo
                                 </button>
                             </div>
-                            <div style={{ marginTop: '12px' }}>
-                                <input placeholder="Or paste direct image URL here..." name="logo_url" value={settings.logo_url || ''} onChange={handleChange} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.8rem' }} />
-                            </div>
+
                         </div>
 
                         <div>
@@ -154,9 +152,7 @@ export default function ModuleSettings() {
                                     <UploadCloud size={16} /> Upload Signature
                                 </button>
                             </div>
-                            <div style={{ marginTop: '12px' }}>
-                                <input placeholder="Or paste direct image URL here..." name="signature_url" value={settings.signature_url || ''} onChange={handleChange} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.8rem' }} />
-                            </div>
+
                         </div>
                     </div>
                 </div>
