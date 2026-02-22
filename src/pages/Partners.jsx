@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search, MapPin, Globe, Building2, Mail, Phone, Star, Filter, ChevronDown, CheckCircle2, Circle, X, UploadCloud, Upload, Download } from 'lucide-react';
 import Papa from 'papaparse';
+import ReactQuill from 'react-quill-new';
+import 'react-quill-new/dist/quill.snow.css';
 import { getPartners, deletePartner, savePartner } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
@@ -445,11 +447,27 @@ export default function Partners() {
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Notes</label>
-                                <textarea rows="3" placeholder="Internal notes about this partner..." value={newPartner.notes} onChange={e => setNewPartner({ ...newPartner, notes: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', resize: 'vertical' }} />
+                                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Notes (Rich Text Builder)</label>
+                                <div style={{ background: '#fff' }}>
+                                    <ReactQuill
+                                        theme="snow"
+                                        value={newPartner.notes}
+                                        onChange={(content) => setNewPartner({ ...newPartner, notes: content })}
+                                        style={{ height: '200px', marginBottom: '40px' }}
+                                        modules={{
+                                            toolbar: [
+                                                [{ 'header': [1, 2, false] }],
+                                                ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+                                                [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
+                                                ['link', 'image'],
+                                                ['clean']
+                                            ]
+                                        }}
+                                    />
+                                </div>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
                                 <button type="button" onClick={() => setShowModal(false)} style={{ padding: '10px 24px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#475569', fontWeight: 600, cursor: 'pointer' }}>
                                     Cancel
                                 </button>
