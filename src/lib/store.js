@@ -171,3 +171,16 @@ export const saveDocumentSettings = async (payload) => {
   }
 };
 
+// --- Storage / File Uploads ---
+export const uploadFile = async (bucket, folderPath, file) => {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random()}.${fileExt}`;
+  const filePath = `${folderPath}/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file);
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
+  return data.publicUrl;
+};
+

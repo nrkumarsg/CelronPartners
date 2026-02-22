@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Settings, UploadCloud, ToggleRight, ToggleLeft, Save } from 'lucide-react';
-import { getDocumentSettings, saveDocumentSettings } from '../lib/store';
+import { getDocumentSettings, saveDocumentSettings, uploadFile } from '../lib/store';
 
 export default function ModuleSettings() {
     const [loading, setLoading] = useState(true);
@@ -15,6 +15,9 @@ export default function ModuleSettings() {
         signature_url: '',
         watermark: false
     });
+
+    const logoInputRef = useRef(null);
+    const signatureInputRef = useRef(null);
 
     useEffect(() => {
         loadSettings();
@@ -48,6 +51,22 @@ export default function ModuleSettings() {
     const handleChange = (e) => {
         const { name, value } = e.target;
         setSettings(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleFileUpload = async (e, fieldName) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setSaving(true);
+        try {
+            // Uploads to a bucket named "company_assets" in a folder "settings"
+            const url = await uploadFile('company_assets', 'settings', file);
+            setSettings(prev => ({ ...prev, [fieldName]: url }));
+        } catch (error) {
+            console.error('Upload Error:', error);
+            alert('Failed to upload. Did you create the "company_assets" bucket in Supabase Storage with Public access enabled?');
+        }
+        setSaving(false);
     };
 
     if (loading) {
@@ -95,36 +114,48 @@ export default function ModuleSettings() {
 
                 {/* Logo & Signature Block */}
                 <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '32px' }}>
-                    <h3 style={{ margin: '0 0 24px 0', fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>Logo & Signature (Web Links)</h3>
+                    <h3 style={{ margin: '0 0 24px 0', fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>Logo & Signature</h3>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '48px' }}>
                         <div>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '12px' }}>Company Logo URL</label>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <input placeholder="https://example.com/logo.png" name="logo_url" value={settings.logo_url || ''} onChange={handleChange} style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.85rem' }} />
-                                {settings.logo_url && (
-                                    <div style={{ width: '120px', height: '80px', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', background: '#f8fafc' }}>
-                                        <img src={settings.logo_url} alt="Logo Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                                    </div>
-                                )}
+                            <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '12px' }}>Company Logo</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <div style={{ width: '80px', height: '80px', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', background: '#f8fafc' }}>
+                                    {settings.logo_url ? (
+                                        <img src={settings.logo_url} alt="Logo" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                                    ) : (
+                                        <div style={{ color: '#cbd5e1', fontSize: '0.7rem' }}>No Logo</div>
+                                    )}
+                                </div>
+                                <input type="file" accept="image/*" ref={logoInputRef} style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'logo_url')} />
+                                <button onClick={() => logoInputRef.current?.click()} style={{ background: '#fff', color: '#64748b', border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <UploadCloud size={16} /> Upload Logo
+                                </button>
+                            </div>
+                            <div style={{ marginTop: '12px' }}>
+                                <input placeholder="Or paste direct image URL here..." name="logo_url" value={settings.logo_url || ''} onChange={handleChange} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.8rem' }} />
                             </div>
                         </div>
 
                         <div>
-                            <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '12px' }}>Digital Signature URL</label>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <input placeholder="https://drive.google.com/.../signature.png" name="signature_url" value={settings.signature_url || ''} onChange={handleChange} style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.85rem' }} />
-                                {settings.signature_url ? (
-                                    <div style={{ width: '160px', height: '80px', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc' }}>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '12px' }}>Digital Signature</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                <div style={{ width: '120px', height: '80px', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: '4px' }}>
+                                    {settings.signature_url ? (
                                         <img src={settings.signature_url} alt="Signature Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                                    </div>
-                                ) : (
-                                    <div style={{ width: '160px', height: '80px', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    ) : (
                                         <svg viewBox="0 0 100 40" width="80" height="30" stroke="#cbd5e1" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M10,25 Q20,10 30,25 T50,15 T70,30 T90,10" />
                                         </svg>
-                                    </div>
-                                )}
+                                    )}
+                                </div>
+                                <input type="file" accept="image/*" ref={signatureInputRef} style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'signature_url')} />
+                                <button onClick={() => signatureInputRef.current?.click()} style={{ background: '#fff', color: '#64748b', border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <UploadCloud size={16} /> Upload Signature
+                                </button>
+                            </div>
+                            <div style={{ marginTop: '12px' }}>
+                                <input placeholder="Or paste direct image URL here..." name="signature_url" value={settings.signature_url || ''} onChange={handleChange} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.8rem' }} />
                             </div>
                         </div>
                     </div>
