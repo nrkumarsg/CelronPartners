@@ -1,7 +1,17 @@
 import { supabase } from './supabase';
 
-export const getPartners = async () => {
-  const { data, error } = await supabase.from('partners').select('*').order('created_at', { ascending: false });
+export const getPartners = async (profile = null) => {
+  let query = supabase.from('partners').select('*').order('created_at', { ascending: false });
+
+  // If we have a profile with a company_id, enforce isolation
+  if (profile?.company_id) {
+    query = query.eq('company_id', profile.company_id);
+  } else if (profile && profile.role !== 'superadmin') {
+    // If not superadmin but missing company_id, pull nothing for safety
+    query = query.eq('company_id', '00000000-0000-0000-0000-000000000000');
+  }
+
+  const { data, error } = await query;
   if (error) console.error('Error fetching partners:', error);
   return data || [];
 };

@@ -6,11 +6,42 @@ import { getPartners, deletePartner, savePartner } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
 
+const COUNTRIES = [
+    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina",
+    "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados",
+    "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana",
+    "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon",
+    "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros",
+    "Congo (Congo-Brazzaville)", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czechia (Czech Republic)",
+    "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador",
+    "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France",
+    "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea",
+    "Guinea-Bissau", "Guyana", "Haiti", "Holy See", "Honduras", "Hungary", "Iceland", "India",
+    "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan",
+    "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho",
+    "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia",
+    "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia",
+    "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia",
+    "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea",
+    "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine State", "Panama",
+    "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania",
+    "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines",
+    "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles",
+    "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa",
+    "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland",
+    "Syria", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago",
+    "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
+    "United Kingdom", "United States of America", "Uruguay", "Uzbekistan", "Vanuatu", "Venezuela",
+    "Vietnam", "Yemen", "Zambia", "Zimbabwe"
+];
+
 export default function Partners() {
     const { profile } = useAuth();
     const [partners, setPartners] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedCountry, setSelectedCountry] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 8;
     const navigate = useNavigate();
@@ -30,7 +61,7 @@ export default function Partners() {
 
     const loadPartners = async () => {
         setLoading(true);
-        const data = await getPartners();
+        const data = await getPartners(profile);
         const sorted = data.sort((a, b) => a.name.localeCompare(b.name));
         setPartners(sorted);
         setLoading(false);
@@ -106,15 +137,18 @@ export default function Partners() {
     };
 
     const filteredPartners = partners.filter(p => {
-        if (!searchTerm) return true;
         const term = searchTerm.toLowerCase();
-        return (
+        const matchesSearch = !searchTerm || (
             (p.name && p.name.toLowerCase().includes(term)) ||
             (p.email1 && p.email1.toLowerCase().includes(term)) ||
             (p.country && p.country.toLowerCase().includes(term)) ||
-            (p.types && p.types.some(t => t.toLowerCase().includes(term))) ||
+            (p.types && p.types.some(t => t?.toLowerCase().includes(term))) ||
             (p.brand && p.brand.toLowerCase().includes(term))
         );
+        const matchesCountry = !selectedCountry || (p.country && p.country === selectedCountry);
+        const matchesCategory = !selectedCategory || (p.types && p.types.includes(selectedCategory));
+
+        return matchesSearch && matchesCountry && matchesCategory;
     });
 
     const paginatedPartners = filteredPartners.slice(
@@ -124,7 +158,9 @@ export default function Partners() {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm]);
+    }, [searchTerm, selectedCountry, selectedCategory]);
+
+    const availableCategories = Array.from(new Set(partners.flatMap(p => p.types || []))).filter(Boolean).sort();
 
     const handleCategoryToggle = (cat) => {
         setNewSupplier(prev => ({
@@ -163,11 +199,34 @@ export default function Partners() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px' }}>
-                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 500 }}>
-                        <MapPin size={16} color="#94a3b8" /> All Countries <ChevronDown size={14} />
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 16px', gap: '8px' }}>
+                        <MapPin size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
+                        <select
+                            value={selectedCountry}
+                            onChange={(e) => setSelectedCountry(e.target.value)}
+                            style={{ appearance: 'none', background: 'transparent', border: 'none', outline: 'none', color: '#475569', fontSize: '0.9rem', fontWeight: 500, padding: '10px 24px 10px 0', cursor: 'pointer', width: '100%', minWidth: '150px' }}
+                        >
+                            <option value="">All Countries</option>
+                            {COUNTRIES.map(country => (
+                                <option key={country} value={country}>{country}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={14} color="#94a3b8" style={{ position: 'absolute', right: '16px', pointerEvents: 'none' }} />
                     </div>
-                    <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 500 }}>
-                        <Filter size={16} color="#94a3b8" /> All Categories <ChevronDown size={14} />
+
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 16px', gap: '8px' }}>
+                        <Filter size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
+                        <select
+                            value={selectedCategory}
+                            onChange={(e) => setSelectedCategory(e.target.value)}
+                            style={{ appearance: 'none', background: 'transparent', border: 'none', outline: 'none', color: '#475569', fontSize: '0.9rem', fontWeight: 500, padding: '10px 24px 10px 0', cursor: 'pointer', width: '100%', minWidth: '150px' }}
+                        >
+                            <option value="">All Categories</option>
+                            {availableCategories.map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                        </select>
+                        <ChevronDown size={14} color="#94a3b8" style={{ position: 'absolute', right: '16px', pointerEvents: 'none' }} />
                     </div>
                 </div>
             </div>
@@ -279,7 +338,17 @@ export default function Partners() {
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Country *</label>
-                                    <input required placeholder="Country" value={newSupplier.country} onChange={e => setNewSupplier({ ...newSupplier, country: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <select
+                                        required
+                                        value={newSupplier.country}
+                                        onChange={e => setNewSupplier({ ...newSupplier, country: e.target.value })}
+                                        style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: '#fff', cursor: 'pointer' }}
+                                    >
+                                        <option value="" disabled>Select Country</option>
+                                        {COUNTRIES.map(country => (
+                                            <option key={country} value={country}>{country}</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>City</label>
