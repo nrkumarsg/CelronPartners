@@ -54,6 +54,7 @@ export default function Partners() {
         types: [],
         rating: 0
     });
+    const [customCategory, setCustomCategory] = useState('');
 
     useEffect(() => {
         loadPartners();
@@ -160,7 +161,8 @@ export default function Partners() {
         setCurrentPage(1);
     }, [searchTerm, selectedCountry, selectedCategory]);
 
-    const availableCategories = Array.from(new Set(partners.flatMap(p => p.types || []))).filter(Boolean).sort();
+    const defaultCategories = ['Supplier', 'Spare Parts', 'Service', 'Calibration', 'Automation', 'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment', 'Industrial Supplies'];
+    const availableCategories = Array.from(new Set([...defaultCategories, ...partners.flatMap(p => p.types || [])])).filter(Boolean).sort();
 
     const handleCategoryToggle = (cat) => {
         setNewSupplier(prev => ({
@@ -169,6 +171,16 @@ export default function Partners() {
                 ? prev.types.filter(t => t !== cat)
                 : [...prev.types, cat]
         }));
+    };
+
+    const handleAddCustomCategory = () => {
+        if (customCategory.trim() && !newSupplier.types.includes(customCategory.trim())) {
+            setNewSupplier(prev => ({
+                ...prev,
+                types: [...prev.types, customCategory.trim()]
+            }));
+            setCustomCategory('');
+        }
     };
 
     return (
@@ -309,13 +321,14 @@ export default function Partners() {
 
                         <form onSubmit={handleSaveNewSupplier} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
-                            <div style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '24px', border: '1px dashed #cbd5e1', borderRadius: '12px', background: '#f8fafc', marginBottom: '8px' }}>
+                            <div style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '24px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc', marginBottom: '16px' }}>
                                 <div style={{ width: '64px', height: '64px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <UploadCloud color="#94a3b8" />
+                                    <Globe color="#6366f1" size={28} />
                                 </div>
-                                <div>
-                                    <div style={{ fontWeight: 500, color: '#1e293b' }}>Company Logo</div>
-                                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Upload a logo image</div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '6px' }}>Company Website</label>
+                                    <input placeholder="https://supplier.com" value={newSupplier.weblink} onChange={e => setNewSupplier({ ...newSupplier, weblink: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Enter the primary website URL for the supplier.</div>
                                 </div>
                             </div>
 
@@ -332,10 +345,7 @@ export default function Partners() {
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Phone</label>
                                     <input placeholder="+1 234 567 8900" value={newSupplier.phone1} onChange={e => setNewSupplier({ ...newSupplier, phone1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Website</label>
-                                    <input placeholder="https://supplier.com" value={newSupplier.weblink} onChange={e => setNewSupplier({ ...newSupplier, weblink: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                </div>
+
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Country *</label>
                                     <select
@@ -364,7 +374,7 @@ export default function Partners() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Categories</label>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                    {['Supplier', 'Spare Parts', 'Service', 'Calibration', 'Automation', 'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment', 'Industrial Supplies'].map(cat => (
+                                    {Array.from(new Set([...defaultCategories, ...availableCategories, ...newSupplier.types])).map(cat => (
                                         <div
                                             key={cat}
                                             onClick={() => handleCategoryToggle(cat)}
@@ -373,6 +383,18 @@ export default function Partners() {
                                             {cat}
                                         </div>
                                     ))}
+                                </div>
+                                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                    <input
+                                        placeholder="Add new custom category"
+                                        value={customCategory}
+                                        onChange={e => setCustomCategory(e.target.value)}
+                                        onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), handleAddCustomCategory())}
+                                        style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem' }}
+                                    />
+                                    <button type="button" onClick={handleAddCustomCategory} style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: '#e2e8f0', color: '#475569', fontWeight: 500, cursor: 'pointer', fontSize: '0.85rem' }}>
+                                        Add
+                                    </button>
                                 </div>
                             </div>
 
