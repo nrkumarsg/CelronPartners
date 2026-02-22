@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Edit2, Trash2, Printer } from 'lucide-react';
-import { getContacts, deleteContact, getPartners } from '../lib/store';
+import { Search, Plus, Edit2, Trash2, Printer, Upload, Download } from 'lucide-react';
+import Papa from 'papaparse';
+import { getContacts, deleteContact, getPartners, saveContact } from '../lib/store';
 import Pagination from '../components/Pagination';
 
 export default function ContactsDirectory() {
@@ -12,6 +13,7 @@ export default function ContactsDirectory() {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     const navigate = useNavigate();
+    const fileInputRef = useRef(null);
 
     useEffect(() => {
         loadData();
@@ -42,6 +44,58 @@ export default function ContactsDirectory() {
             await deleteContact(id);
             loadData();
         }
+    };
+
+    const handleImportCSV = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setLoading(true);
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async function (results) {
+                let imported = 0;
+                for (const row of results.data) {
+                    if (!row.name || !row.name.trim()) continue;
+                    try {
+                        const payload = { ...row, name: row.name.trim() };
+                        if (row.id) payload.id = row.id;
+                        await saveContact(payload);
+                        imported++;
+                    } catch (err) {
+                        console.error("Error saving contact row", err);
+                    }
+                }
+                alert(`Successfully imported ${imported} contacts`);
+                loadData();
+            },
+            error: function () {
+                alert('Error parsing CSV file');
+                setLoading(false);
+            }
+        });
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const handleExportCSV = () => {
+        const csvData = filteredContacts.map(c => ({
+            id: c.id || '',
+            name: c.name || '',
+            partnerId: c.partnerId || '',
+            partnerName: partners[c.partnerId] || '',
+            post: c.post || '',
+            email: c.email || '',
+            handphone: c.handphone || ''
+        }));
+        const csv = Papa.unparse(csvData);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute('download', 'contacts_export.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const filteredContacts = contacts.filter(c => {
@@ -75,6 +129,13 @@ export default function ContactsDirectory() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px' }}>
+                    <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} style={{ display: 'none' }} />
+                    <button onClick={() => fileInputRef.current.click()} style={{ background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                        <Upload size={18} /> Add CSV
+                    </button>
+                    <button onClick={handleExportCSV} style={{ background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 500, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                        <Download size={18} /> Export
+                    </button>
                     <button className="btn btn-secondary" onClick={() => window.print()} disabled={loading}>
                         <Printer size={18} /> Print
                     </button>
