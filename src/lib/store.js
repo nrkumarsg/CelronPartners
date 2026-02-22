@@ -146,3 +146,28 @@ export const deleteBrand = async (id) => {
   const { error } = await supabase.from('brands').delete().eq('id', id);
   if (error) console.error('Error deleting brand:', error);
 };
+
+// --- Document Settings ---
+export const getDocumentSettings = async () => {
+  const { data, error } = await supabase.from('document_settings').select('*').limit(1).single();
+  if (error && error.code !== 'PGRST116') console.error('Error fetching settings:', error);
+  return data || null;
+};
+
+export const saveDocumentSettings = async (payload) => {
+  const isExisting = !!payload.id;
+  const dataToSave = { ...payload };
+  delete dataToSave.created_at;
+
+  if (isExisting) {
+    const { data, error } = await supabase.from('document_settings').update(dataToSave).eq('id', payload.id).select();
+    if (error) throw error;
+    return data[0];
+  } else {
+    delete dataToSave.id;
+    const { data, error } = await supabase.from('document_settings').insert([dataToSave]).select();
+    if (error) throw error;
+    return data[0];
+  }
+};
+
