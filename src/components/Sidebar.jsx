@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, LogOut, ShieldCheck, Search } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, LogOut, ShieldCheck, Search, Tags, Hexagon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Sidebar() {
@@ -35,13 +35,29 @@ export default function Sidebar() {
                 </NavLink>
 
                 {hasAccess('partners') && (
-                    <NavLink
-                        to="/partners"
-                        className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                    >
-                        <Building2 size={20} />
-                        <span className="nav-text">Partners</span>
-                    </NavLink>
+                    <>
+                        <NavLink
+                            to="/partners"
+                            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                        >
+                            <Building2 size={20} />
+                            <span className="nav-text">Partners</span>
+                        </NavLink>
+                        <NavLink
+                            to="/categories"
+                            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                        >
+                            <Tags size={20} />
+                            <span className="nav-text">Categories</span>
+                        </NavLink>
+                        <NavLink
+                            to="/brands"
+                            className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                        >
+                            <Hexagon size={20} />
+                            <span className="nav-text">Brands</span>
+                        </NavLink>
+                    </>
                 )}
 
                 {hasAccess('contacts') && (

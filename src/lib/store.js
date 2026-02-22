@@ -88,3 +88,61 @@ export const deleteContact = async (id) => {
   const { error } = await supabase.from('contacts').delete().eq('id', id);
   if (error) console.error('Error deleting contact:', error);
 };
+
+// --- Categories ---
+export const getCategories = async () => {
+  const { data, error } = await supabase.from('categories').select('*').order('name');
+  if (error) console.error('Error fetching categories:', error);
+  return data || [];
+};
+
+export const saveCategory = async (payload) => {
+  const isExisting = !!payload.id;
+  const dataToSave = { ...payload };
+  delete dataToSave.created_at;
+
+  if (isExisting) {
+    const { data, error } = await supabase.from('categories').update(dataToSave).eq('id', payload.id).select();
+    if (error) throw error;
+    return data[0];
+  } else {
+    delete dataToSave.id;
+    const { data, error } = await supabase.from('categories').insert([dataToSave]).select();
+    if (error) throw error;
+    return data[0];
+  }
+};
+
+export const deleteCategory = async (id) => {
+  const { error } = await supabase.from('categories').delete().eq('id', id);
+  if (error) console.error('Error deleting category:', error);
+};
+
+// --- Brands ---
+export const getBrands = async () => {
+  const { data, error } = await supabase.from('brands').select('*').order('name');
+  if (error) console.error('Error fetching brands:', error);
+  return data || [];
+};
+
+export const saveBrand = async (payload) => {
+  const isExisting = !!payload.id;
+  const dataToSave = { ...payload };
+  delete dataToSave.created_at;
+
+  if (isExisting) {
+    const { data, error } = await supabase.from('brands').update(dataToSave).eq('id', payload.id).select();
+    if (error) throw error;
+    return data[0];
+  } else {
+    delete dataToSave.id;
+    const { data, error } = await supabase.from('brands').insert([dataToSave]).select();
+    if (error) throw error;
+    return data[0];
+  }
+};
+
+export const deleteBrand = async (id) => {
+  const { error } = await supabase.from('brands').delete().eq('id', id);
+  if (error) console.error('Error deleting brand:', error);
+};

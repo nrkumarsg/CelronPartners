@@ -17,6 +17,8 @@ import WorkflowBoard from './pages/workflows/WorkflowBoard';
 import UniversalFinder from './pages/workflows/UniversalFinder';
 import EnquiryDetails from './pages/workflows/EnquiryDetails';
 import JobDetails from './pages/workflows/JobDetails';
+import CategoriesDirectory from './pages/CategoriesDirectory';
+import BrandsDirectory from './pages/BrandsDirectory';
 
 // Authentication & RBAC Components
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -73,6 +75,9 @@ function App() {
               {/* Partners Module */}
               <Route path="/partners" element={<ProtectedRoute requiredModule="partners"><Partners /></ProtectedRoute>} />
               <Route path="/partners/:id" element={<ProtectedRoute requiredModule="partners"><PartnerForm /></ProtectedRoute>} />
+
+              <Route path="/categories" element={<ProtectedRoute><CategoriesDirectory /></ProtectedRoute>} />
+              <Route path="/brands" element={<ProtectedRoute><BrandsDirectory /></ProtectedRoute>} />
 
               {/* Contacts Module */}
               <Route path="/contacts" element={<ProtectedRoute requiredModule="contacts"><ContactsDirectory /></ProtectedRoute>} />
