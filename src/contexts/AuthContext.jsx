@@ -14,6 +14,14 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         let mounted = true;
 
+        const defaultDemoProfile = (user) => ({
+            id: user.id,
+            email: user.email,
+            role: 'superadmin',
+            status: 'active',
+            accessible_modules: ['partners', 'contacts', 'vessels', 'work-locations', 'catalog', 'reports', 'settings']
+        });
+
         async function initializeAuth() {
             try {
                 // 1. Initial session fetch
@@ -25,7 +33,9 @@ export const AuthProvider = ({ children }) => {
 
                 if (session?.user && mounted) {
                     setUser(session.user);
-                    const { data: profileData } = await getProfile(session.user.id);
+                    let { data: profileData } = await getProfile(session.user.id);
+                    // Fallback for Demo without triggers
+                    if (!profileData) profileData = defaultDemoProfile(session.user);
                     if (mounted) setProfile(profileData);
                 } else if (mounted) {
                     setUser(null);
@@ -50,8 +60,9 @@ export const AuthProvider = ({ children }) => {
 
             if (session?.user) {
                 setUser(session.user);
-                // Optionally wrap in try/catch if getProfile can fail wildly
-                const { data: profileData } = await getProfile(session.user.id);
+                let { data: profileData } = await getProfile(session.user.id);
+                // Fallback for Demo without triggers
+                if (!profileData) profileData = defaultDemoProfile(session.user);
                 if (mounted) setProfile(profileData);
             } else {
                 setUser(null);
