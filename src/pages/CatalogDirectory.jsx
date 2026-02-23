@@ -10,8 +10,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Package,
-    Wrench,
-    Upload
+    Wrench
 } from 'lucide-react';
 import { getCatalogItems, getAllCatalogItemsForExport, createCatalogItem } from '../lib/catalogService';
 import Papa from 'papaparse';
