@@ -1,7 +1,48 @@
--- MASTER FIX FOR AUTHENTICATION AND DATA VISIBILITY
--- Run this in the Supabase SQL Editor to fix the "0 value" issue for new signups.
+-- 1. Ensure ownership columns exist on ALL tables
+DO $$ 
+BEGIN
+    -- Partners
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='partners' AND column_name='company_id') THEN
+        ALTER TABLE public.partners ADD COLUMN company_id uuid;
+    END IF;
 
--- 1. Ensure the Demo Company exists
+    -- Contacts
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='contacts' AND column_name='company_id') THEN
+        ALTER TABLE public.contacts ADD COLUMN company_id uuid;
+    END IF;
+
+    -- Vessels
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='vessels' AND column_name='company_id') THEN
+        ALTER TABLE public.vessels ADD COLUMN company_id uuid;
+    END IF;
+
+    -- Work Locations
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='work_locations' AND column_name='company_id') THEN
+        ALTER TABLE public.work_locations ADD COLUMN company_id uuid;
+    END IF;
+
+    -- Categories
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='categories' AND column_name='company_id') THEN
+        ALTER TABLE public.categories ADD COLUMN company_id uuid;
+    END IF;
+
+    -- Brands
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='brands' AND column_name='company_id') THEN
+        ALTER TABLE public.brands ADD COLUMN company_id uuid;
+    END IF;
+    
+    -- Enquiries
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='enquiries' AND column_name='company_id') THEN
+        ALTER TABLE public.enquiries ADD COLUMN company_id uuid;
+    END IF;
+
+    -- Jobs
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='jobs' AND column_name='company_id') THEN
+        ALTER TABLE public.jobs ADD COLUMN company_id uuid;
+    END IF;
+END $$;
+
+-- 2. Ensure the Demo Company exists
 INSERT INTO public.companies (id, name) 
 VALUES ('d0000000-0000-0000-0000-000000000001', 'Cel-Ron Global') 
 ON CONFLICT (id) DO NOTHING;

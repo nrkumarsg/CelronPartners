@@ -5,6 +5,13 @@ export default function Calendar() {
     // This URL uses 'primary' which automatically shows the calendar of the logged-in Google user.
     const calendarEmbedUrl = "https://calendar.google.com/calendar/embed?src=primary&ctz=Asia%2FSingapore";
 
+    const refreshIframe = () => {
+        const iframe = document.getElementById('google-calendar-iframe');
+        if (iframe) {
+            iframe.src = iframe.src;
+        }
+    };
+
     return (
         <div className="animate-fade-in" style={{ height: 'calc(100vh - 100px)', display: 'flex', flexDirection: 'column' }}>
             <div className="page-header" style={{ marginBottom: '24px' }}>
@@ -19,13 +26,22 @@ export default function Calendar() {
                         </p>
                     </div>
                 </div>
-                <button
-                    className="btn btn-secondary"
-                    onClick={() => window.open('https://calendar.google.com', '_blank')}
-                >
-                    <ExternalLink size={18} />
-                    Open Full Google Calendar
-                </button>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                    <button
+                        className="btn btn-secondary"
+                        onClick={refreshIframe}
+                        title="Refresh embedded view"
+                    >
+                        Refresh View
+                    </button>
+                    <button
+                        className="btn btn-primary"
+                        onClick={() => window.open('https://calendar.google.com', '_blank')}
+                    >
+                        <ExternalLink size={18} />
+                        Open Full Google Calendar
+                    </button>
+                </div>
             </div>
 
             <div className="glass-panel" style={{ flex: 1, padding: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -42,12 +58,14 @@ export default function Calendar() {
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                         <Info size={16} color="var(--accent)" />
-                        <span>This view shows your primary Google Calendar. If you see an access error, please ensure you are signed in.</span>
+                        <span>Sign into Google in the new tab, then come back and click <b>Refresh View</b> to see it here.</span>
                     </div>
                     <button
                         className="btn btn-primary"
                         style={{ padding: '6px 16px', fontSize: '0.8rem', background: '#4285F4' }}
-                        onClick={() => window.open('https://accounts.google.com/ServiceLogin?service=cl', '_blank')}
+                        onClick={() => {
+                            window.open('https://accounts.google.com/ServiceLogin?service=cl', '_blank');
+                        }}
                     >
                         Login to Google
                     </button>
@@ -55,6 +73,7 @@ export default function Calendar() {
 
                 <div style={{ flex: 1, position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
                     <iframe
+                        id="google-calendar-iframe"
                         src={calendarEmbedUrl}
                         style={{ border: 0, width: '100%', height: '100%' }}
                         frameBorder="0"
