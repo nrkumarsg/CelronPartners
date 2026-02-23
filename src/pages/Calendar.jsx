@@ -31,17 +31,26 @@ export default function Calendar() {
             <div className="glass-panel" style={{ flex: 1, padding: '12px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                 <div style={{
                     marginBottom: '12px',
-                    padding: '8px 16px',
+                    padding: '12px 16px',
                     background: 'rgba(59, 130, 246, 0.05)',
-                    borderRadius: '8px',
+                    borderRadius: '12px',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '8px',
-                    fontSize: '0.85rem',
-                    color: 'var(--text-secondary)'
+                    justifyContent: 'space-between',
+                    gap: '16px',
+                    border: '1px solid rgba(59, 130, 246, 0.1)'
                 }}>
-                    <Info size={16} color="var(--accent)" />
-                    <span>This view shows your primary Google Calendar. If you don't see your events, ensure you are logged into your Google account in this browser.</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                        <Info size={16} color="var(--accent)" />
+                        <span>This view shows your primary Google Calendar. If you see an access error, please ensure you are signed in.</span>
+                    </div>
+                    <button
+                        className="btn btn-primary"
+                        style={{ padding: '6px 16px', fontSize: '0.8rem', background: '#4285F4' }}
+                        onClick={() => window.open('https://accounts.google.com/ServiceLogin?service=cl', '_blank')}
+                    >
+                        Login to Google
+                    </button>
                 </div>
 
                 <div style={{ flex: 1, position: 'relative', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-color)' }}>
