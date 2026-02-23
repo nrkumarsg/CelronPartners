@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { getDocumentSettings } from '../../lib/store';
+import { useEffect } from 'react';
 
 const SignUp = () => {
     const { signUp } = useAuth();
@@ -14,6 +16,19 @@ const SignUp = () => {
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
     const [loading, setLoading] = useState(false);
+    const [allowSignup, setAllowSignup] = useState(true);
+    const [checkingSettings, setCheckingSettings] = useState(true);
+
+    useEffect(() => {
+        async function fetchSettings() {
+            const settings = await getDocumentSettings();
+            if (settings && settings.allow_signup === false) {
+                setAllowSignup(false);
+            }
+            setCheckingSettings(false);
+        }
+        fetchSettings();
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -40,6 +55,23 @@ const SignUp = () => {
 
         setLoading(false);
     };
+
+    if (checkingSettings) {
+        return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg-primary)', color: 'white' }}>Loading...</div>;
+    }
+
+    if (!allowSignup) {
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg-primary)' }}>
+                <div className="glass-panel" style={{ width: '100%', maxWidth: '400px', margin: '20px', textAlign: 'center' }}>
+                    <AlertCircle size={48} color="#ef4444" style={{ marginBottom: '16px' }} />
+                    <h2 style={{ marginBottom: '8px' }}>Signup Disabled</h2>
+                    <p style={{ color: 'var(--text-secondary)', marginBottom: '24px' }}>Public account registration is currently restricted by the administrator.</p>
+                    <Link to="/login" className="btn btn-primary" style={{ textDecoration: 'none', display: 'inline-block' }}>Go to Login</Link>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg-primary)' }}>

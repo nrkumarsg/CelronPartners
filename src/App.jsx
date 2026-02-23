@@ -19,6 +19,10 @@ import EnquiryDetails from './pages/workflows/EnquiryDetails';
 import JobDetails from './pages/workflows/JobDetails';
 import CategoriesDirectory from './pages/CategoriesDirectory';
 import BrandsDirectory from './pages/BrandsDirectory';
+import TodoList from './pages/TodoList';
+import NotesDirectory from './pages/NotesDirectory';
+import NoteForm from './pages/NoteForm';
+import Calendar from './pages/Calendar';
 
 // Authentication & RBAC Components
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -103,6 +107,13 @@ function App() {
 
               {/* Reports */}
               <Route path="/reports" element={<ProtectedRoute requiredModule="reports"><Reports /></ProtectedRoute>} />
+
+              <Route path="/todo" element={<ProtectedRoute><TodoList /></ProtectedRoute>} />
+
+              {/* Notes Module */}
+              <Route path="/notes" element={<ProtectedRoute><NotesDirectory /></ProtectedRoute>} />
+              <Route path="/notes/:id" element={<ProtectedRoute><NoteForm /></ProtectedRoute>} />
+              <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
 
               {/* Settings */}
               <Route path="/settings" element={<ProtectedRoute requiredModule="settings"><ModuleSettings /></ProtectedRoute>} />

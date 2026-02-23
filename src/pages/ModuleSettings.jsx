@@ -13,7 +13,8 @@ export default function ModuleSettings() {
         email: 'sales@celron.net',
         logo_url: 'https://celron.net/wp-content/uploads/2023/12/celronlogowithtranslogorotating.gif',
         signature_url: '',
-        watermark: false
+        watermark: false,
+        allow_signup: true
     });
 
     const logoInputRef = useRef(null);
@@ -168,6 +169,21 @@ export default function ModuleSettings() {
                         </div>
                         <div onClick={() => setSettings(prev => ({ ...prev, watermark: !prev.watermark }))} style={{ cursor: 'pointer', color: settings.watermark ? '#10b981' : '#cbd5e1', transition: 'all 0.2s' }}>
                             {settings.watermark ? <ToggleRight size={36} /> : <ToggleLeft size={36} />}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Authentication Block */}
+                <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '32px' }}>
+                    <h3 style={{ margin: '0 0 24px 0', fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>Authentication Settings</h3>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <div style={{ fontSize: '0.95rem', fontWeight: 500, color: '#1e293b', marginBottom: '4px' }}>Allow Public Signup</div>
+                            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>If disabled, the "Sign Up" link will be hidden from the login page.</div>
+                        </div>
+                        <div onClick={() => setSettings(prev => ({ ...prev, allow_signup: !prev.allow_signup }))} style={{ cursor: 'pointer', color: settings.allow_signup ? '#10b981' : '#cbd5e1', transition: 'all 0.2s' }}>
+                            {settings.allow_signup ? <ToggleRight size={36} /> : <ToggleLeft size={36} />}
                         </div>
                     </div>
                 </div>

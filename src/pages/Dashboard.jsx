@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Search, Users, DollarSign, Activity, FileSpreadsheet, Ship, MapPin } from 'lucide-react';
 import { getPartners, getContacts } from '../lib/store';
 import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 import StageReminders from '../components/dashboard/StageReminders';
+import TodoReminder from '../components/dashboard/TodoReminder';
 
 export default function Dashboard() {
     const [searchTerm, setSearchTerm] = useState('');
+    const { profile } = useAuth();
     const [stats, setStats] = useState({
         totalPartners: 0,
         customers: 0,
@@ -21,8 +24,8 @@ export default function Dashboard() {
     useEffect(() => {
         async function loadData() {
             setLoading(true);
-            const p = await getPartners();
-            const c = await getContacts();
+            const p = await getPartners(profile);
+            const c = await getContacts(profile);
             setPartners(p);
 
             let customers = 0;
@@ -120,6 +123,7 @@ export default function Dashboard() {
             </div>
 
             {/* AI Workflow Action Reminders */}
+            {!searchTerm && <TodoReminder />}
             {!searchTerm && <StageReminders />}
 
             {searchTerm && (

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Lock, Mail, Eye, EyeOff } from 'lucide-react';
+import { getDocumentSettings } from '../../lib/store';
+import { useEffect } from 'react';
 
 const Login = () => {
     const { signIn } = useAuth();
@@ -11,6 +13,17 @@ const Login = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [allowSignup, setAllowSignup] = useState(true);
+
+    useEffect(() => {
+        async function fetchSettings() {
+            const settings = await getDocumentSettings();
+            if (settings && settings.allow_signup !== undefined) {
+                setAllowSignup(settings.allow_signup);
+            }
+        }
+        fetchSettings();
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -108,9 +121,11 @@ const Login = () => {
                         {loading ? 'Signing In...' : 'Sign In'}
                     </button>
 
-                    <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                        Don't have an account? <Link to="/signup" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>Sign Up</Link>
-                    </div>
+                    {allowSignup && (
+                        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                            Don't have an account? <Link to="/signup" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>Sign Up</Link>
+                        </div>
+                    )}
                 </form>
             </div>
         </div>
