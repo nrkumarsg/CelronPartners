@@ -1,5 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
 import Partners from './pages/Partners';
 import PartnerForm from './pages/PartnerForm';
@@ -23,6 +24,7 @@ import TodoList from './pages/TodoList';
 import NotesDirectory from './pages/NotesDirectory';
 import NoteForm from './pages/NoteForm';
 import Calendar from './pages/Calendar';
+import StorageDirectory from './pages/StorageDirectory';
 
 // Authentication & RBAC Components
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -45,9 +47,12 @@ const AppLayout = ({ children }) => {
   return (
     <div className="app-container">
       <Sidebar />
-      <main className="main-content">
-        {children}
-      </main>
+      <div className="main-layout">
+        <Header />
+        <main className="main-content">
+          {children}
+        </main>
+      </div>
     </div>
   );
 };
@@ -104,6 +109,7 @@ function App() {
               <Route path="/workflows/enquiry/:id" element={<ProtectedRoute><EnquiryDetails /></ProtectedRoute>} />
               <Route path="/workflows/job/:id" element={<ProtectedRoute><JobDetails /></ProtectedRoute>} />
               <Route path="/workflows/finder" element={<ProtectedRoute><UniversalFinder /></ProtectedRoute>} />
+              <Route path="/storage" element={<ProtectedRoute><StorageDirectory /></ProtectedRoute>} />
 
               {/* Reports */}
               <Route path="/reports" element={<ProtectedRoute requiredModule="reports"><Reports /></ProtectedRoute>} />

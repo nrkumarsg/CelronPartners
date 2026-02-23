@@ -14,7 +14,9 @@ export default function ModuleSettings() {
         logo_url: 'https://celron.net/wp-content/uploads/2023/12/celronlogowithtranslogorotating.gif',
         signature_url: '',
         watermark: false,
-        allow_signup: true
+        allow_signup: true,
+        google_drive_folder_id: '',
+        google_calendar_id: ''
     });
 
     const logoInputRef = useRef(null);
@@ -184,6 +186,39 @@ export default function ModuleSettings() {
                         </div>
                         <div onClick={() => setSettings(prev => ({ ...prev, allow_signup: !prev.allow_signup }))} style={{ cursor: 'pointer', color: settings.allow_signup ? '#10b981' : '#cbd5e1', transition: 'all 0.2s' }}>
                             {settings.allow_signup ? <ToggleRight size={36} /> : <ToggleLeft size={36} />}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Google Integration Block */}
+                <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '32px' }}>
+                    <h3 style={{ margin: '0 0 24px 0', fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>Google Integration</h3>
+                    <p style={{ margin: '0 0 24px 0', color: '#64748b', fontSize: '0.85rem' }}>Personalize storage and schedule for your company. Find these IDs in your Google Drive folder and Calendar settings.</p>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b' }}>Google Drive Root Folder ID</label>
+                            <input
+                                type="text"
+                                name="google_drive_folder_id"
+                                placeholder="e.g. 1aBC...xyZ"
+                                value={settings.google_drive_folder_id || ''}
+                                onChange={handleChange}
+                                style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.95rem' }}
+                            />
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ID of the `CELRON2026` folder in your drive.</span>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b' }}>Google Calendar ID</label>
+                            <input
+                                type="text"
+                                name="google_calendar_id"
+                                placeholder="e.g. company@gmail.com"
+                                value={settings.google_calendar_id || ''}
+                                onChange={handleChange}
+                                style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.95rem' }}
+                            />
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Usually your email address or a shared calendar ID.</span>
                         </div>
                     </div>
                 </div>

@@ -1,9 +1,22 @@
 import React from 'react';
 import { Calendar as CalendarIcon, ExternalLink, Info } from 'lucide-react';
+import { getDocumentSettings } from '../lib/store';
 
 export default function Calendar() {
-    // This URL uses 'primary' which automatically shows the calendar of the logged-in Google user.
-    const calendarEmbedUrl = "https://calendar.google.com/calendar/embed?src=primary&ctz=Asia%2FSingapore";
+    const [settings, setSettings] = React.useState(null);
+
+    React.useEffect(() => {
+        loadSettings();
+    }, []);
+
+    const loadSettings = async () => {
+        const data = await getDocumentSettings();
+        if (data) setSettings(data);
+    };
+
+    // Use 'primary' if no specific calendar ID is provided in settings
+    const calendarId = settings?.google_calendar_id || 'primary';
+    const calendarEmbedUrl = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(calendarId)}&ctz=Asia%2FSingapore`;
 
     const refreshIframe = () => {
         const iframe = document.getElementById('google-calendar-iframe');

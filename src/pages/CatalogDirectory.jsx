@@ -10,15 +10,19 @@ import {
     ChevronLeft,
     ChevronRight,
     Package,
-    Wrench
+    Wrench,
+    Upload
 } from 'lucide-react';
-import { getCatalogItems, getAllCatalogItemsForExport } from '../lib/catalogService';
+import { getCatalogItems, getAllCatalogItemsForExport, createCatalogItem } from '../lib/catalogService';
 import Papa from 'papaparse';
+import { useAuth } from '../contexts/AuthContext';
 import * as html2pdf from 'html2pdf.js';
 
 const CatalogDirectory = () => {
     const navigate = useNavigate();
+    const { profile } = useAuth();
     const [items, setItems] = useState([]);
+    const fileInputRef = React.useRef(null);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState('');
@@ -94,6 +98,47 @@ const CatalogDirectory = () => {
         window.print();
     };
 
+    const handleImportCSV = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setLoading(true);
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async function (results) {
+                let imported = 0;
+                for (const row of results.data) {
+                    const itemName = row['Item Name'] || row['Name'] || row['item_name'];
+                    if (!itemName) continue;
+
+                    try {
+                        const payload = {
+                            name: itemName.trim(),
+                            type: row['Type'] || row['type'] || 'Supply Part',
+                            specification: row['Specification'] || row['specification'] || '',
+                            quantity: row['Qty'] || row['Quantity Available'] || row['quantity'] ? parseInt(row['Qty'] || row['Quantity Available'] || row['quantity'], 10) : 0,
+                            selling_price: row['Price'] || row['Selling Price'] || row['selling_price'] ? parseFloat(row['Price'] || row['Selling Price'] || row['selling_price']) : 0,
+                            stored_location: row['Location'] || row['Stored Location'] || row['stored_location'] || '',
+                            company_id: profile?.company_id || 'd0000000-0000-0000-0000-000000000001'
+                        };
+                        await createCatalogItem(payload);
+                        imported++;
+                    } catch (err) {
+                        console.error("Error saving catalog row", err);
+                    }
+                }
+                alert(`Successfully imported ${imported} catalog items`);
+                fetchItems();
+            },
+            error: function () {
+                alert('Error parsing CSV file');
+                setLoading(false);
+            }
+        });
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
     return (
         <div className="animate-fade-in">
             <div className="page-header">
@@ -102,6 +147,10 @@ const CatalogDirectory = () => {
                     <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Manage your supply parts and services</p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }} className="hide-on-print">
+                    <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} style={{ display: 'none' }} />
+                    <button className="btn btn-secondary" onClick={() => fileInputRef.current.click()}>
+                        <Upload size={18} /> Import CSV
+                    </button>
                     <button className="btn btn-secondary" onClick={handleExportCSV}>
                         <Download size={18} /> Export CSV
                     </button>

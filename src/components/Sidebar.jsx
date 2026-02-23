@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, LogOut, ShieldCheck, Search, Tags, Hexagon, CheckSquare, StickyNote, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, ShieldCheck, Search, Tags, Hexagon, CheckSquare, StickyNote, CalendarDays, Database } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getTodos } from '../lib/todoService';
 
@@ -123,6 +123,11 @@ export default function Sidebar() {
                     <span className="nav-text">Universal Finder</span>
                 </NavLink>
 
+                <NavLink to="/storage" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                    <Database size={20} color="#3b82f6" />
+                    <span className="nav-text" style={{ fontWeight: 600 }}>Storage</span>
+                </NavLink>
+
                 {hasAccess('reports') && (
                     <NavLink to="/reports" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                         <FileText size={20} />
@@ -146,26 +151,6 @@ export default function Sidebar() {
             </nav>
 
             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {profile && (
-                    <div className="user-profile-badge" style={{ padding: '12px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ overflow: 'hidden' }}>
-                            <p style={{ fontSize: '0.85rem', color: '#fff', margin: 0, whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                                {profile.email}
-                            </p>
-                            <span style={{ fontSize: '0.7rem', color: '#6366f1', textTransform: 'uppercase', fontWeight: 600 }}>
-                                {profile.role}
-                            </span>
-                        </div>
-                        <button
-                            onClick={() => signOut()}
-                            title="Sign Out"
-                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}
-                        >
-                            <LogOut size={18} />
-                        </button>
-                    </div>
-                )}
-
                 <div className="integration-status" style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', textAlign: 'center' }}>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: 0 }}>
                         <span className="nav-text">Integration Status: </span><span style={{ color: '#4ade80', fontWeight: 'bold' }}>•</span>

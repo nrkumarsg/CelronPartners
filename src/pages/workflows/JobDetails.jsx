@@ -4,7 +4,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getJobById, updateJob, getPurchaseOrders, createPurchaseOrder } from '../../lib/workflowService';
 import { generateDocumentPDF } from '../../lib/pdfGenerator';
 import DocumentManager from '../../components/workflows/DocumentManager';
-import { ArrowLeft, FileText, CheckCircle, ShieldCheck, DollarSign, Plus, Printer, Truck } from 'lucide-react';
+import { ArrowLeft, FileText, CheckCircle, ShieldCheck, DollarSign, Plus, Printer, Truck, Database, ExternalLink } from 'lucide-react';
+import { getDocumentSettings } from '../../lib/store';
 
 export default function JobDetails() {
     const { id } = useParams();
@@ -17,6 +18,9 @@ export default function JobDetails() {
     const [poType, setPoType] = useState('Customer');
     const [amountStr, setAmountStr] = useState('');
     const [partnerStr, setPartnerStr] = useState('');
+    const [settings, setSettings] = useState(null);
+    const [driveLink, setDriveLink] = useState('');
+    const [showLinkInput, setShowLinkInput] = useState(false);
 
     useEffect(() => {
         if (profile?.company_id && id) {
@@ -31,7 +35,9 @@ export default function JobDetails() {
             if (error) throw error;
             if (data) {
                 setJob(data);
+                if (data.google_drive_link) setDriveLink(data.google_drive_link);
                 fetchPOs(data.id);
+                loadSettings();
             }
         } catch (error) {
             console.error('Error fetching job details:', error);
@@ -43,6 +49,23 @@ export default function JobDetails() {
     const fetchPOs = async (jobId) => {
         const { data } = await getPurchaseOrders(profile.company_id, jobId);
         if (data) setPos(data);
+    };
+
+    const loadSettings = async () => {
+        const data = await getDocumentSettings();
+        if (data) setSettings(data);
+    };
+
+    const updateDriveLink = async () => {
+        try {
+            const { error } = await updateJob(id, { google_drive_link: driveLink });
+            if (error) throw error;
+            setJob({ ...job, google_drive_link: driveLink });
+            setShowLinkInput(false);
+        } catch (error) {
+            console.error('Failed to update storage link:', error);
+            alert('Failed to update storage link');
+        }
     };
 
     const handleAddTracking = async (e) => {
@@ -228,6 +251,50 @@ export default function JobDetails() {
                                 {(!job.enquiries?.catalog_items || job.enquiries?.catalog_items.length === 0) && <li>No items mapped.</li>}
                             </ul>
                         </div>
+                    </div>
+
+                    {/* Storage Integration Card */}
+                    <div className="card" style={{ border: '1px solid rgba(16, 185, 129, 0.3)', background: 'rgba(30, 41, 59, 0.4)' }}>
+                        <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Database size={18} color="#10b981" />
+                            <h3 className="card-title" style={{ color: '#fff' }}>Order Storage (Google Drive)</h3>
+                        </div>
+
+                        {!job.google_drive_link || showLinkInput ? (
+                            <div style={{ padding: '4px' }}>
+                                <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '12px' }}>
+                                    <b>Guidance:</b> If you already created a folder for Enquiry <b>{job.enquiries?.enquiry_no}</b>, please rename it to <b>{job.job_no} - {job.enquiries?.partners?.name}</b> in the <a href={`https://drive.google.com/drive/folders/${settings?.google_drive_folder_id}`} target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>CELRON2026</a> root.
+                                </p>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input
+                                        type="text"
+                                        placeholder="Paste Google Drive folder URL here"
+                                        className="form-control"
+                                        value={driveLink}
+                                        onChange={(e) => setDriveLink(e.target.value)}
+                                        style={{ background: 'rgba(0,0,0,0.2)', color: '#fff' }}
+                                    />
+                                    <button className="btn btn-primary" style={{ padding: '8px 12px', background: '#10b981' }} onClick={updateDriveLink}>Link</button>
+                                </div>
+                                {job.google_drive_link && (
+                                    <button onClick={() => setShowLinkInput(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.75rem', marginTop: '8px', cursor: 'pointer' }}>Cancel</button>
+                                )}
+                            </div>
+                        ) : (
+                            <div>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                    <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Cloud Storage Active</span>
+                                    <button onClick={() => setShowLinkInput(true)} style={{ background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '0.75rem', cursor: 'pointer' }}>Update Link</button>
+                                </div>
+                                <button
+                                    onClick={() => window.open(job.google_drive_link, '_blank')}
+                                    className="btn btn-primary"
+                                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: '#10b981' }}
+                                >
+                                    <ExternalLink size={18} /> Open Job Folder
+                                </button>
+                            </div>
+                        )}
                     </div>
 
                     {/* WhatsApp Wall / Document Manager imported as component */}
