@@ -139,7 +139,7 @@ export default function Sidebar() {
 
                         <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                             <Settings size={20} />
-                            <span className="nav-text">Module Settings</span>
+                            <span className="nav-text">Setting</span>
                         </NavLink>
                     </>
                 )}

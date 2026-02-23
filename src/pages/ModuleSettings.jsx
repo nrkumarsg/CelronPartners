@@ -77,7 +77,7 @@ export default function ModuleSettings() {
     return (
         <div style={{ background: '#f8fafc', minHeight: '100%', padding: '32px', color: '#334155', borderRadius: '16px' }}>
             <header style={{ marginBottom: '32px' }}>
-                <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', margin: '0 0 8px 0' }}>Document Settings</h1>
+                <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', margin: '0 0 8px 0' }}>Setting</h1>
                 <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Configure PDF templates for Enquiries and Quotations</p>
             </header>
 
