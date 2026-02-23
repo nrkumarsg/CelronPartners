@@ -124,8 +124,8 @@ export default function Sidebar() {
                 </NavLink>
 
                 <NavLink to="/storage" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                    <Database size={20} color="#3b82f6" />
-                    <span className="nav-text" style={{ fontWeight: 600 }}>Storage</span>
+                    <Folder size={20} color="#3b82f6" />
+                    <span className="nav-text" style={{ fontWeight: 600 }}>Storage Directory</span>
                 </NavLink>
 
                 {hasAccess('reports') && (
