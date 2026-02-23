@@ -24,32 +24,40 @@ export default function Dashboard() {
     useEffect(() => {
         async function loadData() {
             setLoading(true);
-            const p = await getPartners(profile);
-            const c = await getContacts(profile);
-            setPartners(p);
+            try {
+                const [p, c] = await Promise.all([
+                    getPartners(profile),
+                    getContacts(profile)
+                ]);
 
-            let customers = 0;
-            let suppliers = 0;
-            p.forEach(pt => {
-                if (pt.types?.includes('Customer') || pt.types?.includes('Customer Related')) customers++;
-                if (pt.types?.includes('Supplier') || pt.types?.includes('Supplier Related')) suppliers++;
-            });
+                setPartners(p);
 
-            const { count: vesselsCount } = await supabase.from('vessels').select('*', { count: 'exact', head: true });
-            const { count: locationsCount } = await supabase.from('work_locations').select('*', { count: 'exact', head: true });
+                let customers = 0;
+                let suppliers = 0;
+                p.forEach(pt => {
+                    if (pt.types?.includes('Customer') || pt.types?.includes('Customer Related')) customers++;
+                    if (pt.types?.includes('Supplier') || pt.types?.includes('Supplier Related')) suppliers++;
+                });
 
-            setStats({
-                totalPartners: p.length,
-                customers,
-                suppliers,
-                totalContacts: c.length,
-                totalVessels: vesselsCount || 0,
-                totalLocations: locationsCount || 0
-            });
-            setLoading(false);
+                const { count: vesselsCount } = await supabase.from('vessels').select('*', { count: 'exact', head: true });
+                const { count: locationsCount } = await supabase.from('work_locations').select('*', { count: 'exact', head: true });
+
+                setStats({
+                    totalPartners: p.length,
+                    customers,
+                    suppliers,
+                    totalContacts: c.length,
+                    totalVessels: vesselsCount || 0,
+                    totalLocations: locationsCount || 0
+                });
+            } catch (err) {
+                console.error("Dashboard load error:", err);
+            } finally {
+                setLoading(false);
+            }
         }
         loadData();
-    }, []);
+    }, [profile]);
 
     const filteredPartners = partners.filter(p =>
         p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||

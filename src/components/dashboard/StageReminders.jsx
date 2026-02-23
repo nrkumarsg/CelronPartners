@@ -10,8 +10,12 @@ export default function StageReminders() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (profile?.company_id) {
-            fetchReminders();
+        if (profile) {
+            if (profile.company_id || profile.role === 'superadmin') {
+                fetchReminders();
+            } else {
+                setLoading(false);
+            }
         }
     }, [profile]);
 
@@ -19,8 +23,8 @@ export default function StageReminders() {
         setLoading(true);
         try {
             const [enqRes, jobRes] = await Promise.all([
-                getEnquiries(profile.company_id),
-                getJobs(profile.company_id)
+                getEnquiries(profile?.company_id),
+                getJobs(profile?.company_id)
             ]);
 
             const newReminders = [];
