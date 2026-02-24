@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getWorkflowDocuments, deleteWorkflowDocument } from '../../lib/workflowV2Service';
 import {
@@ -23,12 +23,24 @@ export default function WorkflowV2Board() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [activeType, setActiveType] = useState('All');
+    const [showDropdown, setShowDropdown] = useState(false);
+    const dropdownRef = useRef(null);
 
     useEffect(() => {
         if (profile?.company_id) {
             fetchDocs();
         }
     }, [profile, activeType]);
+
+    useEffect(() => {
+        function handleClickOutside(event) {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setShowDropdown(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [dropdownRef]);
 
     const fetchDocs = async () => {
         setLoading(true);
@@ -79,13 +91,20 @@ export default function WorkflowV2Board() {
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                    <div className="dropdown">
-                        <button className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div className="dropdown" ref={dropdownRef}>
+                        <button
+                            className="btn btn-primary"
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                            onClick={() => setShowDropdown(!showDropdown)}
+                        >
                             <Plus size={18} /> New Document
                         </button>
-                        <div className="dropdown-content" style={{ right: 0, minWidth: '200px' }}>
+                        <div className={`dropdown-content ${showDropdown ? 'show' : ''}`} style={{ right: 0, minWidth: '200px' }}>
                             {DOC_TYPES.map(type => (
-                                <button key={type} onClick={() => navigate(`/workflows/editor/${type.toLowerCase().replace(/\s+/g, '-')}/new`)}>
+                                <button key={type} onClick={() => {
+                                    setShowDropdown(false);
+                                    navigate(`/workflows/editor/${type.toLowerCase().replace(/\s+/g, '-')}/new`);
+                                }}>
                                     {type}
                                 </button>
                             ))}
@@ -265,7 +284,7 @@ export default function WorkflowV2Board() {
                     top: 100%;
                     margin-top: 4px;
                 }
-                .dropdown:hover .dropdown-content {
+                .dropdown-content.show {
                     display: block;
                 }
                 .dropdown-content button {
