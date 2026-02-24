@@ -18,6 +18,8 @@ import WorkflowBoard from './pages/workflows/WorkflowBoard';
 import UniversalFinder from './pages/workflows/UniversalFinder';
 import EnquiryDetails from './pages/workflows/EnquiryDetails';
 import JobDetails from './pages/workflows/JobDetails';
+import WorkflowV2Board from './pages/workflows/WorkflowV2Board';
+import WorkflowEditor from './pages/workflows/WorkflowEditor';
 import CategoriesDirectory from './pages/CategoriesDirectory';
 import BrandsDirectory from './pages/BrandsDirectory';
 import TodoList from './pages/TodoList';
@@ -105,9 +107,11 @@ function App() {
               <Route path="/catalog/:id" element={<ProtectedRoute requiredModule="catalog"><CatalogForm /></ProtectedRoute>} />
 
               {/* Workflows & Universal Finder Module */}
-              <Route path="/workflows" element={<ProtectedRoute><WorkflowBoard /></ProtectedRoute>} />
+              <Route path="/workflows" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/workflows/legacy" element={<ProtectedRoute><WorkflowBoard /></ProtectedRoute>} />
               <Route path="/workflows/enquiry/:id" element={<ProtectedRoute><EnquiryDetails /></ProtectedRoute>} />
               <Route path="/workflows/job/:id" element={<ProtectedRoute><JobDetails /></ProtectedRoute>} />
+              <Route path="/workflows/editor/:type/:id" element={<ProtectedRoute><WorkflowEditor /></ProtectedRoute>} />
               <Route path="/workflows/finder" element={<ProtectedRoute><UniversalFinder /></ProtectedRoute>} />
               <Route path="/storage" element={<ProtectedRoute><StorageDirectory /></ProtectedRoute>} />
 

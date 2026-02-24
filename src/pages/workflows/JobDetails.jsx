@@ -23,8 +23,12 @@ export default function JobDetails() {
     const [showLinkInput, setShowLinkInput] = useState(false);
 
     useEffect(() => {
-        if (profile?.company_id && id) {
-            fetchJob();
+        if (profile && id) {
+            if (profile.company_id) {
+                fetchJob();
+            } else {
+                setLoading(false);
+            }
         }
     }, [id, profile]);
 

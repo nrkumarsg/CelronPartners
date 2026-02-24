@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     Save,
@@ -25,12 +25,15 @@ import {
     deletePurchaseHistory
 } from '../lib/purchaseHistoryService';
 import { supabase } from '../lib/supabase';
+import { uploadFile } from '../lib/store';
 
 const CatalogForm = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const { profile } = useAuth();
     const isNewItem = id === 'new';
+    const quillRef = useRef(null);
+    const purchaseQuillRef = useRef(null);
 
     const [loading, setLoading] = useState(!isNewItem);
     const [saving, setSaving] = useState(false);
@@ -246,15 +249,55 @@ const CatalogForm = () => {
         return <div className="text-center py-12">Loading item data...</div>;
     }
 
+    const imageHandler = (ref) => {
+        const input = document.createElement('input');
+        input.setAttribute('type', 'file');
+        input.setAttribute('accept', 'image/*');
+        input.click();
+        input.onchange = async () => {
+            const file = input.files[0];
+            if (file) {
+                try {
+                    const url = await uploadFile('company_assets', `catalog/content/${id || 'temp'}`, file, { maxWidth: 1024 });
+                    const quill = ref.current.getEditor();
+                    const range = quill.getSelection();
+                    quill.insertEmbed(range.index, 'image', url);
+                } catch (error) {
+                    console.error('Image upload failed:', error);
+                }
+            }
+        };
+    };
+
     // Quill Modules with image support
     const quillModules = {
-        toolbar: [
-            [{ 'header': [1, 2, 3, false] }],
-            ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-            [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
-            ['link', 'image'],
-            ['clean']
-        ],
+        toolbar: {
+            container: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+                [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
+                ['link', 'image'],
+                ['clean']
+            ],
+            handlers: {
+                image: () => imageHandler(quillRef)
+            }
+        }
+    };
+
+    const purchaseQuillModules = {
+        toolbar: {
+            container: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+                [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
+                ['link', 'image'],
+                ['clean']
+            ],
+            handlers: {
+                image: () => imageHandler(purchaseQuillRef)
+            }
+        }
     };
 
     return (
@@ -445,6 +488,7 @@ const CatalogForm = () => {
                                 <label className="form-label">Additional Details & Photos</label>
                                 <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-secondary)', overflow: 'hidden' }}>
                                     <ReactQuill
+                                        ref={quillRef}
                                         theme="snow"
                                         value={formData.details}
                                         onChange={handleDetailsChange}
@@ -588,10 +632,11 @@ const CatalogForm = () => {
                                         <label className="form-label">Purchase Details / Invoice Snippets</label>
                                         <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
                                             <ReactQuill
+                                                ref={purchaseQuillRef}
                                                 theme="snow"
                                                 value={purchaseFormData.details}
                                                 onChange={handlePurchaseDetailsChange}
-                                                modules={quillModules}
+                                                modules={purchaseQuillModules}
                                                 style={{ height: '200px' }}
                                             />
                                         </div>

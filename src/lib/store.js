@@ -21,9 +21,11 @@ export const savePartner = async (partnerData) => {
   delete payload.created_at;
   delete payload.updated_at;
 
-  // Fix empty strings for integer columns in Supabase
+  // Fix empty strings for Supabase
   if (payload.customerCredit === '') payload.customerCredit = null;
   if (payload.supplierCredit === '') payload.supplierCredit = null;
+  if (payload.customerCreditTime === '') payload.customerCreditTime = null;
+  if (payload.supplierCreditTime === '') payload.supplierCreditTime = null;
 
   if (isExisting) {
     const { data, error } = await supabase.from('partners').update(payload).eq('id', payload.id).select();
@@ -145,9 +147,15 @@ export const deleteBrand = async (id) => {
 };
 
 // --- Document Settings ---
-export const getDocumentSettings = async () => {
-  const { data, error } = await supabase.from('document_settings').select('*').limit(1).single();
-  if (error && error.code !== 'PGRST116') console.error('Error fetching settings:', error);
+export const getDocumentSettings = async (companyId = null) => {
+  let query = supabase.from('document_settings').select('*');
+
+  if (companyId) {
+    query = query.eq('company_id', companyId);
+  }
+
+  const { data, error } = await query.limit(1).maybeSingle();
+  if (error) console.error('Error fetching settings:', error);
   return data || null;
 };
 
@@ -155,6 +163,7 @@ export const saveDocumentSettings = async (payload) => {
   const isExisting = !!payload.id;
   const dataToSave = { ...payload };
   delete dataToSave.created_at;
+  delete dataToSave.updated_at;
 
   if (isExisting) {
     const { data, error } = await supabase.from('document_settings').update(dataToSave).eq('id', payload.id).select();
@@ -169,15 +178,78 @@ export const saveDocumentSettings = async (payload) => {
 };
 
 // --- Storage / File Uploads ---
-export const uploadFile = async (bucket, folderPath, file) => {
+export const uploadFile = async (bucket, folderPath, file, options = {}) => {
+  let fileToUpload = file;
+
+  // Resize if it's an image and resize options are provided
+  if (file.type.startsWith('image/') && (options.maxWidth || options.maxHeight)) {
+    try {
+      fileToUpload = await resizeImage(file, options.maxWidth || 1024, options.maxHeight || 1024);
+    } catch (e) {
+      console.warn('Image resize failed, uploading original:', e);
+    }
+  }
+
   const fileExt = file.name.split('.').pop();
   const fileName = `${Math.random()}.${fileExt}`;
   const filePath = `${folderPath}/${fileName}`;
 
-  const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, file);
+  const { error: uploadError } = await supabase.storage.from(bucket).upload(filePath, fileToUpload);
   if (uploadError) throw uploadError;
 
   const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
   return data.publicUrl;
+};
+
+/**
+ * Resizes an image file to fit within maxWidth/maxHeight.
+ * Returns a Blob.
+ */
+export const resizeImage = (file, maxWidth, maxHeight) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            // Keep the original filename but as a Blob
+            const resizedFile = new File([blob], file.name, {
+              type: file.type,
+              lastModified: Date.now(),
+            });
+            resolve(resizedFile);
+          } else {
+            reject(new Error('Canvas to Blob failed'));
+          }
+        }, file.type, 0.8); // 0.8 quality for JPEG
+      };
+      img.onerror = (e) => reject(e);
+    };
+    reader.onerror = (e) => reject(e);
+  });
 };
 

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useVesselsStore } from '../lib/vesselsStore';
+import { uploadFile } from '../lib/store';
 import { ArrowLeft, Save, Trash2, Search, Ship } from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
@@ -9,6 +10,7 @@ export default function VesselForm() {
     const { id } = useParams();
     const navigate = useNavigate();
     const isNew = id === 'new';
+    const quillRef = useRef(null);
     const { vessels, fetchVessels, addVessel, updateVessel, deleteVessel } = useVesselsStore();
 
     const [loading, setLoading] = useState(false);
@@ -79,6 +81,41 @@ export default function VesselForm() {
             } else {
                 alert('Error deleting vessel.');
                 setLoading(false);
+            }
+        }
+    };
+
+    const imageHandler = () => {
+        const input = document.createElement('input');
+        input.setAttribute('type', 'file');
+        input.setAttribute('accept', 'image/*');
+        input.click();
+        input.onchange = async () => {
+            const file = input.files[0];
+            if (file) {
+                try {
+                    const url = await uploadFile('company_assets', `vessels/content/${id || 'temp'}`, file, { maxWidth: 1024 });
+                    const quill = quillRef.current.getEditor();
+                    const range = quill.getSelection();
+                    quill.insertEmbed(range.index, 'image', url);
+                } catch (error) {
+                    console.error('Image upload failed:', error);
+                }
+            }
+        };
+    };
+
+    const modules = {
+        toolbar: {
+            container: [
+                [{ 'header': [1, 2, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                ['link', 'image'],
+                ['clean']
+            ],
+            handlers: {
+                image: imageHandler
             }
         }
     };
@@ -220,9 +257,11 @@ export default function VesselForm() {
                     </h3>
                     <div className="form-group">
                         <ReactQuill
+                            ref={quillRef}
                             theme="snow"
                             value={formData.other_details}
                             onChange={handleQuillChange}
+                            modules={modules}
                             style={{ height: '250px', marginBottom: '40px' }}
                         />
                     </div>

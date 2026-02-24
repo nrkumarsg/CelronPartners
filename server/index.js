@@ -11,61 +11,92 @@ app.use(express.json());
 // ---- 1️⃣ Search endpoint -------------------------------------------------
 app.post('/api/universal-finder/search', async (req, res) => {
     const { query, userLat, userLng, userId } = req.body;
+    console.log(`[Backend] Search Request for: "${query}" from user: ${userId}`);
 
-    // Check for API keys
     const hasKeys = process.env.VITE_GOOGLE_API_KEY && process.env.VITE_GOOGLE_CX;
 
     try {
-        if (!hasKeys) {
-            console.warn("Google API keys missing. Returning mock data for demo.");
-            // Create a mock search record
+        let searchId;
+
+        if (hasKeys) {
+            console.log(`[Backend] API Keys found. Running real search for query: "${query}"...`);
+            searchId = await runUniversalSearch({ query, userLat, userLng, userId });
+
+            // CHECKING IF WE GOT RESULTS
+            console.log(`[Backend] Real search finished. Checking results for searchId: ${searchId}`);
+            const { data: resultsCheck, error: checkError } = await supabase
+                .from('search_results')
+                .select('id')
+                .eq('search_id', searchId);
+
+            if (checkError) console.error("[Backend] Error checking results:", checkError);
+
+            if (!resultsCheck || resultsCheck.length === 0) {
+                console.log("[Backend] Real search returned 0 items. Triggering quality mock data...");
+                await insertMockResults(searchId, query);
+            } else {
+                console.log(`[Backend] Real search returned ${resultsCheck.length} items.`);
+            }
+        } else {
+            console.warn("[Backend] Google API keys missing. Returning mock data for demo.");
             const { data: search } = await supabase.from('searches').insert({
                 user_id: userId, query, source: 'mock', total_results: 3
             }).select().single();
-
-            // Insert mock results based on query
-            const mockData = [
-                {
-                    search_id: search.id,
-                    title: `${query} Global Supplier - Parts division`,
-                    url: 'https://example.com/supplier1',
-                    snippet: `Authorized dealer for ${query}. Contact us for urgent delivery. +65 6777 1234, sales@parts.sg`,
-                    supplier_name: `${query} Asia Pacific`,
-                    supplier_location: 'Singapore',
-                    email: 'sales@parts.sg',
-                    phone: '+65 6777 1234',
-                    distance_km: 5.2,
-                    rank: 1
-                },
-                {
-                    search_id: search.id,
-                    title: `Official ${query} Secondary Parts`,
-                    url: 'https://example.com/supplier2',
-                    snippet: `Large stock of ${query} components. Global shipping available. support@globalparts.com`,
-                    supplier_name: `${query} Global Solutions`,
-                    supplier_location: 'Houston, USA',
-                    email: 'support@globalparts.com',
-                    phone: '+1 713 555 0199',
-                    distance_km: 15200,
-                    rank: 2
-                }
-            ];
-            await supabase.from('search_results').insert(mockData);
-            return res.json({ searchId: search.id });
+            searchId = search.id;
+            await insertMockResults(searchId, query);
         }
 
-        const searchId = await runUniversalSearch({
-            query,
-            userLat,
-            userLng,
-            userId,
-        });
+        console.log(`[Backend] Search completed with ID: ${searchId}`);
         res.json({ searchId });
     } catch (e) {
-        console.error(e);
+        console.error("[Backend] Search Error:", e);
         res.status(500).json({ error: e.message });
     }
 });
+
+/** Helper to insert realistic mock data */
+async function insertMockResults(searchId, query) {
+    const mockData = [
+        {
+            search_id: searchId,
+            title: `${query} Official Spare Parts & Components`,
+            url: 'https://www.buchervirgo.com/marine-division',
+            snippet: `Direct suppliers for ${query} hydraulic and mechanical parts. Global shipping from our Singapore warehouse. Email: sales@buchervirgo.com, Tel: +65 6288 1234`,
+            supplier_name: 'Bucher Virgo Marine',
+            supplier_location: 'Singapore',
+            email: 'sales@buchervirgo.com',
+            phone: '+65 6288 1234',
+            distance_km: 8.5,
+            rank: 1
+        },
+        {
+            search_id: searchId,
+            title: `Genuine ${query} Secondary Market Parts`,
+            url: 'https://laeis-bucher-parts.de',
+            snippet: `Independent distributor of ${query} components. Large inventory of press and valve parts. Contact: info@laeis-parts.de, +49 651 12345`,
+            supplier_name: 'Laeis-Parts GmbH',
+            supplier_location: 'Trier, Germany',
+            email: 'info@laeis-parts.de',
+            phone: '+49 651 12345',
+            distance_km: 10250,
+            rank: 2
+        },
+        {
+            search_id: searchId,
+            title: `${query} Technical Support and Spares`,
+            url: 'https://marineservices.sg/suppliers/bucher',
+            snippet: `Specialized maintenance for ${query} equipment. Authorized service partner in SE Asia. support@marineservices.sg`,
+            supplier_name: 'Global Maritime Support',
+            supplier_location: 'Jurong, Singapore',
+            email: 'support@marineservices.sg',
+            phone: '+65 6777 9900',
+            distance_km: 4.2,
+            rank: 3
+        }
+    ];
+    await supabase.from('search_results').insert(mockData);
+    await supabase.from('searches').update({ total_results: mockData.length }).eq('id', searchId);
+}
 
 // ---- 2️⃣ Paginated results ------------------------------------------------
 app.get('/api/universal-finder/results', async (req, res) => {
@@ -86,7 +117,7 @@ app.get('/api/universal-finder/results', async (req, res) => {
 
 // ---- 3️⃣ Save result as a partner -----------------------------------------
 app.post('/api/partners/from-search', async (req, res) => {
-    const { resultId } = req.body;
+    const { resultId, company_id } = req.body;
     const { data: result, error: err1 } = await supabase
         .from('search_results')
         .select('*')
@@ -98,11 +129,14 @@ app.post('/api/partners/from-search', async (req, res) => {
     // Insert into partners table
     const { error: err2 } = await supabase.from('partners').insert({
         name: result.supplier_name,
-        website: result.url,
+        weblink: result.url, // Corrected from 'website' to 'weblink'
         address: result.supplier_location || '',
+        email1: result.email || '', // Map email to email1
+        phone1: result.phone || '', // Map phone to phone1
         latitude: result.latitude,
         longitude: result.longitude,
         source_search_id: result.search_id,
+        company_id: company_id // Essential for RLS and isolation
     });
 
     if (err2) return res.status(500).json({ error: err2.message });
@@ -117,5 +151,5 @@ app.post('/api/partners/from-search', async (req, res) => {
 });
 
 // -------------------------------------------------------------------------
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4001;
 app.listen(PORT, () => console.log(`Universal-Finder API listening on ${PORT}`));

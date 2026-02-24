@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Settings, UploadCloud, ToggleRight, ToggleLeft, Save } from 'lucide-react';
 import { getDocumentSettings, saveDocumentSettings, uploadFile } from '../lib/store';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ModuleSettings() {
     const [loading, setLoading] = useState(true);
@@ -19,17 +20,20 @@ export default function ModuleSettings() {
         google_calendar_id: ''
     });
 
+    const { profile } = useAuth();
     const logoInputRef = useRef(null);
     const signatureInputRef = useRef(null);
 
     useEffect(() => {
-        loadSettings();
-    }, []);
+        if (profile) {
+            loadSettings();
+        }
+    }, [profile]);
 
     const loadSettings = async () => {
         setLoading(true);
         try {
-            const data = await getDocumentSettings();
+            const data = await getDocumentSettings(profile?.company_id);
             if (data) {
                 setSettings(data);
             }
@@ -40,13 +44,20 @@ export default function ModuleSettings() {
     };
 
     const handleSave = async () => {
+        if (!profile?.company_id) {
+            return alert('Critical Profile Error: Missing Company ID. Please refresh or relog.');
+        }
+
         setSaving(true);
         try {
-            await saveDocumentSettings(settings);
+            const payload = { ...settings };
+            if (!payload.company_id) payload.company_id = profile.company_id;
+
+            await saveDocumentSettings(payload);
             alert('Settings Saved Successfully!');
         } catch (error) {
             console.error(error);
-            alert('Failed to save settings. Make sure you ran the Supabase schema first.');
+            alert('Failed to save settings. Make sure you ran the latest Supabase schema updates.');
         }
         setSaving(false);
     };
@@ -63,7 +74,7 @@ export default function ModuleSettings() {
         setSaving(true);
         try {
             // Uploads to a bucket named "company_assets" in a folder "settings"
-            const url = await uploadFile('company_assets', 'settings', file);
+            const url = await uploadFile('company_assets', 'settings', file, { maxWidth: 800 });
             setSettings(prev => ({ ...prev, [fieldName]: url }));
         } catch (error) {
             console.error('Upload Error:', error);

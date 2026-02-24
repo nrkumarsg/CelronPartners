@@ -64,7 +64,7 @@ export default function NoteForm() {
         setUploading(true);
         try {
             // Upload to a dedicated 'notes-attachments' bucket if it exists, or 'partners' as fallback
-            const url = await uploadFile('partners', `notes/${id || 'temp'}`, file);
+            const url = await uploadFile('company_assets', `notes/${id || 'temp'}`, file, { maxWidth: 1200 });
             const newAttachment = {
                 name: file.name,
                 url,
@@ -78,7 +78,7 @@ export default function NoteForm() {
             }));
         } catch (error) {
             console.error('Upload failed:', error);
-            alert('Failed to upload file');
+            alert(`Failed to upload file: ${error.message || 'Unknown Error'}`);
         } finally {
             setUploading(false);
         }
@@ -110,7 +110,7 @@ export default function NoteForm() {
             if (file) {
                 setUploading(true);
                 try {
-                    const url = await uploadFile('partners', `notes/images/${id || 'temp'}`, file);
+                    const url = await uploadFile('company_assets', `notes/images/${id || 'temp'}`, file, { maxWidth: 1200 });
                     const quill = quillRef.current.getEditor();
                     const range = quill.getSelection();
                     quill.insertEmbed(range.index, 'image', url);

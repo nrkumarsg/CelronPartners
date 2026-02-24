@@ -13,8 +13,12 @@ export default function StorageDirectory() {
     const [activeTab, setActiveTab] = useState('enquiries');
 
     useEffect(() => {
-        if (profile?.company_id) {
-            fetchData();
+        if (profile) {
+            if (profile.company_id) {
+                fetchData();
+            } else {
+                setLoading(false);
+            }
         }
     }, [profile]);
 

@@ -13,8 +13,12 @@ export default function DocumentManager({ referenceType, referenceId }) {
     const [newDocUrl, setNewDocUrl] = useState('');
 
     useEffect(() => {
-        if (profile?.company_id && referenceId) {
-            fetchDocs();
+        if (profile) {
+            if (profile.company_id && referenceId) {
+                fetchDocs();
+            } else {
+                setLoading(false);
+            }
         }
     }, [profile, referenceId]);
 

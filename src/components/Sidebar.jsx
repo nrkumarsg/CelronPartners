@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, ShieldCheck, Search, Tags, Hexagon, CheckSquare, StickyNote, CalendarDays, Database } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, ShieldCheck, Search, Tags, Hexagon, CheckSquare, StickyNote, CalendarDays, Database, Folder } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getTodos } from '../lib/todoService';
 

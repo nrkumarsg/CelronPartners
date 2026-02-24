@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { Save, ArrowLeft, X, Plus } from 'lucide-react';
-import { getPartners, savePartner } from '../lib/store';
-import { getContactsByPartner, deleteContact } from '../lib/store';
+import { getPartners, savePartner, getContactsByPartner, deleteContact, uploadFile } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
 
 const PARTNER_TYPES = ['Customer', 'Supplier', 'Customer Related', 'Supplier Related', 'Freelancer', 'Service Company'];
@@ -14,6 +13,7 @@ export default function PartnerForm() {
     const navigate = useNavigate();
     const { profile } = useAuth();
     const isNew = id === 'new';
+    const quillRef = useRef(null);
 
     const [formData, setFormData] = useState({
         types: [],
@@ -28,7 +28,9 @@ export default function PartnerForm() {
         weblink: '',
         info: '',
         customerCredit: '',
-        supplierCredit: ''
+        supplierCredit: '',
+        customerCreditTime: '',
+        supplierCreditTime: ''
     });
 
     const [typeInput, setTypeInput] = useState('');
@@ -96,6 +98,41 @@ export default function PartnerForm() {
     };
 
     if (loading && !isNew) return <div style={{ padding: '40px' }}>Loading partner data...</div>;
+
+    const imageHandler = () => {
+        const input = document.createElement('input');
+        input.setAttribute('type', 'file');
+        input.setAttribute('accept', 'image/*');
+        input.click();
+        input.onchange = async () => {
+            const file = input.files[0];
+            if (file) {
+                try {
+                    const url = await uploadFile('company_assets', `partners/content/${id || 'temp'}`, file, { maxWidth: 1024 });
+                    const quill = quillRef.current.getEditor();
+                    const range = quill.getSelection();
+                    quill.insertEmbed(range.index, 'image', url);
+                } catch (error) {
+                    console.error('Image upload failed:', error);
+                }
+            }
+        };
+    };
+
+    const modules = {
+        toolbar: {
+            container: [
+                [{ 'header': [1, 2, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                ['link', 'image'],
+                ['clean']
+            ],
+            handlers: {
+                image: imageHandler
+            }
+        }
+    };
 
     return (
         <div className="animate-fade-in">
@@ -424,47 +461,68 @@ export default function PartnerForm() {
 
                     <div className="grid-2">
                         {isCustomerSelected && (
-                            <div className="form-group animate-fade-in">
-                                <label className="form-label">Customer Credit Period (Days)</label>
-                                <input
-                                    type="number"
-                                    className="form-input"
-                                    name="customerCredit"
-                                    value={formData.customerCredit || ''}
-                                    onChange={handleChange}
-                                />
-                            </div>
+                            <>
+                                <div className="form-group animate-fade-in">
+                                    <label className="form-label">Customer Credit Limit</label>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        name="customerCredit"
+                                        value={formData.customerCredit || ''}
+                                        onChange={handleChange}
+                                        placeholder="e.g. 5000"
+                                    />
+                                </div>
+                                <div className="form-group animate-fade-in">
+                                    <label className="form-label">Customer Credit Time (Days)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        name="customerCreditTime"
+                                        value={formData.customerCreditTime || ''}
+                                        onChange={handleChange}
+                                        placeholder="e.g. 30"
+                                    />
+                                </div>
+                            </>
                         )}
 
                         {isSupplierSelected && (
-                            <div className="form-group animate-fade-in">
-                                <label className="form-label">Supplier Credit Period (Days)</label>
-                                <input
-                                    type="number"
-                                    className="form-input"
-                                    name="supplierCredit"
-                                    value={formData.supplierCredit || ''}
-                                    onChange={handleChange}
-                                />
-                            </div>
+                            <>
+                                <div className="form-group animate-fade-in">
+                                    <label className="form-label">Supplier Credit Limit</label>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        name="supplierCredit"
+                                        value={formData.supplierCredit || ''}
+                                        onChange={handleChange}
+                                        placeholder="e.g. 10000"
+                                    />
+                                </div>
+                                <div className="form-group animate-fade-in">
+                                    <label className="form-label">Supplier Credit Time (Days)</label>
+                                    <input
+                                        type="number"
+                                        className="form-input"
+                                        name="supplierCreditTime"
+                                        value={formData.supplierCreditTime || ''}
+                                        onChange={handleChange}
+                                        placeholder="e.g. 60"
+                                    />
+                                </div>
+                            </>
                         )}
                     </div>
 
                     <div className="form-group" style={{ marginTop: '24px' }}>
                         <label className="form-label">Other Information</label>
                         <ReactQuill
+                            ref={quillRef}
                             theme="snow"
                             value={formData.info || ''}
                             onChange={handleEditorChange}
-                            modules={{
-                                toolbar: [
-                                    [{ 'header': [1, 2, false] }],
-                                    ['bold', 'italic', 'underline', 'strike'],
-                                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                                    ['link', 'image'],
-                                    ['clean']
-                                ]
-                            }}
+                            modules={modules}
                         />
                     </div>
                 </form>

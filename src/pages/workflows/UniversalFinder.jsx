@@ -125,7 +125,10 @@ export default function UniversalFinder() {
                 await fetch('/api/partners/from-search', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ resultId: result.id })
+                    body: JSON.stringify({
+                        resultId: result.id,
+                        company_id: profile?.company_id
+                    })
                 });
             }
             alert(`Successfully saved ${selected.length} suppliers to Partners table!`);

@@ -19,8 +19,12 @@ export default function WorkflowBoard() {
     const [newEnquiry, setNewEnquiry] = useState({ type: 'Supply', source: '', partner_id: '' });
 
     useEffect(() => {
-        if (profile?.company_id) {
-            fetchData();
+        if (profile) {
+            if (profile.company_id) {
+                fetchData();
+            } else {
+                setLoading(false);
+            }
         }
     }, [profile]);
 
