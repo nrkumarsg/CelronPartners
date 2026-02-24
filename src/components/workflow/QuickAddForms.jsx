@@ -154,6 +154,36 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                 </div>
 
                 <div className="form-item">
+                    <label>Partner Type (Customer/Supplier)</label>
+                    <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={formData.types.includes('Customer')}
+                                onChange={(e) => {
+                                    const newTypes = e.target.checked
+                                        ? [...formData.types, 'Customer']
+                                        : formData.types.filter(t => t !== 'Customer');
+                                    setFormData(prev => ({ ...prev, types: newTypes }));
+                                }}
+                            /> Customer
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={formData.types.includes('Supplier')}
+                                onChange={(e) => {
+                                    const newTypes = e.target.checked
+                                        ? [...formData.types, 'Supplier']
+                                        : formData.types.filter(t => t !== 'Supplier');
+                                    setFormData(prev => ({ ...prev, types: newTypes }));
+                                }}
+                            /> Supplier
+                        </label>
+                    </div>
+                </div>
+
+                <div className="form-item">
                     <label><Mail size={14} /> Email</label>
                     <input
                         className="form-input"
@@ -266,19 +296,28 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
 };
 
 export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, onCancel }) => {
-    const [name, setName] = useState('');
-    const [email, setEmail] = useState('');
-    const [selectedPartnerId, setSelectedPartnerId] = useState(partner_id || '');
+    const [formData, setFormData] = useState({
+        name: '',
+        email: '',
+        partnerId: partner_id || '',
+        post: '',
+        phone: '',
+        handphone: '',
+        address: ''
+    });
     const [loading, setLoading] = useState(false);
 
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
     const handleSave = async () => {
-        if (!name || !selectedPartnerId) return alert('Name and Partner are required');
+        if (!formData.name || !formData.partnerId) return alert('Name and Partner are required');
         setLoading(true);
         try {
             const { data, error } = await supabase.from('contacts').insert([{
-                name,
-                email,
-                partner_id: selectedPartnerId,
+                ...formData,
                 company_id
             }]).select();
             if (error) throw error;
@@ -293,35 +332,93 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, o
 
     return (
         <div>
-            <div className="form-item">
-                <label>Customer / Partner *</label>
-                <select className="form-select" value={selectedPartnerId} onChange={e => setSelectedPartnerId(e.target.value)}>
-                    <option value="">Select Partner...</option>
-                    {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+            <div className="grid-2">
+                <div className="form-item full-width">
+                    <label>Customer / Partner *</label>
+                    <select
+                        className="form-select"
+                        name="partnerId"
+                        value={formData.partnerId}
+                        onChange={handleChange}
+                    >
+                        <option value="">Select Partner...</option>
+                        {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                </div>
+
+                <div className="form-item">
+                    <label>Contact Name *</label>
+                    <input
+                        className="form-input"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleChange}
+                        placeholder="e.g. John Doe"
+                        autoFocus
+                    />
+                </div>
+
+                <div className="form-item">
+                    <label>Post / Designation</label>
+                    <input
+                        className="form-input"
+                        name="post"
+                        value={formData.post}
+                        onChange={handleChange}
+                        placeholder="e.g. Purchasing Manager"
+                    />
+                </div>
+
+                <div className="form-item">
+                    <label><Mail size={14} /> Email Address</label>
+                    <input
+                        className="form-input"
+                        name="email"
+                        type="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        placeholder="john@example.com"
+                    />
+                </div>
+
+                <div className="form-item">
+                    <label><Phone size={14} /> Office Phone</label>
+                    <input
+                        className="form-input"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleChange}
+                        placeholder="+65 ...."
+                    />
+                </div>
+
+                <div className="form-item">
+                    <label><Phone size={14} /> Handphone / Mobile</label>
+                    <input
+                        className="form-input"
+                        name="handphone"
+                        value={formData.handphone}
+                        onChange={handleChange}
+                        placeholder="+65 ...."
+                    />
+                </div>
+
+                <div className="form-item full-width">
+                    <label>Contact Address (if different)</label>
+                    <textarea
+                        className="form-textarea"
+                        name="address"
+                        value={formData.address}
+                        onChange={handleChange}
+                        placeholder="Enter specific address if any..."
+                        rows={2}
+                    />
+                </div>
             </div>
-            <div className="form-item">
-                <label>Contact Name *</label>
-                <input
-                    className="form-input"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    placeholder="e.g. John Doe"
-                />
-            </div>
-            <div className="form-item">
-                <label>Email Address</label>
-                <input
-                    className="form-input"
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    placeholder="john@example.com"
-                />
-            </div>
+
             <div className="quick-form-actions">
                 <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleSave} disabled={loading || !name || !selectedPartnerId}>
+                <button className="btn btn-primary" onClick={handleSave} disabled={loading || !formData.name || !formData.partnerId}>
                     <Save size={18} /> {loading ? 'Saving...' : 'Save Contact'}
                 </button>
             </div>
