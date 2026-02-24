@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { savePartner } from '../../lib/store';
+import BusinessCardUpload from '../common/BusinessCardUpload';
+import { COUNTRIES } from '../../lib/constants';
 
 // Generic Modal Base
 export const Modal = ({ isOpen, onClose, title, children, icon: Icon }) => {
@@ -110,7 +112,8 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
         customerCredit: '',
         supplierCredit: '',
         customerCreditTime: '',
-        supplierCreditTime: ''
+        supplierCreditTime: '',
+        business_card_url: ''
     });
     const [loading, setLoading] = useState(false);
 
@@ -222,10 +225,14 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                     <input
                         className="form-input"
                         name="country"
+                        list="country-list"
                         value={formData.country}
                         onChange={handleChange}
-                        placeholder="Singapore"
+                        placeholder="Search country..."
                     />
+                    <datalist id="country-list">
+                        {COUNTRIES.map(c => <option key={c} value={c} />)}
+                    </datalist>
                 </div>
 
                 <div className="form-item full-width">
@@ -285,6 +292,14 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                 </div>
             </div>
 
+            <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px' }}>
+                <BusinessCardUpload
+                    value={formData.business_card_url}
+                    onChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
+                    label="Partner Business Card"
+                />
+            </div>
+
             <div className="quick-form-actions">
                 <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
                 <button className="btn btn-primary" onClick={handleSave} disabled={loading || !formData.name}>
@@ -303,7 +318,8 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, o
         post: '',
         phone: '',
         handphone: '',
-        address: ''
+        address: '',
+        business_card_url: ''
     });
     const [loading, setLoading] = useState(false);
 
@@ -414,6 +430,14 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, o
                         rows={2}
                     />
                 </div>
+            </div>
+
+            <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px' }}>
+                <BusinessCardUpload
+                    value={formData.business_card_url}
+                    onChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
+                    label="Contact Business Card"
+                />
             </div>
 
             <div className="quick-form-actions">
