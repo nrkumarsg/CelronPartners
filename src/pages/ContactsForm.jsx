@@ -4,6 +4,7 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { Save, ArrowLeft } from 'lucide-react';
 import { getContacts, saveContact, getPartners } from '../lib/store';
+import BusinessCardUpload from '../components/common/BusinessCardUpload';
 
 export default function ContactsForm() {
     const { id } = useParams();
@@ -21,7 +22,8 @@ export default function ContactsForm() {
         phone: '',
         handphone: '',
         facebook: '',
-        info: ''
+        info: '',
+        business_card_url: ''
     });
 
     const [partners, setPartners] = useState([]);
@@ -98,20 +100,31 @@ export default function ContactsForm() {
             <div className="glass-panel" style={{ maxWidth: '900px', margin: '0 auto' }}>
                 <form onSubmit={handleSubmit}>
 
-                    <div className="form-group">
-                        <label className="form-label">Linked Partner (Company) *</label>
-                        <select
-                            className="form-select"
-                            name="partnerId"
-                            value={formData.partnerId}
-                            onChange={handleChange}
-                            required
-                        >
-                            <option value="">Select Partner...</option>
-                            {partners.map(p => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                        </select>
+                    <div className="grid-2" style={{ gridTemplateColumns: '1fr 280px', gap: '40px' }}>
+                        <div>
+                            <div className="form-group">
+                                <label className="form-label">Linked Partner (Company) *</label>
+                                <select
+                                    className="form-select"
+                                    name="partnerId"
+                                    value={formData.partnerId}
+                                    onChange={handleChange}
+                                    required
+                                >
+                                    <option value="">Select Partner...</option>
+                                    {partners.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <BusinessCardUpload
+                                value={formData.business_card_url}
+                                onChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
+                                label="Contact Business card"
+                            />
+                        </div>
                     </div>
 
                     <div className="grid-2">

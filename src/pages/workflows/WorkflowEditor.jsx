@@ -24,6 +24,7 @@ import {
     QuickVesselAdd,
     QuickLocationAdd
 } from '../../components/workflow/QuickAddForms';
+import RichTextEditor from '../../components/common/RichTextEditor';
 
 export default function WorkflowEditor() {
     const { type, id } = useParams();
@@ -152,6 +153,10 @@ export default function WorkflowEditor() {
         if (name === 'partner_id' && value) {
             getContactsByPartner(value).then(setContacts);
         }
+    };
+
+    const handleEditorChange = (name, content) => {
+        setFormData(prev => ({ ...prev, [name]: content }));
     };
 
     const handleQuickAddSuccess = (newItem) => {
@@ -519,12 +524,22 @@ export default function WorkflowEditor() {
                                 </select>
                             </div>
                             <div className="form-item" style={{ gridColumn: '1 / -1' }}>
-                                <label>Notes</label>
-                                <textarea className="form-textarea" name="notes" value={formData.notes} onChange={handleHeaderChange} placeholder="Internal notes or additional content for PDF..." />
+                                <label>Notes (Included in PDF)</label>
+                                <RichTextEditor
+                                    value={formData.notes}
+                                    onChange={(val) => handleEditorChange('notes', val)}
+                                    placeholder="Enter additional details, descriptions or specifications..."
+                                    height="200px"
+                                />
                             </div>
                             <div className="form-item" style={{ gridColumn: '1 / -1' }}>
                                 <label>Terms & Conditions</label>
-                                <textarea className="form-textarea" name="terms_conditions" value={formData.terms_conditions} onChange={handleHeaderChange} placeholder="Payment terms, delivery details..." />
+                                <RichTextEditor
+                                    value={formData.terms_conditions}
+                                    onChange={(val) => handleEditorChange('terms_conditions', val)}
+                                    placeholder="Payment terms, delivery details..."
+                                    height="150px"
+                                />
                             </div>
                         </div>
                     </div>
