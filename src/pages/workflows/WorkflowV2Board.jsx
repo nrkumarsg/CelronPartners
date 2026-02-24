@@ -76,10 +76,15 @@ export default function WorkflowV2Board() {
     };
 
     const filteredDocs = documents.filter(doc =>
-        doc.document_no.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (doc.document_no || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (doc.partners?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        doc.subject?.toLowerCase().includes(searchQuery.toLowerCase())
+        (doc.subject || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const handleOpenDocument = (type, id) => {
+        const url = `/workflows/editor/${type.toLowerCase().replace(/\s+/g, '-')}/${id}`;
+        window.open(url, '_blank');
+    };
 
     return (
         <div className="animate-fade-in">
@@ -103,7 +108,7 @@ export default function WorkflowV2Board() {
                             {DOC_TYPES.map(type => (
                                 <button key={type} onClick={() => {
                                     setShowDropdown(false);
-                                    navigate(`/workflows/editor/${type.toLowerCase().replace(/\s+/g, '-')}/new`);
+                                    handleOpenDocument(type, 'new');
                                 }}>
                                     {type}
                                 </button>

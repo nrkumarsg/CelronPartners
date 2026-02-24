@@ -5,7 +5,7 @@ import {
     Printer, Send, X, Package,
     FileText, Calculator, Ship,
     MoreHorizontal, Search, Settings,
-    ChevronDown, CreditCard, User, MapPin
+    ChevronDown, CreditCard, User, Users, MapPin
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -47,7 +47,7 @@ export default function WorkflowEditor() {
 
     // Form Data
     const [formData, setFormData] = useState({
-        document_type: type.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+        document_type: (type || 'Enquiry').split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
         document_no: '',
         issue_date: new Date().toISOString().split('T')[0],
         expiry_date: '',
