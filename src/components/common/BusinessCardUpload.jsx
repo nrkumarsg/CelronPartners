@@ -2,31 +2,37 @@ import React, { useState } from 'react';
 import { Camera, X, UploadCloud, User, CreditCard } from 'lucide-react';
 import { uploadFile } from '../../lib/store';
 
-export default function BusinessCardUpload({ value, onChange, label = "Business Card" }) {
-    const [uploading, setUploading] = useState(false);
+export default function BusinessCardUpload({ frontValue, backValue, onFrontChange, onBackChange, label = "Business Card" }) {
+    const [uploadingFront, setUploadingFront] = useState(false);
+    const [uploadingBack, setUploadingBack] = useState(false);
 
-    const handleUpload = async (e) => {
+    const handleUpload = async (e, side) => {
         const file = e.target.files[0];
         if (!file) return;
 
-        setUploading(true);
+        if (side === 'front') setUploadingFront(true);
+        else setUploadingBack(true);
+
         try {
-            const url = await uploadFile('business-cards', 'originals', file, {
+            const url = await uploadFile('company_assets', 'business_cards', file, {
                 maxWidth: 1000,
                 maxHeight: 1000
             });
-            onChange(url);
+            if (side === 'front') onFrontChange(url);
+            else onBackChange(url);
         } catch (err) {
             console.error(err);
-            alert('Failed to upload business card');
+            alert(`Failed to upload business card ${side} side`);
         } finally {
-            setUploading(false);
+            if (side === 'front') setUploadingFront(false);
+            else setUploadingBack(false);
         }
     };
 
-    const remove = () => {
-        if (window.confirm('Remove business card?')) {
-            onChange(null);
+    const remove = (side) => {
+        if (window.confirm(`Remove business card ${side} side?`)) {
+            if (side === 'front') onFrontChange(null);
+            else onBackChange(null);
         }
     };
 
@@ -34,35 +40,104 @@ export default function BusinessCardUpload({ value, onChange, label = "Business 
         <div className="bc-upload-container">
             <label className="form-label">{label}</label>
 
-            {value ? (
-                <div className="bc-preview">
-                    <img src={value} alt="Business Card" />
-                    <button className="remove-bc" onClick={remove}>
-                        <X size={16} />
-                    </button>
-                    <div className="bc-overlay" onClick={() => window.open(value, '_blank')}>
-                        <span>Click to View Full</span>
+            <div className="bc-stack">
+                {/* Front Side */}
+                <div className="bc-side-item">
+                    <div className="bc-side-header">
+                        <span className="bc-side-label">Front Side</span>
+                        {frontValue && <span className="bc-status-badge">Uploaded</span>}
                     </div>
-                </div>
-            ) : (
-                <label className="bc-placeholder">
-                    <input type="file" accept="image/*" onChange={handleUpload} hidden />
-                    {uploading ? (
-                        <div className="spinner-small"></div>
+                    {frontValue ? (
+                        <div className="bc-preview">
+                            <img src={frontValue} alt="Business Card Front" />
+                            <button className="remove-bc" onClick={() => remove('front')}>
+                                <X size={14} />
+                            </button>
+                            <div className="bc-overlay" onClick={() => window.open(frontValue, '_blank')}>
+                                <span>View Full</span>
+                            </div>
+                        </div>
                     ) : (
-                        <>
-                            <UploadCloud size={32} />
-                            <span>Upload Business Card</span>
-                            <small>Max 1MB, resized automatically</small>
-                        </>
+                        <label className="bc-placeholder">
+                            <input type="file" accept="image/*" onChange={(e) => handleUpload(e, 'front')} hidden />
+                            {uploadingFront ? (
+                                <div className="spinner-small"></div>
+                            ) : (
+                                <>
+                                    <UploadCloud size={20} />
+                                    <span>Upload Front Side</span>
+                                </>
+                            )}
+                        </label>
                     )}
-                </label>
-            )}
+                </div>
+
+                {/* Back Side */}
+                <div className="bc-side-item">
+                    <div className="bc-side-header">
+                        <span className="bc-side-label">Back Side</span>
+                        {backValue && <span className="bc-status-badge">Uploaded</span>}
+                    </div>
+                    {backValue ? (
+                        <div className="bc-preview">
+                            <img src={backValue} alt="Business Card Back" />
+                            <button className="remove-bc" onClick={() => remove('back')}>
+                                <X size={14} />
+                            </button>
+                            <div className="bc-overlay" onClick={() => window.open(backValue, '_blank')}>
+                                <span>View Full</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <label className="bc-placeholder">
+                            <input type="file" accept="image/*" onChange={(e) => handleUpload(e, 'back')} hidden />
+                            {uploadingBack ? (
+                                <div className="spinner-small"></div>
+                            ) : (
+                                <>
+                                    <UploadCloud size={20} />
+                                    <span>Upload Back Side</span>
+                                </>
+                            )}
+                        </label>
+                    )}
+                </div>
+            </div>
 
             <style dangerouslySetInnerHTML={{
                 __html: `
                 .bc-upload-container {
-                    margin-bottom: 20px;
+                    margin-bottom: 24px;
+                }
+                .bc-stack {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 20px;
+                }
+                .bc-side-item {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                }
+                .bc-side-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .bc-side-label {
+                    font-size: 0.7rem;
+                    font-weight: 700;
+                    color: #94a3b8;
+                    text-transform: uppercase;
+                    letter-spacing: 0.05em;
+                }
+                .bc-status-badge {
+                    font-size: 0.65rem;
+                    font-weight: 600;
+                    color: #10b981;
+                    background: #ecfdf5;
+                    padding: 2px 8px;
+                    border-radius: 10px;
                 }
                 .bc-preview {
                     position: relative;
@@ -70,8 +145,9 @@ export default function BusinessCardUpload({ value, onChange, label = "Business 
                     height: 160px;
                     border-radius: 12px;
                     overflow: hidden;
-                    border: 2px solid #e2e8f0;
-                    background: #f8fafc;
+                    border: 1px solid #e2e8f0;
+                    background: #fff;
+                    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
                 }
                 .bc-preview img {
                     width: 100%;
@@ -85,18 +161,19 @@ export default function BusinessCardUpload({ value, onChange, label = "Business 
                     justify-content: center;
                     gap: 8px;
                     width: 100%;
-                    height: 160px;
-                    border: 2px dashed #cbd5e1;
+                    height: 140px;
+                    border: 2px dashed #e2e8f0;
                     border-radius: 12px;
-                    background: rgba(248, 250, 252, 0.5);
+                    background: #f8fafc;
                     cursor: pointer;
                     color: #64748b;
                     transition: all 0.2s;
+                    font-size: 0.85rem;
                 }
                 .bc-placeholder:hover {
-                    border-color: var(--accent);
-                    background: rgba(99, 102, 241, 0.05);
-                    color: var(--accent);
+                    border-color: #6366f1;
+                    background: #f5f3ff;
+                    color: #6366f1;
                 }
                 .remove-bc {
                     position: absolute;
@@ -106,24 +183,26 @@ export default function BusinessCardUpload({ value, onChange, label = "Business 
                     color: #fff;
                     border: none;
                     border-radius: 50%;
-                    padding: 4px;
+                    width: 24px;
+                    height: 24px;
                     cursor: pointer;
                     z-index: 10;
-                    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
                 }
                 .bc-overlay {
                     position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0,0,0,0.3);
+                    inset: 0;
+                    background: rgba(15, 23, 42, 0.4);
                     display: flex;
                     align-items: center;
                     justify-content: center;
                     opacity: 0;
                     transition: 0.2s;
                     cursor: pointer;
+                    backdrop-filter: blur(2px);
                 }
                 .bc-preview:hover .bc-overlay {
                     opacity: 1;
@@ -131,8 +210,8 @@ export default function BusinessCardUpload({ value, onChange, label = "Business 
                 .bc-overlay span {
                     color: #fff;
                     font-weight: 600;
-                    font-size: 0.85rem;
-                    background: rgba(0,0,0,0.5);
+                    font-size: 0.8rem;
+                    background: #6366f1;
                     padding: 4px 12px;
                     border-radius: 20px;
                 }
@@ -140,7 +219,7 @@ export default function BusinessCardUpload({ value, onChange, label = "Business 
                     width: 24px;
                     height: 24px;
                     border: 3px solid #e2e8f0;
-                    border-top: 3px solid var(--accent);
+                    border-top: 3px solid #6366f1;
                     border-radius: 50%;
                     animation: spin 1s linear infinite;
                 }

@@ -20,3 +20,9 @@ export const COUNTRIES = [
     "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan", "Vanuatu",
     "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"
 ];
+
+export const PARTNER_CATEGORIES = [
+    'Partner', 'Spare Parts', 'Service', 'Calibration', 'Automation',
+    'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment',
+    'Industrial Supplies', 'Customer', 'Supplier', 'Freelancer', 'Service Company'
+];

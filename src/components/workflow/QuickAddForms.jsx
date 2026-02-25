@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map } from 'lucide-react';
+import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map, ExternalLink } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { savePartner } from '../../lib/store';
 import BusinessCardUpload from '../common/BusinessCardUpload';
-import { COUNTRIES } from '../../lib/constants';
+import { COUNTRIES, PARTNER_CATEGORIES } from '../../lib/constants';
 
 // Generic Modal Base
 export const Modal = ({ isOpen, onClose, title, children, icon: Icon }) => {
@@ -100,6 +100,7 @@ export const Modal = ({ isOpen, onClose, title, children, icon: Icon }) => {
     );
 };
 
+// Quick Partner Add
 export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
     const [formData, setFormData] = useState({
         name: '',
@@ -113,8 +114,42 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
         supplierCredit: '',
         customerCreditTime: '',
         supplierCreditTime: '',
-        business_card_url: ''
+        city: '',
+        brand: '',
+        notes: '',
+        business_card_url: '',
+        business_card_back_url: ''
     });
+    const [customCategory, setCustomCategory] = useState('');
+
+    const handleCategoryToggle = (cat) => {
+        setFormData(prev => ({
+            ...prev,
+            types: prev.types.includes(cat)
+                ? prev.types.filter(t => t !== cat)
+                : [...prev.types, cat]
+        }));
+    };
+
+    const handleAddCustomCategory = () => {
+        if (customCategory.trim() && !formData.types.includes(customCategory.trim())) {
+            setFormData(prev => ({
+                ...prev,
+                types: [...prev.types, customCategory.trim()]
+            }));
+            setCustomCategory('');
+        }
+    };
+    const openWebsite = () => {
+        const url = formData.weblink;
+        if (url) {
+            const path = url.startsWith('http') ? url : `https://${url}`;
+            window.open(path, '_blank');
+        } else {
+            window.open('https://www.google.com', '_blank');
+        }
+    };
+
     const [loading, setLoading] = useState(false);
 
     const handleChange = (e) => {
@@ -135,168 +170,129 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
             onSuccess(data[0]);
         } catch (err) {
             console.error(err);
-            alert('Failed to save partner');
+            alert(`Failed to save partner: ${err.message || 'Check connection.'}`);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div>
-            <div className="grid-2">
-                <div className="form-item full-width">
-                    <label>Partner / Company Name *</label>
-                    <input
-                        className="form-input"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleChange}
-                        placeholder="e.g. Acme Corp"
-                        autoFocus
-                    />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Website Section */}
+            <div style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '24px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc' }}>
+                <div style={{ width: '64px', height: '64px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Globe color="#6366f1" size={28} />
                 </div>
-
-                <div className="form-item">
-                    <label>Partner Type (Customer/Supplier)</label>
-                    <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                            <input
-                                type="checkbox"
-                                checked={formData.types.includes('Customer')}
-                                onChange={(e) => {
-                                    const newTypes = e.target.checked
-                                        ? [...formData.types, 'Customer']
-                                        : formData.types.filter(t => t !== 'Customer');
-                                    setFormData(prev => ({ ...prev, types: newTypes }));
-                                }}
-                            /> Customer
-                        </label>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                            <input
-                                type="checkbox"
-                                checked={formData.types.includes('Supplier')}
-                                onChange={(e) => {
-                                    const newTypes = e.target.checked
-                                        ? [...formData.types, 'Supplier']
-                                        : formData.types.filter(t => t !== 'Supplier');
-                                    setFormData(prev => ({ ...prev, types: newTypes }));
-                                }}
-                            /> Supplier
-                        </label>
+                <div style={{ flex: 1 }}>
+                    <label style={{ fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '6px' }}>Company Website</label>
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            placeholder="https://partner.com"
+                            name="weblink"
+                            value={formData.weblink}
+                            onChange={handleChange}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }}
+                        />
+                        <button
+                            type="button"
+                            onClick={openWebsite}
+                            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                            <ExternalLink size={14} /> Visit
+                        </button>
                     </div>
-                </div>
-
-                <div className="form-item">
-                    <label><Mail size={14} /> Email</label>
-                    <input
-                        className="form-input"
-                        name="email1"
-                        type="email"
-                        value={formData.email1}
-                        onChange={handleChange}
-                        placeholder="email@example.com"
-                    />
-                </div>
-
-                <div className="form-item">
-                    <label><Phone size={14} /> Phone</label>
-                    <input
-                        className="form-input"
-                        name="phone1"
-                        value={formData.phone1}
-                        onChange={handleChange}
-                        placeholder="+65 ...."
-                    />
-                </div>
-
-                <div className="form-item">
-                    <label><Globe size={14} /> Website</label>
-                    <input
-                        className="form-input"
-                        name="weblink"
-                        value={formData.weblink}
-                        onChange={handleChange}
-                        placeholder="https://..."
-                    />
-                </div>
-
-                <div className="form-item">
-                    <label><Map size={14} /> Country</label>
-                    <input
-                        className="form-input"
-                        name="country"
-                        list="country-list"
-                        value={formData.country}
-                        onChange={handleChange}
-                        placeholder="Search country..."
-                    />
-                    <datalist id="country-list">
-                        {COUNTRIES.map(c => <option key={c} value={c} />)}
-                    </datalist>
-                </div>
-
-                <div className="form-item full-width">
-                    <label>Address</label>
-                    <textarea
-                        className="form-textarea"
-                        name="address"
-                        value={formData.address}
-                        onChange={handleChange}
-                        placeholder="Enter full address..."
-                        rows={3}
-                    />
-                </div>
-
-                <div className="form-item">
-                    <label>Customer Credit Limit</label>
-                    <input
-                        className="form-input"
-                        name="customerCredit"
-                        value={formData.customerCredit}
-                        onChange={handleChange}
-                        placeholder="e.g. 5000"
-                    />
-                </div>
-
-                <div className="form-item">
-                    <label>Customer Credit Time (Days)</label>
-                    <input
-                        className="form-input"
-                        name="customerCreditTime"
-                        value={formData.customerCreditTime}
-                        onChange={handleChange}
-                        placeholder="e.g. 30"
-                    />
-                </div>
-
-                <div className="form-item">
-                    <label>Supplier Credit Limit</label>
-                    <input
-                        className="form-input"
-                        name="supplierCredit"
-                        value={formData.supplierCredit}
-                        onChange={handleChange}
-                        placeholder="e.g. 10000"
-                    />
-                </div>
-
-                <div className="form-item">
-                    <label>Supplier Credit Time (Days)</label>
-                    <input
-                        className="form-input"
-                        name="supplierCreditTime"
-                        value={formData.supplierCreditTime}
-                        onChange={handleChange}
-                        placeholder="e.g. 60"
-                    />
                 </div>
             </div>
 
-            <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px' }}>
+            <div className="grid-2">
+                <div className="form-item">
+                    <label>Company Name *</label>
+                    <input className="form-input" name="name" value={formData.name} onChange={handleChange} placeholder="Partner company name" autoFocus />
+                </div>
+                <div className="form-item">
+                    <label>Email *</label>
+                    <input className="form-input" name="email1" type="email" value={formData.email1} onChange={handleChange} placeholder="contact@partner.com" />
+                </div>
+                <div className="form-item">
+                    <label>Phone</label>
+                    <input className="form-input" name="phone1" value={formData.phone1} onChange={handleChange} placeholder="+1 234 567 8900" />
+                </div>
+                <div className="form-item">
+                    <label>Country *</label>
+                    <select className="form-select" name="country" value={formData.country} onChange={handleChange}>
+                        <option value="" disabled>Select Country</option>
+                        {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                </div>
+                <div className="form-item">
+                    <label>City</label>
+                    <input className="form-input" name="city" value={formData.city} onChange={handleChange} placeholder="City" />
+                </div>
+                <div className="form-item">
+                    <label>Address</label>
+                    <input className="form-input" name="address" value={formData.address} onChange={handleChange} placeholder="Full address" />
+                </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Categories</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {PARTNER_CATEGORIES.map(cat => (
+                        <div
+                            key={cat}
+                            onClick={() => handleCategoryToggle(cat)}
+                            style={{ padding: '6px 14px', borderRadius: '24px', border: formData.types.includes(cat) ? '1px solid #6366f1' : '1px solid #e2e8f0', background: formData.types.includes(cat) ? '#e0e7ff' : '#fff', color: formData.types.includes(cat) ? '#6366f1' : '#475569', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer' }}
+                        >
+                            {cat}
+                        </div>
+                    ))}
+                </div>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                    <input
+                        placeholder="Add custom category"
+                        value={customCategory}
+                        onChange={e => setCustomCategory(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddCustomCategory())}
+                        style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem' }}
+                    />
+                    <button type="button" onClick={handleAddCustomCategory} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>Add</button>
+                </div>
+            </div>
+
+            <div className="form-item">
+                <label>Brands Supported</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <input className="form-input" name="brand" value={formData.brand} onChange={handleChange} placeholder="Brand names" />
+                    <button type="button" className="btn btn-secondary" style={{ padding: '0 12px' }}><Plus size={16} /></button>
+                </div>
+            </div>
+
+            <div className="grid-2">
+                <div className="form-item">
+                    <label>Customer Credit Limit</label>
+                    <input className="form-input" name="customerCredit" value={formData.customerCredit} onChange={handleChange} placeholder="e.g. 5000" />
+                </div>
+                <div className="form-item">
+                    <label>Customer Credit Time (Days)</label>
+                    <input className="form-input" name="customerCreditTime" value={formData.customerCreditTime} onChange={handleChange} placeholder="e.g. 30" />
+                </div>
+                <div className="form-item">
+                    <label>Supplier Credit Limit</label>
+                    <input className="form-input" name="supplierCredit" value={formData.supplierCredit} onChange={handleChange} placeholder="e.g. 10000" />
+                </div>
+                <div className="form-item">
+                    <label>Supplier Credit Time (Days)</label>
+                    <input className="form-input" name="supplierCreditTime" value={formData.supplierCreditTime} onChange={handleChange} placeholder="e.g. 60" />
+                </div>
+            </div>
+
+            <div style={{ padding: '20px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
                 <BusinessCardUpload
-                    value={formData.business_card_url}
-                    onChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
-                    label="Partner Business Card"
+                    frontValue={formData.business_card_url}
+                    backValue={formData.business_card_back_url}
+                    onFrontChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
+                    onBackChange={(url) => setFormData(prev => ({ ...prev, business_card_back_url: url }))}
+                    label="Business Card"
                 />
             </div>
 
@@ -319,7 +315,8 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, o
         phone: '',
         handphone: '',
         address: '',
-        business_card_url: ''
+        business_card_url: '',
+        business_card_back_url: ''
     });
     const [loading, setLoading] = useState(false);
 
@@ -434,8 +431,10 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, o
 
             <div style={{ marginTop: '20px', padding: '16px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px' }}>
                 <BusinessCardUpload
-                    value={formData.business_card_url}
-                    onChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
+                    frontValue={formData.business_card_url}
+                    backValue={formData.business_card_back_url}
+                    onFrontChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
+                    onBackChange={(url) => setFormData(prev => ({ ...prev, business_card_back_url: url }))}
                     label="Contact Business Card"
                 />
             </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, ShieldCheck, Search, Tags, Hexagon, CheckSquare, StickyNote, CalendarDays, Database, Folder } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Ship, MapPin, Building2, Package, ShieldCheck, Search, Tags, Hexagon, CheckSquare, StickyNote, CalendarDays, Database, Folder, Wrench } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getTodos } from '../lib/todoService';
 
@@ -64,6 +64,11 @@ export default function Sidebar() {
                 <NavLink to="/calendar" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                     <CalendarDays size={20} color="#6366f1" />
                     <span className="nav-text" style={{ fontWeight: 600 }}>Calendar</span>
+                </NavLink>
+
+                <NavLink to="/tools" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                    <Wrench size={20} color="#ec4899" />
+                    <span className="nav-text" style={{ fontWeight: 600 }}>Tools</span>
                 </NavLink>
 
                 <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
@@ -136,18 +141,16 @@ export default function Sidebar() {
                 )}
 
                 {(profile?.role === 'superadmin' || profile?.role === 'admin') && (
-                    <>
-                        <NavLink to="/admin/users" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                            <ShieldCheck size={20} color="#60a5fa" />
-                            <span className="nav-text" style={{ color: '#93c5fd' }}>User Control</span>
-                        </NavLink>
-
-                        <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                            <Settings size={20} />
-                            <span className="nav-text">Setting</span>
-                        </NavLink>
-                    </>
+                    <NavLink to="/admin/users" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                        <ShieldCheck size={20} color="#60a5fa" />
+                        <span className="nav-text" style={{ color: '#93c5fd' }}>User Control</span>
+                    </NavLink>
                 )}
+
+                <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                    <Settings size={20} />
+                    <span className="nav-text">Setting</span>
+                </NavLink>
             </nav>
 
             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>

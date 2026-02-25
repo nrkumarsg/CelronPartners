@@ -2,13 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { Save, ArrowLeft, X, Plus } from 'lucide-react';
+import { Save, ArrowLeft, X, Plus, ExternalLink } from 'lucide-react';
 import { getPartners, savePartner, getContactsByPartner, deleteContact, uploadFile } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
 import BusinessCardUpload from '../components/common/BusinessCardUpload';
-import { COUNTRIES } from '../lib/constants';
-
-const PARTNER_TYPES = ['Customer', 'Supplier', 'Customer Related', 'Supplier Related', 'Freelancer', 'Service Company'];
+import { COUNTRIES, PARTNER_CATEGORIES } from '../lib/constants';
 
 export default function PartnerForm() {
     const { id } = useParams();
@@ -33,7 +31,8 @@ export default function PartnerForm() {
         supplierCredit: '',
         customerCreditTime: '',
         supplierCreditTime: '',
-        business_card_url: ''
+        business_card_url: '',
+        business_card_back_url: ''
     });
 
     const [typeInput, setTypeInput] = useState('');
@@ -59,27 +58,42 @@ export default function PartnerForm() {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const openWebsite = () => {
+        const url = (formData.weblink || '').trim();
+        if (url) {
+            const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+            window.open(fullUrl, '_blank');
+        } else {
+            window.open('https://www.google.com', '_blank');
+        }
+    };
+
     const handleEditorChange = (content) => {
         setFormData(prev => ({ ...prev, info: content }));
     };
 
-    const handleAddType = (e) => {
-        if (e.target.value && !formData.types.includes(e.target.value)) {
-            setFormData(prev => ({ ...prev, types: [...prev.types, e.target.value] }));
-        }
-        setTypeInput('');
-    };
+    const isRelatedSelected = (formData.types || []).some(t => t?.includes('Related'));
+    const isCustomerSelected = (formData.types || []).includes('Customer');
+    const isSupplierSelected = (formData.types || []).includes('Supplier');
 
-    const removeType = (typeToRemove) => {
+    const handleCategoryToggle = (cat) => {
         setFormData(prev => ({
             ...prev,
-            types: prev.types.filter(t => t !== typeToRemove)
+            types: (prev.types || []).includes(cat)
+                ? prev.types.filter(t => t !== cat)
+                : [...(prev.types || []), cat]
         }));
     };
 
-    const isRelatedSelected = formData.types.some(t => t.includes('Related'));
-    const isCustomerSelected = formData.types.includes('Customer');
-    const isSupplierSelected = formData.types.includes('Supplier');
+    const handleAddCustomCategory = () => {
+        if (typeInput.trim() && !(formData.types || []).includes(typeInput.trim())) {
+            setFormData(prev => ({
+                ...prev,
+                types: [...(prev.types || []), typeInput.trim()]
+            }));
+            setTypeInput('');
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -91,11 +105,15 @@ export default function PartnerForm() {
             if (isNew && profile?.company_id) {
                 dataToSave.company_id = profile.company_id;
             }
+            // Cleanup empty strings
+            if (dataToSave.customerCredit === '') dataToSave.customerCredit = null;
+            if (dataToSave.supplierCredit === '') dataToSave.supplierCredit = null;
+
             await savePartner(dataToSave);
             navigate('/partners');
         } catch (err) {
             console.error("SUPABASE SAVE ERROR:", err);
-            alert("Error saving partner. Check console.");
+            alert(`Error saving partner: ${err.message || 'Check console.'}`);
             setLoading(false);
         }
     };
@@ -111,7 +129,7 @@ export default function PartnerForm() {
             const file = input.files[0];
             if (file) {
                 try {
-                    const url = await uploadFile('company_assets', `partners / content / ${id || 'temp'} `, file, { maxWidth: 1024 });
+                    const url = await uploadFile('company_assets', `partners/content/${id || 'temp'}`, file, { maxWidth: 1024 });
                     const quill = quillRef.current.getEditor();
                     const range = quill.getSelection();
                     quill.insertEmbed(range.index, 'image', url);
@@ -161,42 +179,57 @@ export default function PartnerForm() {
             <div className="glass-panel" style={{ maxWidth: '900px', margin: '0 auto' }}>
                 <form onSubmit={handleSubmit}>
 
+                    {/* Website Section */}
+                    <div style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '24px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc', marginBottom: '32px' }}>
+                        <div style={{ width: '64px', height: '64px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Globe color="#6366f1" size={28} />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label className="form-label">Company Website</label>
+                            <div style={{ position: 'relative' }}>
+                                <input
+                                    placeholder="https://partner.com"
+                                    name="weblink"
+                                    value={formData.weblink || ''}
+                                    onChange={handleChange}
+                                    className="form-input"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={openWebsite}
+                                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                >
+                                    <ExternalLink size={14} /> Visit
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="form-group">
-                        <label className="form-label">Partner Type (Multiselect)</label>
-                        <div className="multi-select-container">
-                            {formData.types.map(t => (
-                                <div key={t} className="tag">
-                                    {t}
-                                    <span className="tag-remove" onClick={() => removeType(t)}>×</span>
+                        <label className="form-label">Partner Categories</label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
+                            {PARTNER_CATEGORIES.map(cat => (
+                                <div
+                                    key={cat}
+                                    onClick={() => handleCategoryToggle(cat)}
+                                    style={{ padding: '6px 14px', borderRadius: '24px', border: (formData.types || []).includes(cat) ? '1px solid #6366f1' : '1px solid #e2e8f0', background: (formData.types || []).includes(cat) ? '#e0e7ff' : '#fff', color: (formData.types || []).includes(cat) ? '#6366f1' : '#475569', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer' }}
+                                >
+                                    {cat}
                                 </div>
                             ))}
                         </div>
-                        <select
-                            className="form-select"
-                            value={typeInput}
-                            onChange={handleAddType}
-                            style={{ padding: '8px', maxWidth: '300px' }}
-                        >
-                            <option value="">Select a type to add...</option>
-                            {PARTNER_TYPES.map(t => (
-                                <option key={t} value={t} disabled={formData.types.includes(t)}>{t}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {isRelatedSelected && (
-                        <div className="form-group animate-fade-in" style={{ padding: '16px', background: 'rgba(59, 130, 246, 0.05)', borderRadius: '8px', borderLeft: '3px solid var(--accent)' }}>
-                            <label className="form-label text-accent">Others (Related details)</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
                             <input
-                                type="text"
+                                placeholder="Add custom category"
+                                value={typeInput}
+                                onChange={e => setTypeInput(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddCustomCategory())}
                                 className="form-input"
-                                name="others"
-                                value={formData.others || ''}
-                                onChange={handleChange}
-                                placeholder="Specify relationship details..."
+                                style={{ flex: 1, fontSize: '0.85rem' }}
                             />
+                            <button type="button" onClick={handleAddCustomCategory} className="btn btn-secondary">Add</button>
                         </div>
-                    )}
+                    </div>
 
                     <div className="grid-2" style={{ gridTemplateColumns: 'minmax(0, 1fr) 280px', gap: '40px' }}>
                         <div>
@@ -254,20 +287,14 @@ export default function PartnerForm() {
                                 </div>
                                 <div className="form-group">
                                     <label className="form-label">Phone 2</label>
-                                    <input type="tel" className="form-input" name="phone2" value={formData.phone2 || ''} onChange={handleChange} />
+                                    <input
+                                        type="tel"
+                                        className="form-input"
+                                        name="phone2"
+                                        value={formData.phone2 || ''}
+                                        onChange={handleChange}
+                                    />
                                 </div>
-                            </div>
-
-                            <div className="form-group">
-                                <label className="form-label">Weblink (URL)</label>
-                                <input
-                                    type="url"
-                                    className="form-input"
-                                    name="weblink"
-                                    value={formData.weblink || ''}
-                                    onChange={handleChange}
-                                    placeholder="https://..."
-                                />
                             </div>
 
                             <div className="grid-2">
@@ -329,8 +356,10 @@ export default function PartnerForm() {
 
                         <div>
                             <BusinessCardUpload
-                                value={formData.business_card_url}
-                                onChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
+                                frontValue={formData.business_card_url}
+                                backValue={formData.business_card_back_url}
+                                onFrontChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
+                                onBackChange={(url) => setFormData(prev => ({ ...prev, business_card_back_url: url }))}
                             />
 
                             <div className="glass-panel" style={{ padding: '16px', background: 'rgba(99, 102, 241, 0.05)', border: '1px dashed var(--accent)' }}>
@@ -361,7 +390,7 @@ export default function PartnerForm() {
                         <h3>Related Contacts</h3>
                         <button
                             className="btn btn-secondary"
-                            onClick={() => navigate(`/ contacts / new? partnerId = ${id} `)}
+                            onClick={() => navigate(`/contacts/new?partnerId=${id}`)}
                         >
                             <Plus size={16} /> Add Contact
                         </button>
@@ -421,7 +450,7 @@ function ContactsList({ partnerId }) {
                                 <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>HP: {c.handphone || '-'}</div>
                             </td>
                             <td>
-                                <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.85rem', marginRight: '8px' }} onClick={() => navigate(`/ contacts / ${c.id}?partnerId = ${partnerId} `)}>Edit</button>
+                                <button className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '0.85rem', marginRight: '8px' }} onClick={() => navigate(`/contacts/${c.id}?partnerId=${partnerId}`)}>Edit</button>
                                 <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '0.85rem' }} onClick={() => remove(c.id)}>Delete</button>
                             </td>
                         </tr>

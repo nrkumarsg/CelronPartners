@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { Save, ArrowLeft } from 'lucide-react';
+import { Save, ArrowLeft, ExternalLink } from 'lucide-react';
 import { getContacts, saveContact, getPartners } from '../lib/store';
 import BusinessCardUpload from '../components/common/BusinessCardUpload';
 
@@ -11,7 +11,7 @@ export default function ContactsForm() {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const isNew = id === 'new';
-    const partnerId = searchParams.get('partnerId');
+    const partnerId = searchParams.get('partnerId') || searchParams.get(' partnerId') || searchParams.get('partnerId ');
 
     const [formData, setFormData] = useState({
         partnerId: partnerId || '',
@@ -23,7 +23,8 @@ export default function ContactsForm() {
         handphone: '',
         facebook: '',
         info: '',
-        business_card_url: ''
+        business_card_url: '',
+        business_card_back_url: ''
     });
 
     const [partners, setPartners] = useState([]);
@@ -52,6 +53,16 @@ export default function ContactsForm() {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const openWebsite = () => {
+        const url = formData.facebook;
+        if (url) {
+            const fullUrl = url.startsWith('http') ? url : `https://${url}`;
+            window.open(fullUrl, '_blank');
+        } else {
+            window.open('https://www.google.com', '_blank');
+        }
+    };
+
     const handleEditorChange = (content) => {
         setFormData(prev => ({ ...prev, info: content }));
     };
@@ -69,7 +80,7 @@ export default function ContactsForm() {
             });
             navigate(`/partners/${formData.partnerId}`);
         } catch (err) {
-            alert("Error saving contact. See console.");
+            alert(`Error saving contact: ${err.message || 'See console.'}`);
             setSaving(false);
         }
     };
@@ -120,8 +131,10 @@ export default function ContactsForm() {
                         </div>
                         <div>
                             <BusinessCardUpload
-                                value={formData.business_card_url}
-                                onChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
+                                frontValue={formData.business_card_url}
+                                backValue={formData.business_card_back_url}
+                                onFrontChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
+                                onBackChange={(url) => setFormData(prev => ({ ...prev, business_card_back_url: url }))}
                                 label="Contact Business card"
                             />
                         </div>
@@ -180,7 +193,17 @@ export default function ContactsForm() {
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">Facebook Weblink</label>
+                            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                Facebook Weblink
+                                <button
+                                    type="button"
+                                    className="text-accent hover-opacity"
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                    onClick={openWebsite}
+                                >
+                                    <ExternalLink size={14} /> Visit Facebook
+                                </button>
+                            </label>
                             <input
                                 type="url"
                                 className="form-input"

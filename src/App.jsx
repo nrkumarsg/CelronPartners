@@ -27,6 +27,7 @@ import NotesDirectory from './pages/NotesDirectory';
 import NoteForm from './pages/NoteForm';
 import Calendar from './pages/Calendar';
 import StorageDirectory from './pages/StorageDirectory';
+import Tools from './pages/Tools';
 
 // Authentication & RBAC Components
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -124,9 +125,10 @@ function App() {
               <Route path="/notes" element={<ProtectedRoute><NotesDirectory /></ProtectedRoute>} />
               <Route path="/notes/:id" element={<ProtectedRoute><NoteForm /></ProtectedRoute>} />
               <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+              <Route path="/tools" element={<ProtectedRoute><Tools /></ProtectedRoute>} />
 
-              {/* Settings */}
-              <Route path="/settings" element={<ProtectedRoute requiredModule="settings"><ModuleSettings /></ProtectedRoute>} />
+              {/* Settings (Accessible to all for personal tools, admins see more) */}
+              <Route path="/settings" element={<ProtectedRoute><ModuleSettings /></ProtectedRoute>} />
 
               {/* Fallback */}
               <Route path="*" element={<div style={{ textAlign: 'center', marginTop: '100px' }}><h1>Working on this feature...</h1></div>} />

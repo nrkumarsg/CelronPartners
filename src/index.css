@@ -537,6 +537,18 @@ tr:hover {
   border-radius: 0 0 12px 12px;
 }
 
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .pagination-page {
   width: 32px;
   height: 32px;

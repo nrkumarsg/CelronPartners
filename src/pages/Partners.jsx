@@ -1,41 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, MapPin, Globe, Building2, Mail, Phone, Star, Filter, ChevronDown, CheckCircle2, Circle, X, UploadCloud, Upload, Download, Printer } from 'lucide-react';
+import { Plus, Search, MapPin, Globe, Building2, Mail, Phone, Star, Filter, ChevronDown, CheckCircle2, Circle, X, UploadCloud, Upload, Download, Printer, MoreVertical, Edit2, Trash2 } from 'lucide-react';
 import Papa from 'papaparse';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { getPartners, deletePartner, savePartner } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
+import BusinessCardUpload from '../components/common/BusinessCardUpload';
+import { COUNTRIES, PARTNER_CATEGORIES } from '../lib/constants';
 
-const COUNTRIES = [
-    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina",
-    "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados",
-    "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana",
-    "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon",
-    "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros",
-    "Congo (Congo-Brazzaville)", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czechia (Czech Republic)",
-    "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador",
-    "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France",
-    "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea",
-    "Guinea-Bissau", "Guyana", "Haiti", "Holy See", "Honduras", "Hungary", "Iceland", "India",
-    "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan",
-    "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho",
-    "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia",
-    "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia",
-    "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia",
-    "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea",
-    "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine State", "Panama",
-    "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania",
-    "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines",
-    "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles",
-    "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa",
-    "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland",
-    "Syria", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago",
-    "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates",
-    "United Kingdom", "United States of America", "Uruguay", "Uzbekistan", "Vanuatu", "Venezuela",
-    "Vietnam", "Yemen", "Zambia", "Zimbabwe"
-];
+
 
 export default function Partners() {
     const { profile } = useAuth();
@@ -48,13 +23,27 @@ export default function Partners() {
     const itemsPerPage = 8;
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
+    const [activeMenu, setActiveMenu] = useState(null);
+
+    // Close menu when clicking outside
+    useEffect(() => {
+        const closeMenu = () => setActiveMenu(null);
+        window.addEventListener('click', closeMenu);
+        return () => window.removeEventListener('click', closeMenu);
+    }, []);
 
     // Modal state
     const [showModal, setShowModal] = useState(false);
     const [newPartner, setNewPartner] = useState({
         name: '', email1: '', phone1: '', weblink: '', country: '', city: '', address: '', notes: '', brand: '',
         types: [],
-        rating: 0
+        rating: 0,
+        customerCredit: '',
+        supplierCredit: '',
+        customerCreditTime: '',
+        supplierCreditTime: '',
+        business_card_url: '',
+        business_card_back_url: ''
     });
     const [customCategory, setCustomCategory] = useState('');
 
@@ -70,6 +59,18 @@ export default function Partners() {
         setLoading(false);
     };
 
+    const handleDelete = async (e, id) => {
+        e.stopPropagation();
+        if (window.confirm('Are you sure you want to delete this partner? This action cannot be undone.')) {
+            try {
+                await deletePartner(id);
+                loadPartners();
+            } catch (err) {
+                alert('Failed to delete partner: ' + err.message);
+            }
+        }
+    };
+
     const handleSaveNewPartner = async (e) => {
         e.preventDefault();
         try {
@@ -82,7 +83,13 @@ export default function Partners() {
                 country: newPartner.country,
                 address: newPartner.address,
                 types: newPartner.types,
-                info: newPartner.notes || ''
+                info: newPartner.notes || '',
+                customerCredit: newPartner.customerCredit,
+                supplierCredit: newPartner.supplierCredit,
+                customerCreditTime: newPartner.customerCreditTime,
+                supplierCreditTime: newPartner.supplierCreditTime,
+                business_card_url: newPartner.business_card_url,
+                business_card_back_url: newPartner.business_card_back_url
             };
 
             if (newPartner.city) {
@@ -103,7 +110,7 @@ export default function Partners() {
             alert('Partner added successfully!');
         } catch (error) {
             console.error('Failed to save partner', error);
-            alert('Failed to save. Check inputs.');
+            alert(`Failed to save: ${error.message || 'Check inputs.'}`);
         }
     };
 
@@ -185,8 +192,7 @@ export default function Partners() {
         setCurrentPage(1);
     }, [searchTerm, selectedCountry, selectedCategory]);
 
-    const defaultCategories = ['Partner', 'Spare Parts', 'Service', 'Calibration', 'Automation', 'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment', 'Industrial Supplies'];
-    const availableCategories = Array.from(new Set([...defaultCategories, ...partners.flatMap(p => p.types || [])])).filter(Boolean).sort();
+    const availableCategories = Array.from(new Set([...PARTNER_CATEGORIES, ...partners.flatMap(p => p.types || [])])).filter(Boolean).sort();
 
     const handleCategoryToggle = (cat) => {
         setNewPartner(prev => ({
@@ -297,7 +303,7 @@ export default function Partners() {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                         <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{res.name}</h3>
                                         {res.weblink && (
-                                            <a href={res.weblink.startsWith('http') ? res.weblink : `https://${res.weblink}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#6366f1', display: 'flex', alignItems: 'center' }} title="Visit Website">
+                                            <a href={res.weblink.trim().startsWith('http') ? res.weblink.trim() : `https://${res.weblink.trim()}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} style={{ color: '#6366f1', display: 'flex', alignItems: 'center' }} title="Visit Website">
                                                 <Globe size={16} />
                                             </a>
                                         )}
@@ -305,6 +311,43 @@ export default function Partners() {
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748b', fontSize: '0.85rem' }}>
                                         <MapPin size={14} /> {res.country || 'No Location'}
                                     </div>
+                                </div>
+
+                                {/* Ellipsis Menu */}
+                                <div style={{ position: 'relative' }}>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setActiveMenu(activeMenu === res.id ? null : res.id);
+                                        }}
+                                        style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                                    >
+                                        <MoreVertical size={20} />
+                                    </button>
+
+                                    {activeMenu === res.id && (
+                                        <div style={{ position: 'absolute', top: '100%', right: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', zIndex: 50, padding: '4px', minWidth: '120px' }}>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    navigate(`/partners/${res.id}`);
+                                                }}
+                                                style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#475569', cursor: 'pointer', borderRadius: '4px' }}
+                                                onMouseOver={e => e.currentTarget.style.background = '#f1f5f9'}
+                                                onMouseOut={e => e.currentTarget.style.background = 'none'}
+                                            >
+                                                <Edit2 size={14} /> Edit
+                                            </button>
+                                            <button
+                                                onClick={(e) => handleDelete(e, res.id)}
+                                                style={{ width: '100%', textAlign: 'left', padding: '8px 12px', background: 'none', border: 'none', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#ef4444', cursor: 'pointer', borderRadius: '4px' }}
+                                                onMouseOver={e => e.currentTarget.style.background = '#fef2f2'}
+                                                onMouseOut={e => e.currentTarget.style.background = 'none'}
+                                            >
+                                                <Trash2 size={14} /> Delete
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
@@ -417,11 +460,11 @@ export default function Partners() {
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                                 <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Categories</label>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                    {Array.from(new Set([...defaultCategories, ...availableCategories, ...newPartner.types])).map(cat => (
+                                    {Array.from(new Set([...availableCategories, ...(newPartner.types || [])])).map(cat => (
                                         <div
                                             key={cat}
                                             onClick={() => handleCategoryToggle(cat)}
-                                            style={{ padding: '6px 14px', borderRadius: '24px', border: newPartner.types.includes(cat) ? '1px solid #6366f1' : '1px solid #e2e8f0', background: newPartner.types.includes(cat) ? '#e0e7ff' : '#fff', color: newPartner.types.includes(cat) ? '#6366f1' : '#475569', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer' }}
+                                            style={{ padding: '6px 14px', borderRadius: '24px', border: (newPartner.types || []).includes(cat) ? '1px solid #6366f1' : '1px solid #e2e8f0', background: (newPartner.types || []).includes(cat) ? '#e0e7ff' : '#fff', color: (newPartner.types || []).includes(cat) ? '#6366f1' : '#475569', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer' }}
                                         >
                                             {cat}
                                         </div>
@@ -447,6 +490,35 @@ export default function Partners() {
                                     <input placeholder="Add brand name" value={newPartner.brand} onChange={e => setNewPartner({ ...newPartner, brand: e.target.value })} style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                                     <button type="button" style={{ padding: '10px 16px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}><Plus size={16} /></button>
                                 </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Customer Credit Limit</label>
+                                    <input placeholder="e.g. 5000" value={newPartner.customerCredit} onChange={e => setNewPartner({ ...newPartner, customerCredit: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Customer Credit Time (Days)</label>
+                                    <input placeholder="e.g. 30" value={newPartner.customerCreditTime} onChange={e => setNewPartner({ ...newPartner, customerCreditTime: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Supplier Credit Limit</label>
+                                    <input placeholder="e.g. 10000" value={newPartner.supplierCredit} onChange={e => setNewPartner({ ...newPartner, supplierCredit: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Supplier Credit Time (Days)</label>
+                                    <input placeholder="e.g. 60" value={newPartner.supplierCreditTime} onChange={e => setNewPartner({ ...newPartner, supplierCreditTime: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                </div>
+                            </div>
+
+                            <div style={{ padding: '20px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
+                                <BusinessCardUpload
+                                    frontValue={newPartner.business_card_url}
+                                    backValue={newPartner.business_card_back_url}
+                                    onFrontChange={(url) => setNewPartner(prev => ({ ...prev, business_card_url: url }))}
+                                    onBackChange={(url) => setNewPartner(prev => ({ ...prev, business_card_back_url: url }))}
+                                    label="Business Card"
+                                />
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
