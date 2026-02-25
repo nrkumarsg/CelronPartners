@@ -28,6 +28,7 @@ import NoteForm from './pages/NoteForm';
 import Calendar from './pages/Calendar';
 import StorageDirectory from './pages/StorageDirectory';
 import Tools from './pages/Tools';
+import MessagingHub from './pages/MessagingHub';
 
 // Authentication & RBAC Components
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -126,6 +127,7 @@ function App() {
               <Route path="/notes/:id" element={<ProtectedRoute><NoteForm /></ProtectedRoute>} />
               <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
               <Route path="/tools" element={<ProtectedRoute><Tools /></ProtectedRoute>} />
+              <Route path="/messaging" element={<ProtectedRoute><MessagingHub /></ProtectedRoute>} />
 
               {/* Settings (Accessible to all for personal tools, admins see more) */}
               <Route path="/settings" element={<ProtectedRoute><ModuleSettings /></ProtectedRoute>} />

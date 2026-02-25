@@ -71,6 +71,11 @@ export default function Sidebar() {
                     <span className="nav-text" style={{ fontWeight: 600 }}>Tools</span>
                 </NavLink>
 
+                <NavLink to="/messaging" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                    <Hexagon size={20} color="#8b5cf6" />
+                    <span className="nav-text" style={{ fontWeight: 600 }}>Messaging Hub</span>
+                </NavLink>
+
                 <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
 
                 {hasAccess('partners') && (
