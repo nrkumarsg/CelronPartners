@@ -10,7 +10,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
         autoRefreshToken: true,
         persistSession: true,
         detectSessionInUrl: true,
-        storageOptions: {}, // Can optionally clear this if needed
+        storageOptions: {},
+        lockManagerType: 'ls',
     },
     global: {
         headers: { 'x-my-custom-header': 'celronhub' }

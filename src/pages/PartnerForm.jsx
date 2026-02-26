@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { Save, ArrowLeft, X, Plus, ExternalLink } from 'lucide-react';
+import { Save, ArrowLeft, X, Plus, ExternalLink, Globe } from 'lucide-react';
 import { getPartners, savePartner, getContactsByPartner, deleteContact, uploadFile } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
 import BusinessCardUpload from '../components/common/BusinessCardUpload';
