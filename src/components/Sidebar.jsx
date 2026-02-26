@@ -44,13 +44,13 @@ export default function Sidebar() {
                 <h1 style={{ fontSize: '1.8rem', letterSpacing: '0.05em' }}>HUB</h1>
             </div>
 
-            <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
+            <nav style={{ display: 'flex', flexDirection: 'column', gap: '4px', overflowY: 'auto' }}>
+                <span className="nav-group-header">Main</span>
                 <NavLink to="/" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} end>
                     <LayoutDashboard size={20} />
                     <span className="nav-text">Dashboard</span>
                 </NavLink>
 
-                {/* NEW MODULES - MOVED TO TOP FOR VISIBILITY */}
                 <NavLink to="/todo" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                     <CheckSquare size={20} color="#10b981" />
                     <span className="nav-text" style={{ fontWeight: 600 }}>To-Do List {todoCount > 0 ? `(${todoCount})` : ''}</span>
@@ -76,61 +76,34 @@ export default function Sidebar() {
                     <span className="nav-text" style={{ fontWeight: 600 }}>Messaging Hub</span>
                 </NavLink>
 
-                <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 0' }} />
+                <div className="nav-separator" />
 
-                {hasAccess('partners') && (
+                <span className="nav-group-header">CRM & Tools</span>
+                {(hasAccess('partners') || hasAccess('contacts')) && (
                     <>
-                        <NavLink to="/partners" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                            <Building2 size={20} />
-                            <span className="nav-text">Partners</span>
-                        </NavLink>
-                        <NavLink to="/categories" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                            <Tags size={20} />
-                            <span className="nav-text">Categories</span>
-                        </NavLink>
-                        <NavLink to="/brands" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                            <Hexagon size={20} />
-                            <span className="nav-text">Brands</span>
-                        </NavLink>
+                        {hasAccess('partners') && (
+                            <NavLink to="/partners" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                                <Building2 size={20} color="#94a3b8" />
+                                <span className="nav-text">Partners</span>
+                            </NavLink>
+                        )}
+                        {hasAccess('contacts') && (
+                            <NavLink to="/contacts" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                                <Users size={20} color="#94a3b8" />
+                                <span className="nav-text">Contacts</span>
+                            </NavLink>
+                        )}
                     </>
                 )}
 
-                {hasAccess('contacts') && (
-                    <NavLink to="/contacts" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                        <Users size={20} />
-                        <span className="nav-text">Contacts</span>
-                    </NavLink>
-                )}
-
-                {hasAccess('vessels') && (
-                    <NavLink to="/vessels" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                        <Ship size={20} />
-                        <span className="nav-text">Vessels</span>
-                    </NavLink>
-                )}
-
-                {hasAccess('work-locations') && (
-                    <NavLink to="/work-locations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                        <MapPin size={20} />
-                        <span className="nav-text">Work Locations</span>
-                    </NavLink>
-                )}
-
-                {hasAccess('catalog') && (
-                    <NavLink to="/catalog" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                        <Package size={20} />
-                        <span className="nav-text">Catalog</span>
-                    </NavLink>
-                )}
-
-                <NavLink to="/workflows" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                    <FileText size={20} />
-                    <span className="nav-text">Workflows</span>
+                <NavLink to="/workflows/finder" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                    <Search size={20} color="#3b82f6" />
+                    <span className="nav-text">Universal Finder</span>
                 </NavLink>
 
-                <NavLink to="/workflows/finder" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                    <Search size={20} />
-                    <span className="nav-text">Universal Finder</span>
+                <NavLink to="/workflows" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                    <FileText size={20} color="#94a3b8" />
+                    <span className="nav-text">Workflows</span>
                 </NavLink>
 
                 <NavLink to="/storage" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
@@ -138,9 +111,47 @@ export default function Sidebar() {
                     <span className="nav-text" style={{ fontWeight: 600 }}>Storage Directory</span>
                 </NavLink>
 
+                <div className="nav-separator" />
+
+                {(hasAccess('vessels') || hasAccess('work-locations') || hasAccess('catalog')) && (
+                    <>
+                        <span className="nav-group-header">Operations & Catalog</span>
+                        {hasAccess('vessels') && (
+                            <NavLink to="/vessels" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                                <Ship size={20} color="#94a3b8" />
+                                <span className="nav-text">Vessels</span>
+                            </NavLink>
+                        )}
+                        {hasAccess('work-locations') && (
+                            <NavLink to="/work-locations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                                <MapPin size={20} color="#94a3b8" />
+                                <span className="nav-text">Work Locations</span>
+                            </NavLink>
+                        )}
+                        {hasAccess('catalog') && (
+                            <>
+                                <NavLink to="/catalog" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                                    <Package size={20} color="#94a3b8" />
+                                    <span className="nav-text">Catalog</span>
+                                </NavLink>
+                                <NavLink to="/categories" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                                    <Tags size={20} color="#94a3b8" />
+                                    <span className="nav-text">Categories</span>
+                                </NavLink>
+                                <NavLink to="/brands" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                                    <Hexagon size={20} color="#94a3b8" />
+                                    <span className="nav-text">Brands</span>
+                                </NavLink>
+                            </>
+                        )}
+                        <div className="nav-separator" />
+                    </>
+                )}
+
+                <span className="nav-group-header">System</span>
                 {hasAccess('reports') && (
                     <NavLink to="/reports" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                        <FileText size={20} />
+                        <FileText size={20} color="#94a3b8" />
                         <span className="nav-text">Reports</span>
                     </NavLink>
                 )}
@@ -153,10 +164,11 @@ export default function Sidebar() {
                 )}
 
                 <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                    <Settings size={20} />
+                    <Settings size={20} color="#94a3b8" />
                     <span className="nav-text">Setting</span>
                 </NavLink>
             </nav>
+
 
             <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div className="integration-status" style={{ padding: '16px', background: 'rgba(255,255,255,0.05)', borderRadius: '8px', textAlign: 'center' }}>
@@ -171,6 +183,6 @@ export default function Sidebar() {
                     </p>
                 </div>
             </div>
-        </aside>
+        </aside >
     );
 }

@@ -404,6 +404,17 @@ export default function ModuleSettings() {
                                                 <td><span style={{ fontSize: '0.85rem' }}>{comm.email_address || 'Connected'}</span></td>
                                                 <td style={{ textAlign: 'right' }}>
                                                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                        {comm.provider === 'gmail' && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    import('../lib/gmailService').then(m => m.connectGmailAPI(comm.id));
+                                                                }}
+                                                                title="Connect Gmail API"
+                                                                style={{ border: 'none', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', padding: '4px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', fontWeight: 600 }}
+                                                            >
+                                                                <Globe size={14} /> {comm.auth_data?.access_token ? 'Re-sync' : 'Sync API'}
+                                                            </button>
+                                                        )}
                                                         <button onClick={() => openCommModal(comm)} style={{ border: 'none', background: 'none', color: '#6366f1', cursor: 'pointer', padding: '4px' }}><Settings size={16} /></button>
                                                         <button onClick={() => handleDeleteComm(comm.id)} style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }}><Trash2 size={16} /></button>
                                                     </div>

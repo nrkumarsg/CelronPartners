@@ -36,8 +36,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Login from './pages/auth/Login';
 import SignUp from './pages/auth/SignUp';
 import ForgotPassword from './pages/auth/ForgotPassword';
-import Unauthorized from './pages/auth/Unauthorized';
 import UserManagement from './pages/UserManagement';
+import OAuthCallback from './pages/auth/OAuthCallback';
 
 // App Layout wrapper to only show sidebar when logged in
 const AppLayout = ({ children }) => {
@@ -70,6 +70,7 @@ function App() {
         <Route path="/signup" element={<SignUp />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
+        <Route path="/oauth-callback" element={<OAuthCallback />} />
 
         {/* Protected Application Layout and Routes */}
         <Route path="*" element={

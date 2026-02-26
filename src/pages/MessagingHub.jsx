@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, MessageSquare, Share2, Plus, Search, ExternalLink, RefreshCw, Send, Paperclip, MoreVertical, Star, Inbox, Trash2, Globe, Youtube, Instagram, Twitter, Linkedin, Facebook } from 'lucide-react';
 import { getCommunicationAccounts, getUnreadCounts } from '../lib/communicationService';
+import { fetchGmailThreads } from '../lib/gmailService';
 
 export default function MessagingHub() {
     const [accounts, setAccounts] = useState([]);
@@ -8,8 +9,10 @@ export default function MessagingHub() {
     const [activeSection, setActiveSection] = useState('email'); // 'email', 'chat', 'social'
     const [selectedAccount, setSelectedAccount] = useState(null);
     const [unreadCounts, setUnreadCounts] = useState({});
+    const [realMessages, setRealMessages] = useState([]);
+    const [loadingMessages, setLoadingMessages] = useState(false);
 
-    // Mock messages for UI demonstration
+    // Mock messages for UI demonstration (used as fallback)
     const [mockMessages, setMockMessages] = useState([
         { id: 1, sender: 'John Doe', subject: 'Inquiry regarding Marine Spare Parts', excerpt: 'Hi, I would like to get a quote for the following parts...', time: '10:45 AM', account: 'Sales Email', isUnread: true },
         { id: 2, sender: 'Zoho Team', subject: 'Your weekly security report', excerpt: 'System scan completed. All services are running normally...', time: 'Yesterday', account: 'Work Email', isUnread: false },
@@ -20,6 +23,21 @@ export default function MessagingHub() {
     useEffect(() => {
         fetchAccounts();
     }, []);
+
+    useEffect(() => {
+        if (selectedAccount?.provider === 'gmail' && selectedAccount?.auth_data?.access_token) {
+            loadRealMessages(selectedAccount.auth_data.access_token);
+        } else {
+            setRealMessages([]);
+        }
+    }, [selectedAccount]);
+
+    const loadRealMessages = async (token) => {
+        setLoadingMessages(true);
+        const msgs = await fetchGmailThreads(token);
+        setRealMessages(msgs);
+        setLoadingMessages(false);
+    };
 
     const fetchAccounts = async () => {
         setLoading(true);
@@ -122,32 +140,39 @@ export default function MessagingHub() {
             </div>
 
             <div style={{ flex: 1, overflowY: 'auto' }}>
-                {mockMessages.filter(m => {
-                    if (activeSection === 'email') return !m.type;
-                    return m.type === 'chat';
-                }).map(msg => (
-                    <div
-                        key={msg.id}
-                        style={{
-                            padding: '20px',
-                            borderBottom: '1px solid #e2e8f0',
-                            cursor: 'pointer',
-                            background: msg.isUnread ? '#fff' : 'transparent',
-                            borderLeft: msg.isUnread ? '3px solid #6366f1' : 'none',
-                            transition: 'all 0.2s'
-                        }}
-                    >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                            <span style={{ fontSize: '0.9rem', fontWeight: msg.isUnread ? 700 : 500, color: '#1e293b' }}>{msg.sender}</span>
-                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{msg.time}</span>
-                        </div>
-                        {msg.subject && <div style={{ fontSize: '0.8rem', fontWeight: msg.isUnread ? 600 : 400, color: '#475569', marginBottom: '4px' }}>{msg.subject}</div>}
-                        <div style={{ fontSize: '0.8rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{msg.excerpt}</div>
-                        <div style={{ marginTop: '8px', fontSize: '0.7rem', color: '#6366f1', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Star size={12} /> {msg.account}
-                        </div>
+                {loadingMessages ? (
+                    <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                        <div className="animate-spin" style={{ width: '24px', height: '24px', border: '2px solid #f3f3f3', borderTop: '2px solid #6366f1', borderRadius: '50%', margin: '0 auto 12px' }}></div>
+                        Syncing live messages...
                     </div>
-                ))}
+                ) : (
+                    (realMessages.length > 0 ? realMessages : mockMessages.filter(m => {
+                        if (activeSection === 'email') return !m.type;
+                        return m.type === 'chat';
+                    })).map(msg => (
+                        <div
+                            key={msg.id}
+                            style={{
+                                padding: '20px',
+                                borderBottom: '1px solid #e2e8f0',
+                                cursor: 'pointer',
+                                background: msg.isUnread ? '#fff' : 'transparent',
+                                borderLeft: msg.isUnread ? '3px solid #6366f1' : 'none',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                <span style={{ fontSize: '0.9rem', fontWeight: msg.isUnread ? 700 : 500, color: '#1e293b' }}>{msg.sender}</span>
+                                <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{msg.time}</span>
+                            </div>
+                            {msg.subject && <div style={{ fontSize: '0.8rem', fontWeight: msg.isUnread ? 600 : 400, color: '#475569', marginBottom: '4px' }}>{msg.subject}</div>}
+                            <div style={{ fontSize: '0.8rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{msg.excerpt}</div>
+                            <div style={{ marginTop: '8px', fontSize: '0.7rem', color: '#6366f1', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <Star size={12} /> {msg.account || selectedAccount?.account_label || 'Direct Sync'}
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
         </div>
     );
