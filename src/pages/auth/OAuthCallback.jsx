@@ -13,34 +13,89 @@ export default function OAuthCallback() {
 
             const accessToken = params.get('access_token');
             const state = params.get('state'); // This contains our accountId
-            const expiresIn = params.get('expires_in');
+            const expiresIn = params.get('expires_in') || '3600'; // Default to 1 hour if missing
 
             if (accessToken && state) {
                 try {
+                    console.log('Processing callback for state:', state);
+
+                    // Store token globally for Vault/OCR/Drive integration
+                    localStorage.setItem('google_access_token', accessToken);
+                    localStorage.setItem('google_token_expiry', new Date(Date.now() + parseInt(expiresIn) * 1000).toISOString());
+
+                    if (state === 'contacts_sync' || state === 'manual_upload' || state === 'enquiry_form' || state === 'catalog_photo_upload' || state === 'calibration_lab' || state === 'scanner_module' || state === 'apk_management') {
+                        // Temp store token for the sync process
+                        sessionStorage.setItem('google_contacts_token', accessToken);
+                        sessionStorage.setItem('google_contacts_expires', new Date(Date.now() + parseInt(expiresIn) * 1000).toISOString());
+
+                        const messageMap = {
+                            enquiry_form: 'Google Account Connected! You can now resume saving.',
+                            contacts_sync: 'Google Contacts Connected!',
+                            manual_upload: 'Google Drive Connected!',
+                            catalog_photo_upload: 'Google Drive Connected! You can now upload photos.',
+                            calibration_lab: 'Google Drive Connected! Calibration Lab is ready.',
+                            scanner_module: 'Google Drive Connected! Celron Scanner is active.',
+                            apk_management: 'Google Drive Connected! APK Manager is ready.'
+                        };
+                        const targetMap = {
+                            enquiry_form: '/workflows',
+                            contacts_sync: '/contacts',
+                            manual_upload: '/manuals/new',
+                            catalog_photo_upload: '/catalog',
+                            calibration_lab: '/forms/calibration-lab',
+                            scanner_module: '/scanner',
+                            apk_management: '/admin/apks'
+                        };
+
+                        alert(messageMap[state]);
+                        navigate(targetMap[state]);
+                        return;
+                    }
+
+                    // Ensure we have a session before updating
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) {
+                        console.error('No authenticated user found during callback');
+                        alert('Error: You are not logged in. Please log in again.');
+                        navigate('/login');
+                        return;
+                    }
+
                     // Update the communication account with the auth data
-                    const { error } = await supabase
+                    const { data, error, count } = await supabase
                         .from('communication_accounts')
                         .update({
                             auth_data: {
                                 access_token: accessToken,
                                 expires_at: new Date(Date.now() + parseInt(expiresIn) * 1000).toISOString(),
-                                // Note: Implicit flow doesn't provide refresh tokens. 
-                                // For production, use 'code' flow and exchange for refresh token on backend.
                             }
                         })
-                        .eq('id', state);
+                        .eq('id', state)
+                        .select(); // Select back to verify it worked
 
-                    if (error) throw error;
+                    if (error) {
+                        console.error('Database update error:', error);
+                        throw error;
+                    }
 
-                    alert('Gmail API Connected Successfully!');
-                    navigate('/settings?tab=communications');
+                    if (!data || data.length === 0) {
+                        console.warn('Update matched 0 rows. State/ID might be wrong:', state);
+                        alert('Warning: Account not found in database. Please try adding the account again.');
+                        navigate('/messaging');
+                        return;
+                    }
+
+                    console.log('Successfully updated account:', state);
+                    alert('Google API Connected Successfully!');
+                    navigate('/messaging');
                 } catch (err) {
                     console.error('Callback error:', err);
-                    alert('Failed to save authentication data');
-                    navigate('/settings');
+                    alert(`Failed to save authentication data: ${err.message}`);
+                    navigate('/messaging');
                 }
             } else {
-                navigate('/settings');
+                console.warn('Callback missing token or state:', { hasToken: !!accessToken, state });
+                navigate('/messaging');
             }
         };
 

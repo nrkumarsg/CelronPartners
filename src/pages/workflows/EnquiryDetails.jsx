@@ -1,125 +1,164 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { getEnquiryById, updateEnquiry } from '../../lib/workflowService';
-import { getPartners } from '../../lib/store';
-import { getCatalogItems } from '../../lib/catalogService';
+import { updateEnquiry, shortlistSupplierQuote } from '../../lib/workflowService';
+import { convertEnquiryToV2Document } from '../../lib/workflowV2Service';
+
+import { getPartners, getDocumentSettings } from '../../lib/store';
+import { ArrowLeft, ArrowRight, Send, Ship, Mail, Phone, ExternalLink, Database, FolderPlus, ArrowRightLeft, FileText, CheckCircle2, Clock, DollarSign, ShieldCheck, Plus, Search, Trash, Save, Edit, AlertTriangle, Users, Eye, MailCheck, Download, Calendar, ChevronDown, PlusCircle } from 'lucide-react';
+import UploadOverlay from '../../components/common/UploadOverlay';
+import SafeDriveLink from '../../components/common/SafeDriveLink';
+import EmailPreviewModal from '../../components/workflows/EmailPreviewModal';
+import html2pdf from 'html2pdf.js';
+
+import { useEnquiry } from '../../hooks/useEnquiry';
+import { useSupplierActions } from '../../hooks/useSupplierActions';
 import DocumentManager from '../../components/workflows/DocumentManager';
-import { ArrowLeft, Send, Ship, Mail, Phone, ExternalLink, Database, FolderPlus } from 'lucide-react';
-import { getDocumentSettings } from '../../lib/store';
+import RichTextEditor from '../../components/common/RichTextEditor';
+import CommunicationWall from '../../components/common/CommunicationWall';
+import { ITEM_UNITS } from '../../utils/units';
 
 export default function EnquiryDetails() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const { profile } = useAuth();
-    const [enquiry, setEnquiry] = useState(null);
-    const [loading, setLoading] = useState(true);
 
-    // Form lookups
-    const [suppliers, setSuppliers] = useState([]);
-    const [catalog, setCatalog] = useState([]);
+    // Core Logic Hooks
+    const {
+        enquiry, setEnquiry, catalog, selectedItems, setSelectedItems,
+        loading, isSavingNewItem,
+        handleAddItem, handleUpdateItem, handleRemoveItem, handleUpdateHeader, refresh: refreshEnquiry
+    } = useEnquiry(profile?.company_id, id);
+    const [supplierSearch, setSupplierSearch] = useState('');
+    const [editingPartnerId, setEditingPartnerId] = useState(null);
+    const [editingContactId, setEditingContactId] = useState(null);
+    const [addingContactToPartnerId, setAddingContactToPartnerId] = useState(null);
+    const [editForm, setEditForm] = useState({});
 
-    // State to handle Float Quotations
-    const [selectedSuppliers, setSelectedSuppliers] = useState([]);
-    const [selectedItems, setSelectedItems] = useState([]);
+    const {
+        suppliers,
+        selectedSuppliers,
+        setSelectedSuppliers,
+        supplierContacts,
+        recipientOverrides,
+        setRecipientOverrides,
+        isFloating,
+        isSavingContact,
+        fetchSuppliers,
+        handleToggleSupplier,
+        handleUpdateRecipientOverride,
+        handleSaveNewContact,
+        handleUpdatePartner,
+        handleUpdateContact,
+        handleDeleteContact,
+        handleFloatQuotation
+    } = useSupplierActions(profile?.company_id, id, enquiry);
+
+    // Local UI State
     const [settings, setSettings] = useState(null);
     const [driveLink, setDriveLink] = useState('');
     const [showLinkInput, setShowLinkInput] = useState(false);
+    const [supplierQuotes, setSupplierQuotes] = useState([]);
+    const [vessels, setVessels] = useState([]);
+    const [locations, setLocations] = useState([]);
+    const [allPartners, setAllPartners] = useState([]);
+    const [isConverting, setIsConverting] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadLink, setUploadLink] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [showCatalogList, setShowCatalogList] = useState(false);
+    const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+    const [emailPreviewData, setEmailPreviewData] = useState(null);
+    const [isDownloading, setIsDownloading] = useState(false);
+    const [activeTab, setActiveTab] = useState('items');
 
     useEffect(() => {
-        if (profile && id) {
-            if (profile.company_id) {
-                fetchDetails();
-                fetchLookups();
-            } else {
-                setLoading(false);
-            }
+        if (profile?.company_id) {
+            fetchLookups();
+            fetchSuppliers();
         }
-    }, [id, profile]);
+    }, [profile]);
 
-    const fetchDetails = async () => {
-        setLoading(true);
-        try {
-            const { data, error } = await getEnquiryById(profile.company_id, id);
-            if (error) throw error;
-            if (data) {
-                setEnquiry(data);
-                if (data.catalog_items) setSelectedItems(data.catalog_items);
-                if (data.google_drive_link) setDriveLink(data.google_drive_link);
+    useEffect(() => {
+        if (enquiry) {
+            if (enquiry.gdrive_file_link) {
+                setDriveLink(enquiry.gdrive_file_link);
             }
-        } catch (error) {
-            console.error('Error fetching enquiry details:', error);
-        } finally {
-            setLoading(false);
+            
+            // Smart Defaults for missing fields
+            const updates = {};
+            if (!enquiry.enquiry_date) {
+                updates.enquiry_date = new Date().toISOString().split('T')[0];
+            }
+            if (!enquiry.due_date && enquiry.enquiry_date) {
+                updates.due_date = new Date(new Date(enquiry.enquiry_date).getTime() + 86400000).toISOString().split('T')[0];
+            }
+            if (!enquiry.customer_ref && enquiry.enquiry_no) {
+                updates.customer_ref = `Ref: ${enquiry.enquiry_no}`;
+            }
+            
+            if (Object.keys(updates).length > 0) {
+                handleUpdateHeader(updates);
+            }
         }
-    };
+    }, [enquiry]);
 
     const fetchLookups = async () => {
         try {
-            const [suppliersData, catalogRes, settingsData] = await Promise.all([
-                getPartners(), // ideally filter by type: 'Supplier' but for demo we show all
-                getCatalogItems(1, 100, {}, ''),
-                getDocumentSettings()
+            const [settingsData, quoteRes, vesselsData, locationsData, partnersData] = await Promise.all([
+                getDocumentSettings(),
+                import('../../lib/workflowService').then(m => m.getSupplierQuotes(id)),
+                import('../../lib/store').then(m => m.getVessels()),
+                import('../../lib/store').then(m => m.getWorkLocations()),
+                import('../../lib/store').then(m => m.getPartners())
             ]);
             if (settingsData) setSettings(settingsData);
-
-            // Filter only valid suppliers
-            if (suppliersData) {
-                const supps = suppliersData.filter(p => Array.isArray(p.types) && p.types.includes('Supplier'));
-                setSuppliers(supps);
-            }
-            if (catalogRes.data) setCatalog(catalogRes.data);
-        } catch {
-            console.error("Failed to load lookups");
+            if (quoteRes.data) setSupplierQuotes(quoteRes.data);
+            if (vesselsData) setVessels(vesselsData);
+            if (locationsData) setLocations(locationsData);
+            if (partnersData) setAllPartners(partnersData);
+        } catch (err) {
+            console.error("Failed to load secondary lookups", err);
         }
     };
 
-    const handleAddItem = (e) => {
-        const item = catalog.find(c => c.id === e.target.value);
-        if (item && !selectedItems.some(i => i.id === item.id)) {
-            const updated = [...selectedItems, item];
-            setSelectedItems(updated);
-            updateEnquiry(id, { catalog_items: updated });
-            setEnquiry({ ...enquiry, catalog_items: updated });
-        }
-    };
-
-    const handleRemoveItem = (itemId) => {
-        const updated = selectedItems.filter(i => i.id !== itemId);
-        setSelectedItems(updated);
-        updateEnquiry(id, { catalog_items: updated });
-        setEnquiry({ ...enquiry, catalog_items: updated });
-    };
-
-    const handleToggleSupplier = (supplier) => {
-        if (selectedSuppliers.some(s => s.id === supplier.id)) {
-            setSelectedSuppliers(selectedSuppliers.filter(s => s.id !== supplier.id));
-        } else {
-            setSelectedSuppliers([...selectedSuppliers, supplier]);
-        }
-    };
-
-    const handleFloatQuotation = () => {
+    const handlePrepareFloat = () => {
         if (selectedSuppliers.length === 0) return alert("Select at least one supplier.");
         if (selectedItems.length === 0) return alert("Add at least one item from the catalog.");
 
-        // ... mailto logic ...
-        const emails = selectedSuppliers.map(s => s.email1).filter(e => e).join(',');
+        const emails = selectedSuppliers.map(s => {
+            const override = recipientOverrides[s.id];
+            return override?.email || s.email1;
+        }).filter(e => e).join(',');
+        
         const subject = encodeURIComponent(`Request for Quotation: ${enquiry?.enquiry_no} - CELRON ENTERPRISES`);
 
-        let itemRows = selectedItems.map((item, idx) => `${idx + 1}. ${item.name} (${item.specification || 'N/A'}) - QTY: __ `).join('\n');
+        let itemRows = selectedItems.map((item, idx) => {
+            const specPrefix = item.specification ? `\n   - Spec: ${item.specification.substring(0, 100)}${item.specification.length > 100 ? '...' : ''}` : '';
+            return `${idx + 1}. ${item.name} (${item.qty} ${item.unit || 'pcs'})${specPrefix}`;
+        }).join('\n\n');
 
-        const body = encodeURIComponent(`Dear Supplier,\n\nWe are pleased to invite you to quote for the following items:\n\n${itemRows}\n\nPlease revert with your best price and lead time.\n\nThank you,\nCELRON ENTERPRISES PTE LTD`);
+        const greeting = selectedSuppliers.length === 1 
+            ? `Dear ${recipientOverrides[selectedSuppliers[0].id]?.attn_name || 'Supplier'},\n\n`
+            : `Dear Supplier,\n\n`;
 
-        window.open(`mailto:?bcc=${emails}&subject=${subject}&body=${body}`, '_blank');
+        const body = encodeURIComponent(`${greeting}We are pleased to invite you to quote for the following items:\n\n${itemRows}\n\n${enquiry.gdrive_file_link ? `You can view photos and additional attachments here: ${enquiry.gdrive_file_link}\n\n` : ''}Please revert with your best price and lead time at your earliest convenience.\n\nThank you,\nCELRON ENTERPRISES PTE LTD`);
 
-        alert("Quotation Requests Floated! Awaiting responses.");
+        setEmailPreviewData({ emails, subject, body });
+    };
+
+    const confirmFloat = async () => {
+        const success = await handleFloatQuotation(selectedItems, enquiry);
+        if (success) {
+            setEmailPreviewData(null);
+            refreshEnquiry();
+        }
     };
 
     const updateDriveLink = async () => {
         try {
-            const { error } = await updateEnquiry(id, { google_drive_link: driveLink });
-            if (error) throw error;
-            setEnquiry({ ...enquiry, google_drive_link: driveLink });
+            await updateEnquiry(id, { gdrive_file_link: driveLink });
+            setEnquiry({ ...enquiry, gdrive_file_link: driveLink });
             setShowLinkInput(false);
         } catch (error) {
             console.error('Failed to update storage link:', error);
@@ -127,171 +166,777 @@ export default function EnquiryDetails() {
         }
     };
 
+    const handleConvertToV2 = async () => {
+        if (!window.confirm("Convert this Enquiry to a Detailed Quotation for manual editing?")) return;
+        setIsConverting(true);
+        try {
+            const doc = await convertEnquiryToV2Document(id);
+            navigate(`/workflows/editor/quotation/${doc.id}`);
+        } catch (error) {
+            console.error('Conversion Failed:', error);
+            alert('Failed to convert to detailed document');
+            setIsConverting(false);
+        }
+    };
+
+
     if (loading) return <div className="loading-state">Loading details...</div>;
     if (!enquiry) return <div className="page-container"><h2>Enquiry Not Found</h2></div>;
 
     return (
-        <div className="page-container">
-            <header className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                    <Link to="/workflows" className="btn btn-sm btn-outline" style={{ display: 'inline-flex', marginBottom: '16px', gap: '8px' }}>
-                        <ArrowLeft size={16} /> Back to Board
-                    </Link>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <div style={{ background: '#3b82f6', color: 'white', padding: '12px', borderRadius: '12px' }}>
-                            <Ship size={24} />
-                        </div>
-                        <div>
-                            <h1 className="page-title" style={{ color: '#60a5fa', margin: 0 }}>{enquiry.enquiry_no}</h1>
-                            <p className="page-description" style={{ margin: 0, marginTop: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ background: 'rgba(255,255,255,0.1)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem' }}>{enquiry.type} Order</span>
-                                • Source: {enquiry.source} • Status: <span style={{ color: '#f59e0b' }}>{enquiry.status}</span>
-                            </p>
-                        </div>
+        <>
+            <div className="page-container" style={{ background: '#f8fafc', minHeight: '100vh', padding: '24px' }}>
+            {/* 1. Status Navigation Bar */}
+            <div style={{ display: 'flex', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px', overflow: 'hidden' }}>
+                {['New Enquiry', 'RFQ Floated', 'Quotation Sent', 'Job Created'].map((status) => (
+                    <div 
+                        key={status} 
+                        style={{ 
+                            flex: 1, 
+                            textAlign: 'center', 
+                            padding: '12px', 
+                            borderRadius: '10px', 
+                            fontSize: '0.85rem', 
+                            fontWeight: 700,
+                            background: enquiry.status === status ? '#eff6ff' : 'transparent',
+                            color: enquiry.status === status ? '#3b82f6' : '#94a3b8',
+                            position: 'relative',
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                            cursor: 'default'
+                        }}
+                    >
+                        {status}
+                        <div style={{ 
+                            position: 'absolute', 
+                            bottom: 0, 
+                            left: enquiry.status === status ? '20%' : '50%', 
+                            right: enquiry.status === status ? '20%' : '50%', 
+                            height: '3px', 
+                            background: '#3b82f6',
+                            transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                            opacity: enquiry.status === status ? 1 : 0,
+                            borderRadius: '2px'
+                        }} />
                     </div>
+                ))}
+            </div>
+
+            {/* 2. Page Header Actions */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <Link to="/enquiries" style={{ color: '#94a3b8' }}><ArrowLeft size={20} /></Link>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e293b', margin: 0 }}>Enquiry {enquiry.enquiry_no}</h2>
                 </div>
-            </header>
-
-            <div className="dashboard-grid" style={{ gridTemplateColumns: '2fr 1fr', gap: '24px' }}>
-                {/* Left Column: Requirements & Suppliers */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-                    {/* Catalog Items Required */}
-                    <div className="card">
-                        <div className="card-header">
-                            <h3 className="card-title">Required Items (Catalog)</h3>
-                        </div>
-                        <div style={{ marginBottom: '16px' }}>
-                            <select className="form-control" onChange={handleAddItem} value="">
-                                <option value="" disabled>-- Select items from Catalog to add --</option>
-                                {catalog.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {selectedItems.length === 0 ? <p style={{ color: '#64748b', fontStyle: 'italic', fontSize: '0.9rem' }}>No items added yet</p> :
-                                selectedItems.map(item => (
-                                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                        <div>
-                                            <div style={{ fontWeight: 500, color: '#e2e8f0' }}>{item.name}</div>
-                                            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Spec: {item.specification || 'N/A'}</div>
-                                        </div>
-                                        <button className="btn btn-sm btn-outline" style={{ color: '#ef4444', borderColor: '#ef4444' }} onClick={() => handleRemoveItem(item.id)}>Remove</button>
-                                    </div>
-                                ))
-                            }
-                        </div>
-                    </div>
-
-                    {/* Supplier Float Quotation Engine */}
-                    <div className="card" style={{ borderColor: '#60a5fa' }}>
-                        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 className="card-title" style={{ color: '#60a5fa' }}>Float Quotation</h3>
-                        </div>
-                        <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '16px' }}>
-                            Select potential suppliers below to send a unified BCC email quoting the items above.
-                        </p>
-
-                        <div style={{ maxHeight: '200px', overflowY: 'auto', marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '8px', paddingRight: '12px' }}>
-                            {suppliers.map(sup => (
-                                <label key={sup.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.05)' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={selectedSuppliers.some(s => s.id === sup.id)}
-                                        onChange={() => handleToggleSupplier(sup)}
-                                        style={{ width: '18px', height: '18px' }}
-                                    />
-                                    <div>
-                                        <div style={{ fontWeight: 500, color: '#e2e8f0' }}>{sup.name}</div>
-                                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            <Mail size={12} /> {sup.email1 || 'No email provided'}
-                                            <span style={{ margin: '0 4px' }}>|</span>
-                                            {sup.country || 'Unknown Location'}
-                                        </div>
-                                    </div>
-                                </label>
-                            ))}
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-primary" onClick={handleFloatQuotation} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#3b82f6' }}>
-                                <Send size={18} /> Send Quotation Requests  ({selectedSuppliers.length} suppliers)
-                            </button>
-                        </div>
-                    </div>
-
-                </div>
-
-                {/* Right Column: Customer Details & Documents */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    <div className="glass-panel">
-                        <h3 className="form-section-title" style={{ border: 'none', padding: 0, margin: '0 0 16px 0', fontSize: '1.05rem', color: '#fff' }}>Customer Info</h3>
-                        {enquiry.partners ? (
-                            <div>
-                                <h4 style={{ margin: '0 0 8px 0', color: '#e2e8f0' }}>{enquiry.partners.name}</h4>
-                                <div style={{ fontSize: '0.85rem', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    {enquiry.contacts && <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Phone size={14} /> Contact: {enquiry.contacts.name}</span>}
-                                    <Link to={`/partners/${enquiry.partner_id}`} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#60a5fa', textDecoration: 'none', marginTop: '8px' }}>
-                                        <ExternalLink size={14} /> View Partner Profile
-                                    </Link>
-                                </div>
-                            </div>
-                        ) : <span style={{ color: '#64748b', fontSize: '0.85rem' }}>No customer linked.</span>}
-                    </div>
-
-                    {/* Storage Integration Card */}
-                    <div className="card" style={{ border: '1px solid rgba(59, 130, 246, 0.3)', background: 'rgba(30, 41, 59, 0.4)' }}>
-                        <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Database size={18} color="#60a5fa" />
-                            <h3 className="card-title" style={{ color: '#fff' }}>Google Drive Storage</h3>
-                        </div>
-
-                        {!enquiry.google_drive_link || showLinkInput ? (
-                            <div style={{ padding: '4px' }}>
-                                <p style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '12px' }}>
-                                    Step 1: Open the <a href={`https://drive.google.com/drive/folders/${settings?.google_drive_folder_id}`} target="_blank" rel="noreferrer" style={{ color: '#60a5fa' }}>CELRON2026</a> root folder. <br />
-                                    Step 2: Create a folder named <b>{enquiry.enquiry_no} - {enquiry.partners?.name || 'Walk-in'}</b>. <br />
-                                    Step 3: Paste that folder's share link below:
-                                </p>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input
-                                        type="text"
-                                        placeholder="Paste Google Drive folder URL here"
-                                        className="form-control"
-                                        value={driveLink}
-                                        onChange={(e) => setDriveLink(e.target.value)}
-                                        style={{ background: 'rgba(0,0,0,0.2)', color: '#fff' }}
-                                    />
-                                    <button className="btn btn-primary" style={{ padding: '8px 12px' }} onClick={updateDriveLink}>Link</button>
-                                </div>
-                                {enquiry.google_drive_link && (
-                                    <button onClick={() => setShowLinkInput(false)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.75rem', marginTop: '8px', cursor: 'pointer' }}>Cancel</button>
-                                )}
-                            </div>
-                        ) : (
-                            <div>
-                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                                    <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>Linked to Cloud Storage</span>
-                                    <button onClick={() => setShowLinkInput(true)} style={{ background: 'transparent', border: 'none', color: '#60a5fa', fontSize: '0.75rem', cursor: 'pointer' }}>Edit Link</button>
-                                </div>
-                                <button
-                                    onClick={() => window.open(enquiry.google_drive_link, '_blank')}
-                                    className="btn btn-primary"
-                                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', background: '#10b981' }}
-                                >
-                                    <ExternalLink size={18} /> Open Storage Folder
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* WhatsApp Wall / Document Manager imported as component */}
-                    <DocumentManager referenceType="Enquiry" referenceId={id} />
-
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                        onClick={() => refreshEnquiry()}
+                        className="btn btn-sm btn-primary" 
+                        style={{ background: '#6366f1', display: 'flex', alignItems: 'center', gap: '6px' }}
+                    >
+                        <Save size={16} /> Save
+                    </button>
+                    <button onClick={() => window.print()} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Download size={16} /> Print PDF</button>
+                    <button onClick={handleFloatQuotation} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={16} /> Send by email</button>
+                    <button className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Plus size={16} /> Create Revision</button>
                 </div>
             </div>
+
+            {/* 3. Info Grid (Enquiry Template) */}
+            <div className="glass-panel" style={{ padding: '24px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div className="form-group">
+                            <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.6 }}>Customer</label>
+                            <div style={{ position: 'relative' }}>
+                                <select 
+                                    className="form-select"
+                                    value={enquiry.customer_id || ''}
+                                    onChange={(e) => {
+                                        const p = allPartners.find(x => x.id === e.target.value);
+                                        handleUpdateHeader({ customer_id: e.target.value, customer_name: p?.name });
+                                    }}
+                                    style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 36px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', cursor: 'pointer', fontWeight: 600 }}
+                                >
+                                    <option value="">Select Customer</option>
+                                    {allPartners.filter(p => p.types?.includes('Customer')).map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                                <Users size={16} color="#6366f1" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                                <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.6 }}>Subject / Project Notes</label>
+                            <input 
+                                type="text"
+                                className="form-input"
+                                value={enquiry.customer_ref || ''}
+                                onChange={(e) => handleUpdateHeader({ customer_ref: e.target.value })}
+                                placeholder={enquiry.enquiry_no ? `Ref: ${enquiry.enquiry_no}` : "E.g. Spares for MV Brave..."}
+                                style={{ borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 12px' }}
+                            />
+                        </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                        <div className="form-group">
+                            <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.6 }}>Date</label>
+                            <div style={{ position: 'relative' }}>
+                                <input 
+                                    type="date"
+                                    value={enquiry.enquiry_date || new Date().toISOString().split('T')[0]}
+                                    onChange={(e) => handleUpdateHeader({ enquiry_date: e.target.value })}
+                                    style={{ width: '100%', borderRadius: '8px', padding: '8px 12px 8px 36px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '0.9rem' }}
+                                />
+                                <Calendar size={16} color="#94a3b8" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.6 }}>Expiration / Due Date</label>
+                            <div style={{ position: 'relative' }}>
+                                <input 
+                                    type="date"
+                                    value={enquiry.due_date || (enquiry.enquiry_date ? new Date(new Date(enquiry.enquiry_date).getTime() + 86400000).toISOString().split('T')[0] : '')}
+                                    onChange={(e) => handleUpdateHeader({ due_date: e.target.value })}
+                                    style={{ width: '100%', borderRadius: '8px', padding: '8px 12px 8px 36px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '0.9rem', color: '#f97316' }}
+                                />
+                                <Clock size={16} color="#f97316" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
+                            </div>
+                        </div>
+                        <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                            <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.6 }}>Vessel / Service Location</label>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <div style={{ position: 'relative', flex: 1 }}>
+                                    <select 
+                                        className="form-select"
+                                        value={enquiry.vessel_id || ''}
+                                        onChange={(e) => {
+                                            const v = vessels.find(x => x.id === e.target.value);
+                                            handleUpdateHeader({ vessel_id: e.target.value, vessel_name: v?.vessel_name });
+                                        }}
+                                        style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 36px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#10b981', fontWeight: 600 }}
+                                    >
+                                        <option value="">No Vessel</option>
+                                        {vessels.map(v => (
+                                            <option key={v.id} value={v.id}>{v.vessel_name}</option>
+                                        ))}
+                                    </select>
+                                    <Ship size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#10b981' }} />
+                                    <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                                </div>
+                                <div style={{ position: 'relative', flex: 1 }}>
+                                    <select 
+                                        className="form-select"
+                                        value={enquiry.work_location_id || ''}
+                                        onChange={(e) => {
+                                            const l = locations.find(x => x.id === e.target.value);
+                                            handleUpdateHeader({ work_location_id: e.target.value, location_name: l?.location_name });
+                                        }}
+                                        style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 32px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b' }}
+                                    >
+                                        <option value="">General / Local</option>
+                                        {locations.map(l => (
+                                            <option key={l.id} value={l.id}>{l.location_name}</option>
+                                        ))}
+                                    </select>
+                                    <Database size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                                    <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            {/* 4. Tabs & Content */}
+            <div style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', gap: '24px', borderBottom: '1px solid #e2e8f0', marginBottom: '20px' }}>
+                    <button 
+                        onClick={() => setActiveTab('items')}
+                        style={{ padding: '8px 4px', borderBottom: activeTab === 'items' ? '2px solid #3b82f6' : 'none', color: activeTab === 'items' ? '#3b82f6' : '#64748b', fontSize: '0.9rem', fontWeight: activeTab === 'items' ? 700 : 500, background: 'none', border: 'none', cursor: 'pointer' }}
+                    > Order Lines </button>
+                    <button 
+                        onClick={() => setActiveTab('other')}
+                        style={{ padding: '8px 4px', borderBottom: activeTab === 'other' ? '2px solid #3b82f6' : 'none', color: activeTab === 'other' ? '#3b82f6' : '#64748b', fontSize: '0.9rem', fontWeight: activeTab === 'other' ? 700 : 500, background: 'none', border: 'none', cursor: 'pointer' }}
+                    > Other Info </button>
+                </div>
+
+            {activeTab === 'items' ? (
+                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                                    <th style={{ padding: '16px', textAlign: 'left', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Description</th>
+                                    <th style={{ padding: '16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', width: '100px' }}>Quantity</th>
+                                    <th style={{ padding: '16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', width: '100px' }}>UoM</th>
+                                    <th style={{ padding: '16px', textAlign: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', width: '80px' }}>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {selectedItems.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="4" style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+                                            <Database size={32} style={{ opacity: 0.3, marginBottom: '12px' }} />
+                                            <p style={{ margin: 0, fontSize: '0.9rem' }}>No items added yet</p>
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    selectedItems.map((item, idx) => (
+                                        <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9', background: item.is_section ? '#f8fafc' : 'transparent' }}>
+                                            <td style={{ padding: '12px 16px' }}>
+                                                <input 
+                                                    style={{ width: '100%', border: 'none', background: 'transparent', fontWeight: item.is_section ? 700 : 500, fontSize: '0.9rem', outline: 'none', color: item.is_section ? '#3b82f6' : '#1e293b' }}
+                                                    value={item.description || item.name}
+                                                    onChange={(e) => handleUpdateItem(idx, { description: e.target.value, name: e.target.value })}
+                                                    placeholder={item.is_section ? "SECTION TITLE" : item.is_note ? "Note content..." : "Product name..."}
+                                                />
+                                                {!item.is_section && !item.is_note && (
+                                                    <textarea 
+                                                        style={{ width: '100%', border: 'none', background: 'transparent', fontSize: '0.75rem', color: '#64748b', outline: 'none', marginTop: '4px', resize: 'none' }}
+                                                        value={item.details || item.specification}
+                                                        onChange={(e) => handleUpdateItem(idx, { details: e.target.value, specification: e.target.value })}
+                                                        placeholder="Add specifications..."
+                                                        rows={1}
+                                                    />
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                                {!item.is_section && !item.is_note && (
+                                                    <input 
+                                                        type="number"
+                                                        style={{ width: '60px', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '4px', fontSize: '0.9rem', textAlign: 'center' }}
+                                                        value={item.quantity || item.qty}
+                                                        onChange={(e) => handleUpdateItem(idx, { quantity: e.target.value, qty: e.target.value })}
+                                                    />
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '12px 16px' }}>
+                                                {!item.is_section && !item.is_note && (
+                                                    <input 
+                                                        type="text" 
+                                                        value={item.uom || item.unit || ''} 
+                                                        onChange={(e) => handleUpdateItem(idx, { uom: e.target.value, unit: e.target.value })}
+                                                        style={{ width: '100%', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '6px', textAlign: 'center', fontSize: '0.85rem' }}
+                                                        placeholder="pcs"
+                                                    />
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                                <button 
+                                                    onClick={() => handleRemoveItem(idx)}
+                                                    style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', transition: 'color 0.2s' }}
+                                                    onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
+                                                    onMouseOut={e => e.currentTarget.style.color = '#94a3b8'}
+                                                >
+                                                    <Trash size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                        
+                        <div style={{ padding: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', borderTop: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button 
+                                    onClick={() => handleAddItem({ name: '', unit_price: 0 })}
+                                    style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                    <PlusCircle size={16} /> Add a product
+                                </button>
+                                <button 
+                                    onClick={() => handleAddItem({ name: 'NEW SECTION', is_section: true })}
+                                    style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                                >
+                                    Add a section
+                                </button>
+                                <button 
+                                    onClick={() => handleAddItem({ name: '', is_note: true })}
+                                    style={{ background: 'none', border: 'none', color: '#3b82f6', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}
+                                >
+                                    Add a note
+                                </button>
+                            </div>
+                            
+                            <div style={{ position: 'relative' }}>
+                                <button 
+                                    onClick={() => setShowCatalogList(!showCatalogList)}
+                                    style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '6px 12px', fontSize: '0.85rem', fontWeight: 600, color: '#1e293b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                >
+                                    <Database size={14} /> From Catalog <ChevronDown size={14} />
+                                </button>
+                                
+                                {showCatalogList && (
+                                    <div style={{ position: 'absolute', bottom: '100%', right: 0, zIndex: 10, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 -10px 15px -3px rgba(0,0,0,0.1)', marginBottom: '8px', minWidth: '300px', maxHeight: '300px', overflowY: 'auto' }}>
+                                        <div style={{ padding: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                                            <input 
+                                                autoFocus
+                                                type="text"
+                                                placeholder="Search catalog..."
+                                                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.85rem', outline: 'none' }}
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                            />
+                                        </div>
+                                        {catalog.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(c => (
+                                            <button 
+                                                key={c.id}
+                                                onClick={() => { handleAddItem({ ...c, unit_price: 0 }); setShowCatalogList(false); }}
+                                                style={{ width: '100%', padding: '10px 16px', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' }}
+                                                onMouseOver={e => e.currentTarget.style.background = '#f8fafc'}
+                                                onMouseOut={e => e.currentTarget.style.background = 'none'}
+                                            >
+                                                <div style={{ fontWeight: 600, color: '#1e293b' }}>{c.name}</div>
+                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{c.specification}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+            ) : (
+                /* Other Info Tab */
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 350px', gap: '24px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                         {/* Storage Integration Card */}
+                         <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '24px', border: '1px solid #e2e8f0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                    <div style={{ background: '#dbeafe', padding: '8px', borderRadius: '10px' }}>
+                                        <Database size={20} color="#3b82f6" />
+                                    </div>
+                                    <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b', fontWeight: 600 }}>Cloud Storage</h3>
+                                </div>
+
+                                {!enquiry.gdrive_file_link || showLinkInput ? (
+                                    <div>
+                                        <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '16px', lineHeight: 1.5 }}>
+                                            Override or paste a Google Drive folder link manually here.
+                                        </p>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                                            <input
+                                                type="text"
+                                                placeholder="Paste Google Drive URL..."
+                                                value={driveLink}
+                                                onChange={(e) => setDriveLink(e.target.value)}
+                                                style={{ flex: 1, padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.9rem', minWidth: '150px' }}
+                                            />
+                                            <button onClick={updateDriveLink} style={{ background: '#4f46e5', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Link</button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'center' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                            <span style={{ fontSize: '0.9rem', color: '#10b981', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981' }}></div>
+                                                Active Link Established
+                                            </span>
+                                            <button onClick={() => setShowLinkInput(true)} style={{ background: 'transparent', border: 'none', color: '#4f46e5', fontSize: '0.85rem', cursor: 'pointer', fontWeight: 500 }}>Edit Link</button>
+                                        </div>
+                                        <SafeDriveLink 
+                                            url={enquiry.gdrive_file_link} 
+                                            label="Open Project Vault"
+                                            className="btn btn-block"
+                                            style={{ 
+                                                width: '100%', 
+                                                background: '#fff', 
+                                                color: '#334155', 
+                                                border: '1px solid #cbd5e1', 
+                                                padding: '12px', 
+                                                borderRadius: '8px', 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                justifyContent: 'center', 
+                                                gap: '8px', 
+                                                fontWeight: 600, 
+                                                cursor: 'pointer'
+                                            }}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px' }}>
+                            <h4 style={{ margin: '0 0 16px 0', fontSize: '0.9rem', fontWeight: 700 }}>Internal Documents</h4>
+                            <DocumentManager referenceType="Enquiry" referenceId={id} />
+                        </div>
+                    </div>
+                </div>
+            )}
+            </div>
+            
+            {/* Always visible Notes area */}
+            <div style={{ marginTop: '24px', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px' }}>
+                <h4 style={{ margin: '0 0 16px 0', fontSize: '0.9rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <FileText size={16} color="#3b82f6" /> Notes & Comments
+                </h4>
+                <RichTextEditor 
+                    value={enquiry.notes || ''}
+                    onChange={(val) => setEnquiry({ ...enquiry, notes: val })}
+                    placeholder="Add additional notes here..."
+                />
+            </div>
+
+            {/* Enquiry Floating Module (Bottom) */}
+            <div style={{ marginTop: '24px', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px' }}>
+                <h4 style={{ margin: '0 0 16px 0', fontSize: '0.9rem', fontWeight: 700 }}>Floating Module</h4>
+                <div style={{ position: 'relative', marginBottom: '12px' }}>
+                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input 
+                        type="text"
+                        placeholder="Search suppliers..."
+                        value={supplierSearch}
+                        onChange={(e) => setSupplierSearch(e.target.value)}
+                        style={{ width: '100%', padding: '8px 8px 8px 32px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                    />
+                </div>
+                <div style={{ maxHeight: '500px', overflowY: 'auto', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).map(supplier => {
+                        const isSelected = selectedSuppliers.some(s => s.id === supplier.id);
+                        const contacts = supplierContacts[supplier.id] || [];
+                        const isEditingPartner = editingPartnerId === supplier.id;
+                        
+                        return (
+                            <div key={supplier.id} style={{ 
+                                border: isSelected ? '1px solid #6366f1' : '1px solid #f1f5f9', 
+                                borderRadius: '16px', 
+                                padding: '16px', 
+                                background: isSelected ? '#f8faff' : '#fff', 
+                                transition: 'all 0.2s',
+                                boxShadow: isSelected ? '0 4px 6px -1px rgba(99, 102, 241, 0.1)' : 'none'
+                            }}>
+                                {/* Row 1: Header/Name */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isSelected ? '12px' : 0 }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', flex: 1 }}>
+                                        <input 
+                                            type="checkbox" 
+                                            checked={isSelected}
+                                            onChange={() => handleToggleSupplier(supplier)}
+                                            style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#6366f1' }}
+                                        />
+                                        <span style={{ fontSize: '1rem', fontWeight: 700, color: isSelected ? '#4f46e5' : '#1e293b' }}>{supplier.name}</span>
+                                    </label>
+                                    {isSelected && !isEditingPartner && (
+                                        <button 
+                                            onClick={() => { setEditingPartnerId(supplier.id); setEditForm(supplier); }}
+                                            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                                            onMouseOver={e => e.currentTarget.style.color = '#6366f1'}
+                                            onMouseOut={e => e.currentTarget.style.color = '#94a3b8'}
+                                        >
+                                            <Edit size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                                
+                                {isSelected && isEditingPartner ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '28px', marginBottom: '12px' }}>
+                                        <textarea 
+                                            value={editForm.address || ''} 
+                                            onChange={e => setEditForm({...editForm, address: e.target.value})}
+                                            placeholder="Address"
+                                            style={{ width: '100%', padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
+                                            rows={2}
+                                        />
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <input 
+                                                value={editForm.city || ''} 
+                                                onChange={e => setEditForm({...editForm, city: e.target.value})}
+                                                placeholder="City"
+                                                style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
+                                            />
+                                            <input 
+                                                value={editForm.pincode || ''} 
+                                                onChange={e => setEditForm({...editForm, pincode: e.target.value})}
+                                                placeholder="Pin"
+                                                style={{ width: '80px', padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <input 
+                                                value={editForm.phone1 || ''} 
+                                                onChange={e => setEditForm({...editForm, phone1: e.target.value})}
+                                                placeholder="Phone"
+                                                style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
+                                            />
+                                            <input 
+                                                value={editForm.email1 || ''} 
+                                                onChange={e => setEditForm({...editForm, email1: e.target.value})}
+                                                placeholder="Email"
+                                                style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                            <button 
+                                                onClick={async () => {
+                                                    await handleUpdatePartner(supplier.id, editForm);
+                                                    setEditingPartnerId(null);
+                                                }}
+                                                style={{ flex: 1, padding: '4px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                                            >Save</button>
+                                            <button 
+                                                onClick={() => setEditingPartnerId(null)}
+                                                style={{ flex: 1, padding: '4px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
+                                            >Cancel</button>
+                                        </div>
+                                    </div>
+                                ) : isSelected && (
+                                    <div className="animate-fade-in" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        {/* Row 2: Address */}
+                                        <div style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.4 }}>
+                                            {supplier.address || supplier.city || supplier.pincode || supplier.country ? (
+                                                `${supplier.address || ''}${supplier.city ? `, ${supplier.city}` : ''}${supplier.pincode ? `, ${supplier.pincode}` : ''}${supplier.country ? `, ${supplier.country}` : ''}`
+                                            ) : (
+                                                <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>No address provided</span>
+                                            )}
+                                        </div>
+                                        
+                                        {/* Row 3: Phone/Email */}
+                                        <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>
+                                            {supplier.phone1 && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Phone size={12} /> T: {supplier.phone1}</span>}
+                                            {supplier.email1 && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Mail size={12} /> E: {supplier.email1}</span>}
+                                        </div>
+                                        
+                                        {/* Attn List with CRUD */}
+                                        <div style={{ marginTop: '12px', borderTop: '1px dashed #e2e8f0', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Attention To:</span>
+                                                <button 
+                                                    onClick={() => { setAddingContactToPartnerId(supplier.id); setEditForm({ name: '', phone: '', email: '' }); }}
+                                                    style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                                                >+ Add New</button>
+                                            </div>
+                                            
+                                            {addingContactToPartnerId === supplier.id && (
+                                                <div style={{ background: '#fff', border: '1px solid #6366f1', borderRadius: '10px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                    <input autoFocus value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} placeholder="Name" style={{ padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.75rem' }} />
+                                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                                        <input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} placeholder="Phone" style={{ flex: 1, padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.75rem' }} />
+                                                        <input value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} placeholder="Email" style={{ flex: 1, padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.75rem' }} />
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                                        <button onClick={async () => { await handleSaveNewContact(supplier.id, editForm); setAddingContactToPartnerId(null); }} style={{ flex: 1, padding: '4px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600 }}>Save</button>
+                                                        <button onClick={() => setAddingContactToPartnerId(null)} style={{ flex: 1, padding: '4px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600 }}>Cancel</button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {contacts.length > 0 ? (
+                                                contacts.map(c => (
+                                                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#475569', background: '#fff', padding: '8px 10px', borderRadius: '10px' }}>
+                                                        {editingContactId === c.id ? (
+                                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                <input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} style={{ padding: '4px', fontSize: '0.75rem' }} />
+                                                                <div style={{ display: 'flex', gap: '4px' }}>
+                                                                    <button onClick={async () => { await handleUpdateContact(c.id, { ...editForm, partnerId: supplier.id }); setEditingContactId(null); }} style={{ height: '20px', padding: '0 8px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.65rem' }}>Save</button>
+                                                                    <button onClick={() => setEditingContactId(null)} style={{ height: '20px', padding: '0 8px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '4px', fontSize: '0.65rem' }}>X</button>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <div style={{ flex: 1, overflow: 'hidden' }}>
+                                                                    <span style={{ fontWeight: 700, color: '#6366f1' }}>Attn:</span> {c.name} / {c.handphone || c.phone || '-'} / {c.email || '-'}
+                                                                </div>
+                                                                <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
+                                                                    <Edit size={12} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => { setEditingContactId(c.id); setEditForm(c); }} />
+                                                                    <Trash size={12} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={async () => { if(confirm("Delete contact?")) await handleDeleteContact(c.id, supplier.id); }} />
+                                                                </div>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                ))
+                                            ) : !addingContactToPartnerId && (
+                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>No contacts found.</div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
+                    <button onClick={() => setIsPreviewModalOpen(true)} className="btn btn-sm btn-outline" style={{ flex: 1 }}>Preview</button>
+                    <button onClick={handlePrepareFloat} disabled={selectedSuppliers.length === 0} className="btn btn-sm btn-primary" style={{ flex: 1, background: '#4f46e5' }}>Float RFQ</button>
+                </div>
+            </div>
+
+            {activeTab === 'other' && (
+
+                <div style={{ marginTop: '24px' }}>
+                    <CommunicationWall 
+                        referenceType="Enquiry" 
+                        referenceId={id} 
+                        gdriveFolderId={enquiry?.gdrive_inventory_photos_id || enquiry?.gdrive_file_link?.split('/')?.pop()} 
+                    />
+                </div>
+            )}
+
+            {/* Standardized Upload Overlay */}
+            <UploadOverlay 
+                isVisible={uploadProgress > 0 || !!uploadLink} 
+                progress={uploadProgress} 
+                title="Uploading Quote..."
+                locationLink={uploadLink}
+                onClose={() => {
+                    setUploadProgress(0);
+                    setUploadLink(null);
+                }}
+            />
+            {/* Enquiry Preview Modal */}
+            {isPreviewModalOpen && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+                    <div style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: '850px', maxHeight: '95vh', display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+                        <div style={{ padding: '24px 32px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <h2 style={{ margin: 0, color: '#1e293b', fontSize: '1.25rem', fontWeight: 700 }}>RFQ Preview</h2>
+                                <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.85rem' }}>{enquiry.enquiry_no} • {new Date().toLocaleDateString()}</p>
+                            </div>
+                            <button onClick={() => setIsPreviewModalOpen(false)} style={{ background: '#f1f5f9', border: 'none', padding: '8px', borderRadius: '10px', cursor: 'pointer' }}>
+                                <Plus size={20} style={{ transform: 'rotate(45deg)' }} color="#64748b" />
+                            </button>
+                        </div>
+                        
+                        <div id="rfq-preview-content" style={{ padding: '40px', overflowY: 'auto', flex: 1, background: '#fff' }}>
+                            {/* Document Header */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '30px', borderBottom: '2px solid #f1f5f9', paddingBottom: '20px' }}>
+                                <div style={{ maxWidth: '400px' }}>
+                                    <h1 style={{ margin: 0, fontSize: '1.4rem', color: '#1e3a8a', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.025em' }}>REQUEST FOR QUOTATION</h1>
+                                    <p style={{ margin: '6px 0 0 0', color: '#64748b', fontSize: '0.95rem', fontWeight: 500 }}>Enquiry Ref: {enquiry.enquiry_no}</p>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                    <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b' }}>CEL-RON ENTERPRISES PTE LTD</h3>
+                                    <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.8rem', lineHeight: 1.4 }}>
+                                        10, Jln Besar, #03-05, Singapore 208787<br />
+                                        Phone: +65 8196 2270 | Email: sales@celron.net
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Recipients Section */}
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+                                {selectedSuppliers.map(s => {
+                                    const override = recipientOverrides[s.id] || {};
+                                    return (
+                                        <div key={s.id} style={{ padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                                            <h4 style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#1e293b', fontWeight: 700 }}>{s.name}</h4>
+                                            <div style={{ fontSize: '0.8rem', color: '#475569', lineHeight: 1.5 }}>
+                                                <div style={{ marginBottom: '4px' }}>{override.address || s.address}</div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                                                    <Mail size={12} /> {override.email || s.email1 || 'N/A'}
+                                                </div>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <Phone size={12} /> {override.phone || s.phone || 'N/A'}
+                                                </div>
+                                            </div>
+                                            {override.attn_name && (
+                                                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px dashed #cbd5e1' }}>
+                                                    <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>Attention To</div>
+                                                    <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1e293b' }}>{override.attn_name}</div>
+                                                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>{override.attn_phone} | {override.attn_email}</div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Items Table (Strictly No Prices) */}
+                            <div style={{ borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', marginBottom: '30px', background: '#fff' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                    <thead>
+                                        <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                                            <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: '0.75rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>PRODUCT / DESCRIPTION</th>
+                                            <th style={{ padding: '14px 20px', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', width: '120px' }}>QUANTITY</th>
+                                            <th style={{ padding: '14px 20px', textAlign: 'center', fontSize: '0.75rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', width: '120px' }}>UNIT</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {selectedItems.map((item, idx) => (
+                                            <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                                <td style={{ padding: '20px' }}>
+                                                    <div style={{ fontWeight: 700, color: '#1e293b', marginBottom: '6px', fontSize: '0.95rem' }}>{idx + 1}. {item.name}</div>
+                                                    <div style={{ fontSize: '0.85rem', color: '#64748b', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{item.specification || 'No specification provided'}</div>
+                                                </td>
+                                                <td style={{ padding: '20px', textAlign: 'center', fontWeight: 700, color: '#1e293b', fontSize: '0.95rem' }}>
+                                                    {item.qty}
+                                                </td>
+                                                <td style={{ padding: '20px', textAlign: 'center', fontWeight: 700, color: '#1e293b', fontSize: '0.95rem' }}>
+                                                    {item.unit || 'pcs'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Attachments Note */}
+                            {enquiry.gdrive_file_link && (
+                                <div style={{ padding: '16px', borderRadius: '12px', background: '#eff6ff', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                                    <FileText size={20} color="#3b82f6" style={{ marginTop: '2px' }} />
+                                    <div>
+                                        <div style={{ fontWeight: 700, color: '#1e40af', fontSize: '0.9rem' }}>Photos & Attachments Included</div>
+                                        <div style={{ fontSize: '0.85rem', color: '#1e40af', opacity: 0.8, marginTop: '2px' }}>
+                                            Suppliers will receive a link to the project folder to view technical drawings or photos.
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div style={{ marginTop: '40px', fontSize: '0.8rem', color: '#94a3b8', fontStyle: 'italic', textAlign: 'center' }}>
+                                This is an electronically generated RFQ. No signature is required for quotation purposes.
+                            </div>
+                        </div>
+
+                        <div style={{ padding: '24px 32px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottomLeftRadius: '20px', borderBottomRightRadius: '20px' }}>
+                            <button onClick={() => setIsPreviewModalOpen(false)} className="btn btn-outline" style={{ background: '#fff' }}>Close</button>
+                            
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button 
+                                    onClick={async () => {
+                                        setIsDownloading(true);
+                                        const element = document.getElementById('rfq-preview-content');
+                                        const opt = {
+                                            margin: 10,
+                                            filename: `RFQ_${enquiry.enquiry_no}.pdf`,
+                                            image: { type: 'jpeg', quality: 0.98 },
+                                            html2canvas: { scale: 2, useCORS: true },
+                                            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                                        };
+                                        try {
+                                            await html2pdf().set(opt).from(element).save();
+                                        } finally {
+                                            setIsDownloading(false);
+                                        }
+                                    }}
+                                    disabled={isDownloading}
+                                    className="btn btn-outline" 
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fff' }}
+                                >
+                                    {isDownloading ? <><Clock size={16} className="animate-spin" /> Saving...</> : <><Download size={16} /> Download PDF</>}
+                                </button>
+                                
+                                <button 
+                                    onClick={() => { setIsPreviewModalOpen(false); handlePrepareFloat(); }} 
+                                    disabled={selectedSuppliers.length === 0}
+                                    className="btn btn-primary" 
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#4f46e5', borderColor: '#4f46e5' }}
+                                >
+                                    <MailCheck size={18} /> Send as RFQ Email
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Email Draft Preview Modal */}
+            <EmailPreviewModal 
+                isOpen={!!emailPreviewData}
+                onClose={() => setEmailPreviewData(null)}
+                onConfirm={confirmFloat}
+                data={emailPreviewData || {}}
+            />
         </div>
+        </>
     );
 }
-

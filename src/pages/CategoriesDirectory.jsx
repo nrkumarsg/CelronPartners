@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Tags, Filter, ChevronDown, Circle, X, UploadCloud, Upload, Download, Trash2, Edit2, Printer } from 'lucide-react';
+import { Plus, Search, Tags, Filter, ChevronDown, Circle, X, UploadCloud, Upload, Download, Trash2, Edit, Printer } from 'lucide-react';
 import Papa from 'papaparse';
 import { getCategories, deleteCategory, saveCategory } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,10 +19,6 @@ export default function CategoriesDirectory() {
     const [showModal, setShowModal] = useState(false);
     const [newCategory, setNewCategory] = useState({ name: '' });
 
-    useEffect(() => {
-        loadCategories();
-    }, []);
-
     const loadCategories = async () => {
         setLoading(true);
         const data = await getCategories();
@@ -30,6 +26,11 @@ export default function CategoriesDirectory() {
         setCategories(sorted);
         setLoading(false);
     };
+
+    useEffect(() => {
+        loadCategories();
+    }, []);
+
 
     const handleSaveNewCategory = async (e) => {
         e.preventDefault();
@@ -169,7 +170,7 @@ export default function CategoriesDirectory() {
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button onClick={() => { setNewCategory({ id: res.id, name: res.name }); setShowModal(true); }} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }} title="Edit">
-                                    <Edit2 size={16} />
+                                    <Edit size={16} />
                                 </button>
                                 <button onClick={() => handleDelete(res.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Delete">
                                     <Trash2 size={16} />

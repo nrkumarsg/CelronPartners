@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getEnquiries, getJobs, createEnquiry, generateEnquiryNo, createJob, generateJobNo } from '../../lib/workflowService';
+import { getEnquiries } from '../../lib/enquiryService';
+import { getJobs, createJob, generateJobNo } from '../../lib/workflowService';
 import { getPartners } from '../../lib/store';
-import { FileText, Plus, Search, Filter, ChevronDown, Eye, ShieldCheck, ArrowRightLeft, Calendar } from 'lucide-react';
+import { FileText, Plus, Search, Filter, ChevronDown, Eye, ShieldCheck, ArrowRightLeft, Calendar, Brain, MessageSquare } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import CustomerEnquiryForm from '../../components/CustomerEnquiryForm';
 
 export default function WorkflowBoard() {
     const { profile } = useAuth();
@@ -36,7 +38,7 @@ export default function WorkflowBoard() {
                 getJobs(profile.company_id),
                 getPartners()
             ]);
-            if (enqRes.data) setEnquiries(enqRes.data);
+            if (enqRes) setEnquiries(enqRes);
             if (jobsRes.data) setJobs(jobsRes.data);
             if (partnersData) setPartners(partnersData);
         } catch (error) {
@@ -47,21 +49,12 @@ export default function WorkflowBoard() {
     };
 
     const handleCreateEnquiry = async (e) => {
-        e.preventDefault();
-        try {
-            const enquiry_no = await generateEnquiryNo(profile.company_id);
-            const { error } = await createEnquiry({
-                ...newEnquiry,
-                enquiry_no,
-                company_id: profile.company_id
-            });
-            if (error) throw error;
-            setShowEnquiryModal(false);
-            fetchData();
-        } catch (error) {
-            console.error('Failed to create enquiry:', error);
-            alert('Failed to create enquiry');
-        }
+        // Obsolete function since we have a dedicated form component
+    };
+
+    const handleEnquirySaved = () => {
+        setShowEnquiryModal(false);
+        fetchData();
     };
 
     const convertToJob = async (enquiry) => {
@@ -127,6 +120,28 @@ export default function WorkflowBoard() {
                 </button>
             </div>
 
+            {/* AI Prompt for Jobs */}
+            {activeTab === 'jobs' && (
+                <div className="glass-panel" style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)', border: '1px solid #dbeafe', padding: '24px', borderRadius: '16px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        <div style={{ background: '#fff', padding: '12px', borderRadius: '15px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)' }}>
+                            <Brain size={32} color="#6366f1" />
+                        </div>
+                        <div>
+                            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#1e3a8a' }}>Job History AI Specialist</h3>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.9rem', color: '#1e40af', opacity: 0.8 }}>"How many engines did we repair for Vessel X last year?" — Ask the AI about your historical Zoho logs.</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => window.open('https://notebooklm.google.com/notebook/0ee30281-09bf-4d58-9bc6-7cfc804552bf', '_blank')}
+                        className="btn btn-primary"
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#6366f1' }}
+                    >
+                        <MessageSquare size={18} /> Ask History AI
+                    </button>
+                </div>
+            )}
+
             {/* Main Table Container */}
             <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                 {/* Search Bar / Filters */}
@@ -165,10 +180,10 @@ export default function WorkflowBoard() {
                                         <tr key={enq.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                                             <td style={{ padding: '16px 24px', fontWeight: 600, color: '#1e293b' }}>{enq.enquiry_no}</td>
                                             <td style={{ padding: '16px 24px', color: '#475569' }}>
-                                                <div>{enq.partners?.name || 'Walk-in / Unknown'}</div>
-                                                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Source: {enq.source}</div>
+                                                <div>{enq.customer?.name || 'Walk-in / Unknown'}</div>
+                                                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Source: {enq.source_type}</div>
                                             </td>
-                                            <td style={{ padding: '16px 24px', color: '#64748b' }}>{enq.type}</td>
+                                            <td style={{ padding: '16px 24px', color: '#64748b' }}>{enq.source_type}</td>
                                             <td style={{ padding: '16px 24px', color: '#64748b' }}>{formatDate(enq.created_at)}</td>
                                             <td style={{ padding: '16px 24px' }}>
                                                 <span style={{ background: stStyle.bg, color: stStyle.color, padding: '4px 12px', borderRadius: '16px', fontSize: '0.8rem', fontWeight: 500 }}>
@@ -229,64 +244,12 @@ export default function WorkflowBoard() {
                 </table>
             </div>
 
-            {/* Modal mapped to BASE44 styling slightly */}
+            {/* Modal mapped to new CustomerEnquiryForm */}
             {showEnquiryModal && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-                    <div style={{ background: '#fff', width: '500px', borderRadius: '12px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)' }}>
-                        <h2 style={{ margin: '0 0 24px 0', fontSize: '1.5rem', color: '#1e293b' }}>Add New Enquiry</h2>
-
-                        <form onSubmit={handleCreateEnquiry} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                <label style={{ fontSize: '0.9rem', fontWeight: 500, color: '#475569' }}>Customer / Partner *</label>
-                                <select
-                                    value={newEnquiry.partner_id}
-                                    onChange={e => setNewEnquiry({ ...newEnquiry, partner_id: e.target.value })}
-                                    style={{ padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#334155' }}
-                                    required
-                                >
-                                    <option value="">-- Select Partner --</option>
-                                    {partners.map(p => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '16px' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-                                    <label style={{ fontSize: '0.9rem', fontWeight: 500, color: '#475569' }}>Transaction Type *</label>
-                                    <select
-                                        value={newEnquiry.type}
-                                        onChange={e => setNewEnquiry({ ...newEnquiry, type: e.target.value })}
-                                        style={{ padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#334155' }}
-                                    >
-                                        <option value="Supply">Supply</option>
-                                        <option value="Service">Service</option>
-                                    </select>
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-                                    <label style={{ fontSize: '0.9rem', fontWeight: 500, color: '#475569' }}>Source Channel *</label>
-                                    <input
-                                        type="text"
-                                        placeholder="e.g. Email, WhatsApp"
-                                        value={newEnquiry.source}
-                                        onChange={e => setNewEnquiry({ ...newEnquiry, source: e.target.value })}
-                                        style={{ padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#334155' }}
-                                        required
-                                    />
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
-                                <button type="button" onClick={() => setShowEnquiryModal(false)} style={{ padding: '10px 20px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#475569', fontWeight: 500, cursor: 'pointer' }}>
-                                    Cancel
-                                </button>
-                                <button type="submit" style={{ padding: '10px 20px', background: '#6366f1', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 500, cursor: 'pointer' }}>
-                                    Add Enquiry
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                <CustomerEnquiryForm
+                    onClose={() => setShowEnquiryModal(false)}
+                    onSave={handleEnquirySaved}
+                />
             )}
         </div>
     );

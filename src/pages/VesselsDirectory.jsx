@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, Download, Upload, Search, Ship, Printer } from 'lucide-react';
+import { Plus, Edit, Trash2, Download, Upload, Search, Ship, Printer, MapPin } from 'lucide-react';
 import Papa from 'papaparse';
 import { useVesselsStore } from '../lib/vesselsStore';
 import Pagination from '../components/Pagination';
@@ -186,11 +186,19 @@ export default function VesselsDirectory() {
                                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                                                 <button
                                                     className="btn btn-secondary"
+                                                    style={{ padding: '6px', color: '#6366f1', background: 'rgba(99, 102, 241, 0.1)' }}
+                                                    onClick={() => navigate(`/vessel-tracking/${v.id}`)}
+                                                    title="Locate Vessel (Live Tracking)"
+                                                >
+                                                    <MapPin size={16} />
+                                                </button>
+                                                <button
+                                                    className="btn btn-secondary"
                                                     style={{ padding: '6px' }}
                                                     onClick={() => navigate(`/vessels/${v.id}`)}
                                                     title="View / Edit"
                                                 >
-                                                    <Edit2 size={16} />
+                                                    <Edit size={16} />
                                                 </button>
                                                 <button
                                                     className="btn btn-danger"

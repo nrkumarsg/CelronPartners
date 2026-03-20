@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, MessageSquare, Share2, Plus, Search, ExternalLink, RefreshCw, Send, Paperclip, MoreVertical, Star, Inbox, Trash2, Globe, Youtube, Instagram, Twitter, Linkedin, Facebook } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Mail, MessageSquare, Share2, Plus, Search, ExternalLink, RefreshCw, Send, Paperclip, MoreVertical, Star, Inbox, Trash2, Globe, Youtube, Instagram, Twitter, Linkedin, Facebook, X } from 'lucide-react';
 import { getCommunicationAccounts, getUnreadCounts } from '../lib/communicationService';
-import { fetchGmailThreads } from '../lib/gmailService';
+import { fetchGmailThreads } from '../lib/googleAuthService';
 
 export default function MessagingHub() {
+    const navigate = useNavigate();
     const [accounts, setAccounts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [activeSection, setActiveSection] = useState('email'); // 'email', 'chat', 'social'
@@ -11,6 +13,9 @@ export default function MessagingHub() {
     const [unreadCounts, setUnreadCounts] = useState({});
     const [realMessages, setRealMessages] = useState([]);
     const [loadingMessages, setLoadingMessages] = useState(false);
+    const [selectedMessage, setSelectedMessage] = useState(null);
+    const [isUnified, setIsUnified] = useState(false);
+    const [statusMessage, setStatusMessage] = useState('');
 
     // Mock messages for UI demonstration (used as fallback)
     const [mockMessages, setMockMessages] = useState([
@@ -20,50 +25,184 @@ export default function MessagingHub() {
         { id: 4, sender: 'WhatsApp: Chris', subject: '', excerpt: 'Did you check the latest shipment for the Greek client?', time: '11:15 AM', account: 'WA: Business', isUnread: true, type: 'chat' },
     ]);
 
+    const [tabs, setTabs] = useState([]); // Array of { id, type, label, provider }
+    const [activeTabId, setActiveTabId] = useState(null);
+
     useEffect(() => {
         fetchAccounts();
     }, []);
 
+    // Sync selectedAccount/isUnified with tabs logic
     useEffect(() => {
-        if (selectedAccount?.provider === 'gmail' && selectedAccount?.auth_data?.access_token) {
+        if (isUnified) {
+            handleOpenTab({ id: 'unified', type: 'unified', label: 'Unified Inbox', provider: 'gmail' });
+        } else if (selectedAccount) {
+            handleOpenTab({
+                id: selectedAccount.id,
+                type: 'account',
+                label: selectedAccount.account_label,
+                provider: selectedAccount.provider,
+                account: selectedAccount
+            });
+        }
+    }, [selectedAccount, isUnified]);
+
+    const handleOpenTab = (tab) => {
+        setTabs(prev => {
+            if (prev.find(t => t.id === tab.id)) return prev;
+            return [...prev, tab];
+        });
+        setActiveTabId(tab.id);
+    };
+
+    const closeTab = (e, tabId) => {
+        e.stopPropagation();
+        const newTabs = tabs.filter(t => t.id !== tabId);
+        setTabs(newTabs);
+        if (activeTabId === tabId) {
+            if (newTabs.length > 0) setActiveTabId(newTabs[newTabs.length - 1].id);
+            else setActiveTabId(null);
+        }
+    };
+
+    const selectTab = (tab) => {
+        setActiveTabId(tab.id);
+        if (tab.type === 'unified') {
+            setIsUnified(true);
+            setSelectedAccount(null);
+            setActiveSection('email');
+        } else {
+            setIsUnified(false);
+            setSelectedAccount(tab.account);
+            // Auto-switch section based on account
+            if (tab.account.platform === 'email') setActiveSection('email');
+            else if (['whatsapp', 'wechat', 'botim'].includes(tab.account.provider)) setActiveSection('chat');
+            else setActiveSection('social');
+        }
+    };
+
+    useEffect(() => {
+        if (isUnified) {
+            loadUnifiedMessages();
+        } else if (selectedAccount?.provider?.toLowerCase() === 'gmail' && selectedAccount?.auth_data?.access_token) {
             loadRealMessages(selectedAccount.auth_data.access_token);
         } else {
             setRealMessages([]);
         }
-    }, [selectedAccount]);
+    }, [selectedAccount, isUnified, accounts]);
 
     const loadRealMessages = async (token) => {
         setLoadingMessages(true);
-        const msgs = await fetchGmailThreads(token);
-        setRealMessages(msgs);
+        setStatusMessage('');
+        try {
+            const msgs = await fetchGmailThreads(token);
+            setRealMessages(msgs);
+            if (msgs.length === 0) setStatusMessage('No messages found in this Gmail account.');
+            if (msgs.length > 0 && !selectedMessage) setSelectedMessage(msgs[0]);
+        } catch (e) {
+            console.error('MessagingHub load error:', e);
+            setStatusMessage(e.message === 'AUTH_EXPIRED' ? 'Authentication expired.' : `Error: ${e.message}`);
+            setRealMessages([]);
+        }
+        setLoadingMessages(false);
+    };
+
+    const loadUnifiedMessages = async () => {
+        setLoadingMessages(true);
+        try {
+            const gmailAccounts = accounts.filter(a => a.provider?.toLowerCase() === 'gmail' && a.auth_data?.access_token);
+            if (gmailAccounts.length === 0) {
+                setRealMessages([]);
+                setLoadingMessages(false);
+                return;
+            }
+            const allMsgs = await Promise.all(gmailAccounts.map(async (acc) => {
+                try {
+                    const msgs = await fetchGmailThreads(acc.auth_data.access_token);
+                    return msgs.map(m => ({ ...m, accountLabel: acc.account_label }));
+                } catch (err) { return []; }
+            }));
+            const flattened = allMsgs.flat().sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+            setRealMessages(flattened);
+            if (flattened.length > 0 && !selectedMessage) setSelectedMessage(flattened[0]);
+        } catch (e) { console.error(e); }
         setLoadingMessages(false);
     };
 
     const fetchAccounts = async () => {
         setLoading(true);
-        const { data } = await getCommunicationAccounts();
-        if (data) {
-            setAccounts(data);
-            const counts = await getUnreadCounts(data);
-            setUnreadCounts(counts);
-        }
+        try {
+            const { data } = await getCommunicationAccounts();
+            if (data && data.length > 0) {
+                setAccounts(data);
+                const counts = await getUnreadCounts(data);
+                setUnreadCounts(counts);
+
+                // Initial selection
+                const gmailAccount = data.find(a => a.provider?.toLowerCase() === 'gmail');
+                if (gmailAccount) {
+                    setSelectedAccount(gmailAccount);
+                    setIsUnified(false);
+                } else {
+                    setSelectedAccount(data[0]);
+                }
+            }
+        } catch (e) { console.error(e); }
         setLoading(false);
     };
 
-    const getIcon = (provider) => {
-        switch (provider.toLowerCase()) {
-            case 'gmail': return <Globe size={18} color="#ea4335" />;
-            case 'zoho': return <Globe size={18} color="#2563eb" />;
-            case 'whatsapp': return <MessageSquare size={18} color="#25d366" />;
-            case 'facebook': return <Facebook size={18} color="#1877f2" />;
-            case 'instagram': return <Instagram size={18} color="#e4405f" />;
-            case 'twitter': return <Twitter size={18} color="#1da1f2" />;
-            case 'linkedin': return <Linkedin size={18} color="#0a66c2" />;
-            case 'youtube': return <Youtube size={18} color="#ff0000" />;
-            case 'tiktok': return <Globe size={18} color="#000000" />;
-            default: return <Mail size={18} color="#64748b" />;
+    const getIcon = (provider, size = 18) => {
+        switch (provider?.toLowerCase()) {
+            case 'gmail': return <Globe size={size} color="#ea4335" />;
+            case 'zoho': return <Globe size={size} color="#2563eb" />;
+            case 'whatsapp': return <MessageSquare size={size} color="#25d366" />;
+            case 'facebook': return <Facebook size={size} color="#1877f2" />;
+            case 'instagram': return <Instagram size={size} color="#e4405f" />;
+            case 'twitter': return <Twitter size={size} color="#1da1f2" />;
+            case 'linkedin': return <Linkedin size={size} color="#0a66c2" />;
+            case 'youtube': return <Youtube size={size} color="#ff0000" />;
+            default: return <Mail size={size} color="#64748b" />;
         }
     };
+
+    const renderTabBar = () => (
+        <div style={{ display: 'flex', background: '#f1f5f9', padding: '8px 12px 0 12px', borderBottom: '1px solid #e2e8f0', gap: '4px', overflowX: 'auto' }}>
+            {tabs.map(tab => (
+                <div
+                    key={tab.id}
+                    onClick={() => selectTab(tab)}
+                    style={{
+                        padding: '8px 16px',
+                        background: activeTabId === tab.id ? '#fff' : 'transparent',
+                        border: '1px solid #e2e8f0',
+                        borderBottom: activeTabId === tab.id ? '2px solid #fff' : '1px solid #e2e8f0',
+                        marginBottom: '-1px',
+                        borderRadius: '8px 8px 0 0',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        fontSize: '0.8rem',
+                        fontWeight: activeTabId === tab.id ? 700 : 500,
+                        color: activeTabId === tab.id ? '#1e293b' : '#64748b',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.2s',
+                        zIndex: activeTabId === tab.id ? 1 : 0
+                    }}
+                >
+                    {tab.type === 'unified' ? <Inbox size={14} /> : getIcon(tab.provider, 14)}
+                    {tab.label}
+                    <X
+                        size={14}
+                        style={{ marginLeft: '4px', opacity: 0.6 }}
+                        onClick={(e) => closeTab(e, tab.id)}
+                        onMouseEnter={(e) => e.target.style.color = '#ef4444'}
+                        onMouseLeave={(e) => e.target.style.color = 'inherit'}
+                    />
+                </div>
+            ))}
+        </div>
+    );
 
     const renderAccountSidebar = () => (
         <div style={{ width: '280px', borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', background: '#fff' }}>
@@ -72,58 +211,63 @@ export default function MessagingHub() {
             </div>
 
             <div style={{ padding: '12px', flex: 1, overflowY: 'auto' }}>
-                {/* Section Switcher */}
                 <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', padding: '4px', background: '#f1f5f9', borderRadius: '8px' }}>
-                    <button onClick={() => setActiveSection('email')} style={{ flex: 1, padding: '8px', border: 'none', background: activeSection === 'email' ? '#fff' : 'transparent', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: activeSection === 'email' ? '#1e293b' : '#64748b', cursor: 'pointer', boxShadow: activeSection === 'email' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>Email</button>
-                    <button onClick={() => setActiveSection('chat')} style={{ flex: 1, padding: '8px', border: 'none', background: activeSection === 'chat' ? '#fff' : 'transparent', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: activeSection === 'chat' ? '#1e293b' : '#64748b', cursor: 'pointer', boxShadow: activeSection === 'chat' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>Chat</button>
-                    <button onClick={() => setActiveSection('social')} style={{ flex: 1, padding: '8px', border: 'none', background: activeSection === 'social' ? '#fff' : 'transparent', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: activeSection === 'social' ? '#1e293b' : '#64748b', cursor: 'pointer', boxShadow: activeSection === 'social' ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>Social</button>
+                    <button onClick={() => setActiveSection('email')} style={{ flex: 1, padding: '8px', border: 'none', background: activeSection === 'email' ? '#fff' : 'transparent', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: activeSection === 'email' ? '#1e293b' : '#64748b', cursor: 'pointer' }}>Email</button>
+                    <button onClick={() => setActiveSection('chat')} style={{ flex: 1, padding: '8px', border: 'none', background: activeSection === 'chat' ? '#fff' : 'transparent', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: activeSection === 'chat' ? '#1e293b' : '#64748b', cursor: 'pointer' }}>Chat</button>
+                    <button onClick={() => setActiveSection('social')} style={{ flex: 1, padding: '8px', border: 'none', background: activeSection === 'social' ? '#fff' : 'transparent', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: activeSection === 'social' ? '#1e293b' : '#64748b', cursor: 'pointer' }}>Social</button>
                 </div>
 
-                {loading ? (
-                    <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Loading...</div>
-                ) : (
-                    <div>
+                {loading ? <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8' }}>Loading...</div> : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        {activeSection === 'email' && accounts.some(a => a.provider?.toLowerCase() === 'gmail') && (
+                            <div
+                                onClick={() => { setIsUnified(true); setSelectedAccount(null); }}
+                                style={{
+                                    padding: '12px 14px', borderRadius: '10px', marginBottom: '8px', cursor: 'pointer',
+                                    background: isUnified ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : '#fff',
+                                    color: isUnified ? '#fff' : '#1e293b', display: 'flex', alignItems: 'center', gap: '12px', transition: 'all 0.2s', border: isUnified ? 'none' : '1px solid #e2e8f0'
+                                }}
+                            >
+                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: isUnified ? 'rgba(255,255,255,0.2)' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Inbox size={18} color={isUnified ? '#fff' : '#6366f1'} />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>Unified Inbox</div>
+                                </div>
+                            </div>
+                        )}
+
                         {accounts.filter(a => {
                             if (activeSection === 'email') return a.platform === 'email';
                             if (activeSection === 'chat') return a.platform === 'whatsapp' || a.provider === 'wechat' || a.provider === 'botim';
                             return a.platform === 'social';
-                        }).map(account => (
-                            <div
-                                key={account.id}
-                                onClick={() => setSelectedAccount(account)}
-                                style={{
-                                    padding: '10px 12px',
-                                    borderRadius: '8px',
-                                    marginBottom: '4px',
-                                    cursor: 'pointer',
-                                    background: selectedAccount?.id === account.id ? '#f1f5f9' : 'transparent',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '12px',
-                                    transition: 'all 0.2s'
-                                }}
-                            >
-                                <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-                                    {getIcon(account.provider)}
+                        }).map(account => {
+                            const isActive = !isUnified && selectedAccount?.id === account.id;
+                            return (
+                                <div
+                                    key={account.id}
+                                    onClick={() => { setSelectedAccount(account); setIsUnified(false); }}
+                                    style={{
+                                        padding: '10px 14px', borderRadius: '10px', cursor: 'pointer',
+                                        background: isActive ? '#f1f5f9' : 'transparent', display: 'flex', alignItems: 'center', gap: '12px', border: isActive ? '1px solid #e2e8f0' : '1px solid transparent'
+                                    }}
+                                >
+                                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+                                        {getIcon(account.provider)}
+                                    </div>
+                                    <div style={{ flex: 1, overflow: 'hidden' }}>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{account.account_label}</div>
+                                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{unreadCounts[account.id] || 0} Notifications</div>
+                                    </div>
                                 </div>
-                                <div style={{ flex: 1, overflow: 'hidden' }}>
-                                    <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{account.account_label}</div>
-                                    <div style={{ fontSize: '0.7rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{account.email_address || account.provider}</div>
-                                </div>
-                                {unreadCounts[account.id] > 0 && (
-                                    <div style={{ padding: '2px 6px', background: '#6366f1', color: '#fff', borderRadius: '10px', fontSize: '0.65rem', fontWeight: 700 }}>{unreadCounts[account.id]}</div>
-                                )}
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 )}
             </div>
 
             <div style={{ padding: '16px', borderTop: '1px solid #e2e8f0' }}>
-                <button
-                    onClick={() => window.location.href = '#/settings?tab=communications'}
-                    style={{ width: '100%', padding: '10px', border: '1px dashed #cbd5e1', background: 'transparent', borderRadius: '8px', fontSize: '0.8rem', color: '#64748b', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                >
+                <button onClick={() => navigate('/settings?tab=communications')} style={{ width: '100%', padding: '10px', border: '2px solid #1e293b', background: '#fff', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                     <Plus size={16} /> Manage Accounts
                 </button>
             </div>
@@ -138,38 +282,16 @@ export default function MessagingHub() {
                     <input type="text" placeholder="Search in messages..." style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '0.85rem', width: '100%' }} />
                 </div>
             </div>
-
             <div style={{ flex: 1, overflowY: 'auto' }}>
-                {loadingMessages ? (
-                    <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-                        <div className="animate-spin" style={{ width: '24px', height: '24px', border: '2px solid #f3f3f3', borderTop: '2px solid #6366f1', borderRadius: '50%', margin: '0 auto 12px' }}></div>
-                        Syncing live messages...
-                    </div>
-                ) : (
-                    (realMessages.length > 0 ? realMessages : mockMessages.filter(m => {
-                        if (activeSection === 'email') return !m.type;
-                        return m.type === 'chat';
-                    })).map(msg => (
-                        <div
-                            key={msg.id}
-                            style={{
-                                padding: '20px',
-                                borderBottom: '1px solid #e2e8f0',
-                                cursor: 'pointer',
-                                background: msg.isUnread ? '#fff' : 'transparent',
-                                borderLeft: msg.isUnread ? '3px solid #6366f1' : 'none',
-                                transition: 'all 0.2s'
-                            }}
-                        >
+                {loadingMessages ? <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Syncing live messages...</div> : (
+                    (realMessages.length > 0 ? realMessages : ((selectedAccount || isUnified) ? [] : mockMessages.filter(m => activeSection === 'email' ? !m.type : m.type === 'chat'))).map(msg => (
+                        <div key={msg.id} onClick={() => setSelectedMessage(msg)} style={{ padding: '20px', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', background: selectedMessage?.id === msg.id ? '#f1f5f9' : (msg.isUnread ? '#fff' : 'transparent'), borderLeft: msg.isUnread ? '3px solid #6366f1' : 'none' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                                <span style={{ fontSize: '0.9rem', fontWeight: msg.isUnread ? 700 : 500, color: '#1e293b' }}>{msg.sender}</span>
+                                <span style={{ fontSize: '0.9rem', fontWeight: msg.isUnread ? 700 : 500 }}>{msg.sender}</span>
                                 <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{msg.time}</span>
                             </div>
                             {msg.subject && <div style={{ fontSize: '0.8rem', fontWeight: msg.isUnread ? 600 : 400, color: '#475569', marginBottom: '4px' }}>{msg.subject}</div>}
                             <div style={{ fontSize: '0.8rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{msg.excerpt}</div>
-                            <div style={{ marginTop: '8px', fontSize: '0.7rem', color: '#6366f1', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <Star size={12} /> {msg.account || selectedAccount?.account_label || 'Direct Sync'}
-                            </div>
                         </div>
                     ))
                 )}
@@ -179,126 +301,77 @@ export default function MessagingHub() {
 
     const renderReadingPane = () => (
         <div style={{ flex: 1, background: '#fff', display: 'flex', flexDirection: 'column' }}>
-            {/* Toolbar */}
             <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', gap: '16px' }}>
-                    <button style={{ border: 'none', background: 'none', color: '#64748b', cursor: 'pointer' }}><RefreshCw size={18} /></button>
-                    <button style={{ border: 'none', background: 'none', color: '#64748b', cursor: 'pointer' }}><Trash2 size={18} /></button>
-                    <button style={{ border: 'none', background: 'none', color: '#64748b', cursor: 'pointer' }}><Star size={18} /></button>
+                    <button onClick={() => selectedAccount?.auth_data?.access_token && loadRealMessages(selectedAccount.auth_data.access_token)} disabled={loadingMessages} style={{ border: 'none', background: 'none', cursor: 'pointer' }}><RefreshCw size={18} /></button>
+                    <button style={{ border: 'none', background: 'none', cursor: 'pointer' }}><Trash2 size={18} /></button>
+                    <button style={{ border: 'none', background: 'none', cursor: 'pointer' }}><Star size={18} /></button>
                 </div>
-                <div>
-                    <button onClick={() => window.open(selectedAccount?.account_url || '#', '_blank')} style={{ padding: '8px 16px', background: '#f1f5f9', border: 'none', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <ExternalLink size={14} /> Open in {selectedAccount?.provider || 'Portal'}
-                    </button>
-                </div>
+                <button onClick={() => window.open(selectedAccount?.account_url || '#', '_blank')} style={{ padding: '8px 16px', background: '#f1f5f9', border: 'none', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ExternalLink size={14} /> Open {selectedAccount?.provider || 'Portal'}
+                </button>
             </div>
-
-            {/* Content Area (Mock) */}
             <div style={{ flex: 1, padding: '40px', overflowY: 'auto' }}>
-                <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-                    <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#1e293b', marginBottom: '24px' }}>Inquiry regarding Marine Spare Parts</h1>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
-                        <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 700 }}>JD</div>
-                        <div>
-                            <div style={{ fontSize: '1rem', fontWeight: 600, color: '#1e293b' }}>John Doe <span style={{ fontWeight: 400, color: '#94a3b8', fontSize: '0.85rem' }}>&lt;john.doe@example.com&gt;</span></div>
-                            <div style={{ fontSize: '0.85rem', color: '#64748b' }}>To: Sales Team &lt;sales@celron.net&gt; • 10:45 AM (2 hours ago)</div>
+                {selectedAccount && !isUnified && !selectedAccount.auth_data?.access_token ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '24px' }}>
+                        <div style={{ width: '80px', height: '80px', borderRadius: '20px', background: selectedAccount.provider === 'gmail' ? '#fef2f2' : '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Globe size={40} color={selectedAccount.provider === 'gmail' ? '#ea4335' : '#2563eb'} />
                         </div>
-                    </div>
-
-                    <div style={{ color: '#334155', lineHeight: 1.6, fontSize: '1rem' }}>
-                        Dear Cel-Ron Team,<br /><br />
-                        I hope this email finds you well.<br /><br />
-                        We are currently looking for a specialized set of marine spare parts for an upcoming maintenance project on MV GLORY. Could you please provide a quotation for the following items:<br /><br />
-                        1. Main Engine Piston Rings - 12 units<br />
-                        2. Cylinder Liner O-rings - 24 units<br />
-                        3. Fuel Injection Pump Spares - Kit<br /><br />
-                        Please advise on the availability and delivery time to Port of Singapore.<br /><br />
-                        Best Regards,<br />
-                        John Doe
-                    </div>
-                </div>
-            </div>
-
-            {/* Quick Reply (Mock) */}
-            <div style={{ padding: '24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
-                <div style={{ maxWidth: '800px', margin: '0 auto', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
-                    <textarea placeholder="Type your reply here..." style={{ width: '100%', border: 'none', padding: '16px', outline: 'none', minHeight: '120px', resize: 'none', fontSize: '0.95rem' }}></textarea>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid #f1f5f9' }}>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <button style={{ padding: '8px', border: 'none', background: 'none', color: '#64748b', cursor: 'pointer' }}><Paperclip size={18} /></button>
+                        <div style={{ textAlign: 'center' }}>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 700 }}>{selectedAccount.provider === 'gmail' ? 'Google Authentication Required' : `${selectedAccount.provider.toUpperCase()} Portal Access`}</h2>
+                            <p style={{ color: '#64748b', maxWidth: '400px' }}>{selectedAccount.provider === 'gmail' ? 'Connect your Google account to see live emails.' : 'Use the direct link to manage your messages.'}</p>
                         </div>
-                        <button style={{ padding: '8px 24px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Send size={16} /> Send Reply
+                        <button onClick={() => selectedAccount.provider === 'gmail' ? import('../lib/googleAuthService').then(m => m.connectGoogleAPI(selectedAccount.id)) : window.open(selectedAccount.account_url, '_blank')} style={{ padding: '12px 32px', background: '#1e293b', color: '#fff', border: 'none', borderRadius: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                            <ExternalLink size={18} /> {selectedAccount.provider === 'gmail' ? 'Connect Google' : `Open ${selectedAccount.account_label}`}
                         </button>
                     </div>
-                </div>
+                ) : selectedMessage ? (
+                    <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+                        <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '24px' }}>{selectedMessage.subject || '(No Subject)'}</h1>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
+                            <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#6366f1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>{selectedMessage.sender?.[0]?.toUpperCase()}</div>
+                            <div>
+                                <div style={{ fontWeight: 600 }}>{selectedMessage.sender}</div>
+                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{selectedMessage.time}</div>
+                            </div>
+                        </div>
+                        <div dangerouslySetInnerHTML={{ __html: selectedMessage.body || selectedMessage.excerpt }}></div>
+                    </div>
+                ) : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}><Inbox size={48} /><p>{statusMessage || 'Select a message to read.'}</p></div>}
             </div>
         </div>
     );
 
     const renderSocialDashboard = () => (
         <div style={{ flex: 1, background: '#f8fafc', padding: '40px', overflowY: 'auto' }}>
-            <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
-                <header style={{ marginBottom: '40px' }}>
-                    <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#1e293b', marginBottom: '8px' }}>Social Ecosystem</h1>
-                    <p style={{ color: '#64748b', fontSize: '1rem' }}>Monitor and manage your company's presence across all social platforms.</p>
-                </header>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
-                    {accounts.filter(a => a.platform === 'social').map(account => (
-                        <div key={account.id} style={{ background: '#fff', borderRadius: '20px', padding: '24px', border: '1px solid #e2e8f0', transition: 'transform 0.2s', cursor: 'pointer', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-4px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                                <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    {getIcon(account.provider)}
-                                </div>
-                                <button onClick={() => window.open(account.account_url, '_blank')} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'transparent', fontSize: '0.75rem', fontWeight: 600, color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    Visit Portal <ExternalLink size={12} />
-                                </button>
-                            </div>
-                            <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>{account.account_label}</h3>
-                            <p style={{ margin: '0 0 20px 0', fontSize: '0.85rem', color: '#64748b' }}>{account.provider.charAt(0).toUpperCase() + account.provider.slice(1)} Channel</p>
-
-                            <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'space-between' }}>
-                                <div style={{ textAlign: 'center' }}>
-                                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b' }}>{unreadCounts[account.id] || 0}</div>
-                                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Notifs</div>
-                                </div>
-                                <div style={{ textAlign: 'center' }}>
-                                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#10b981' }}>Live</div>
-                                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Status</div>
-                                </div>
-                                <div style={{ textAlign: 'center' }}>
-                                    <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#6366f1' }}>Sync</div>
-                                    <div style={{ fontSize: '0.65rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>API</div>
-                                </div>
-                            </div>
+            <h1 style={{ fontSize: '2rem', fontWeight: 800, marginBottom: '40px' }}>Social Ecosystem</h1>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '24px' }}>
+                {accounts.filter(a => a.platform === 'social').map(account => (
+                    <div key={account.id} style={{ background: '#fff', borderRadius: '20px', padding: '24px', border: '1px solid #e2e8f0', cursor: 'pointer' }} onClick={() => selectTab({ id: account.id, type: 'account', label: account.account_label, provider: account.provider, account })}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                            {getIcon(account.provider, 24)}
+                            <button onClick={(e) => { e.stopPropagation(); window.open(account.account_url, '_blank'); }} style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', background: 'transparent', fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>Visit Portal</button>
                         </div>
-                    ))}
-
-                    <div
-                        onClick={() => window.location.href = '#/settings?tab=communications'}
-                        style={{ background: 'transparent', borderRadius: '20px', padding: '24px', border: '2px dashed #cbd5e1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', cursor: 'pointer', minHeight: '200px' }}
-                    >
-                        <Plus size={32} />
-                        <span style={{ marginTop: '12px', fontSize: '0.9rem', fontWeight: 600 }}>Add Social Account</span>
+                        <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', fontWeight: 700 }}>{account.account_label}</h3>
+                        <p style={{ margin: '0 0 20px 0', fontSize: '0.85rem', color: '#64748b' }}>{account.provider} Account</p>
                     </div>
-                </div>
+                ))}
             </div>
         </div>
     );
 
     return (
-        <div style={{ height: 'calc(100vh - 70px)', display: 'flex', overflow: 'hidden', margin: '-32px -40px' }}>
-            {renderAccountSidebar()}
-            {activeSection !== 'social' ? (
-                <>
-                    {renderMessageList()}
-                    {renderReadingPane()}
-                </>
-            ) : (
-                renderSocialDashboard()
-            )}
+        <div style={{ height: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column', margin: '-32px -40px', background: '#f1f5f9' }}>
+            {renderTabBar()}
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                {renderAccountSidebar()}
+                {activeSection !== 'social' ? (
+                    <>
+                        {renderMessageList()}
+                        {renderReadingPane()}
+                    </>
+                ) : renderSocialDashboard()}
+            </div>
         </div>
     );
 }

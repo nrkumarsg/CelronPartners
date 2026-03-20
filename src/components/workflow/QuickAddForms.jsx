@@ -450,17 +450,27 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, o
 };
 
 export const QuickVesselAdd = ({ company_id, onSuccess, onCancel }) => {
-    const [vesselName, setVesselName] = useState('');
-    const [imo, setImo] = useState('');
+    const [formData, setFormData] = useState({
+        vessel_name: '',
+        imo_number: '',
+        mmsi: '',
+        vessel_type: '',
+        vessel_management: '',
+        vessel_owner: ''
+    });
     const [loading, setLoading] = useState(false);
 
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
     const handleSave = async () => {
-        if (!vesselName) return alert('Vessel Name is required');
+        if (!formData.vessel_name) return alert('Vessel Name is required');
         setLoading(true);
         try {
             const { data, error } = await supabase.from('vessels').insert([{
-                vessel_name: vesselName,
-                imo_number: imo,
+                ...formData,
                 company_id
             }]).select();
             if (error) throw error;
@@ -474,29 +484,75 @@ export const QuickVesselAdd = ({ company_id, onSuccess, onCancel }) => {
     };
 
     return (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div className="form-item">
                 <label>Vessel Name *</label>
                 <input
                     className="form-input"
-                    value={vesselName}
-                    onChange={e => setVesselName(e.target.value)}
+                    name="vessel_name"
+                    value={formData.vessel_name}
+                    onChange={handleChange}
                     placeholder="e.g. MS Galaxy"
                     autoFocus
                 />
             </div>
+            <div className="grid-2">
+                <div className="form-item">
+                    <label>IMO Number</label>
+                    <input
+                        className="form-input"
+                        name="imo_number"
+                        value={formData.imo_number}
+                        onChange={handleChange}
+                        placeholder="e.g. 9123456"
+                    />
+                </div>
+                <div className="form-item">
+                    <label>MMSI Number</label>
+                    <input
+                        className="form-input"
+                        name="mmsi"
+                        value={formData.mmsi}
+                        onChange={handleChange}
+                        placeholder="e.g. 314658000"
+                    />
+                </div>
+            </div>
             <div className="form-item">
-                <label>IMO Number</label>
+                <label>Vessel Type</label>
                 <input
                     className="form-input"
-                    value={imo}
-                    onChange={e => setImo(e.target.value)}
-                    placeholder="e.g. 9123456"
+                    name="vessel_type"
+                    value={formData.vessel_type}
+                    onChange={handleChange}
+                    placeholder="e.g. Bulk Carrier"
                 />
+            </div>
+            <div className="grid-2">
+                <div className="form-item">
+                    <label>Management</label>
+                    <input
+                        className="form-input"
+                        name="vessel_management"
+                        value={formData.vessel_management}
+                        onChange={handleChange}
+                        placeholder="Management Co."
+                    />
+                </div>
+                <div className="form-item">
+                    <label>Owner</label>
+                    <input
+                        className="form-input"
+                        name="vessel_owner"
+                        value={formData.vessel_owner}
+                        onChange={handleChange}
+                        placeholder="Owner Co."
+                    />
+                </div>
             </div>
             <div className="quick-form-actions">
                 <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleSave} disabled={loading || !vesselName}>
+                <button className="btn btn-primary" onClick={handleSave} disabled={loading || !formData.vessel_name}>
                     <Save size={18} /> {loading ? 'Saving...' : 'Save Vessel'}
                 </button>
             </div>

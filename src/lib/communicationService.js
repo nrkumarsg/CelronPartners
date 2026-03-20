@@ -15,9 +15,12 @@ export const createCommunicationAccount = async (accountData) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { data: null, error: 'User not authenticated' };
 
+    // Attempt to fetch profile to get company_id
+    const { data: profile } = await supabase.from('profiles').select('company_id').eq('id', user.id).single();
+
     return await supabase
         .from('communication_accounts')
-        .insert([{ ...accountData, user_id: user.id }]);
+        .insert([{ ...accountData, user_id: user.id, company_id: profile?.company_id || null }]);
 };
 
 export const updateCommunicationAccount = async (id, accountData) => {
@@ -36,10 +39,13 @@ export const deleteCommunicationAccount = async (id) => {
 
 // Mock function for fetching unread counts (to be replaced with actual API calls later)
 export const getUnreadCounts = async (accounts) => {
-    // In a real implementation, this would call specialized Edge Functions 
-    // that interact with Zoho, Gmail, Meta, etc.
     return accounts.reduce((acc, account) => {
-        acc[account.id] = Math.floor(Math.random() * 15); // Random mock data
+        // If it's a Gmail account with auth, don't show random mock numbers
+        if (account.provider?.toLowerCase() === 'gmail' && account.auth_data?.access_token) {
+            acc[account.id] = 0;
+        } else {
+            acc[account.id] = Math.floor(Math.random() * 5); // Reduced random range
+        }
         return acc;
     }, {});
 };

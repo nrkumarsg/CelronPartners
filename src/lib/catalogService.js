@@ -8,7 +8,7 @@ export const getCatalogItems = async (page = 1, limit = 50, filters = {}, search
         let query = supabase.from('catalog_items').select('*', { count: 'exact' });
 
         if (searchQuery) {
-            query = query.or(`name.ilike.%${searchQuery}%,specification.ilike.%${searchQuery}%,stored_location.ilike.%${searchQuery}%`);
+            query = query.or(`name.ilike.%${searchQuery}%,specification.ilike.%${searchQuery}%,stored_location.ilike.%${searchQuery}%,barcode.eq.${searchQuery}`);
         }
 
         if (filters.type) {

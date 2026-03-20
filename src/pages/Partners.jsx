@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, MapPin, Globe, Building2, Mail, Phone, Star, Filter, ChevronDown, CheckCircle2, Circle, X, UploadCloud, Upload, Download, Printer, MoreVertical, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, MapPin, Globe, Building2, Mail, Phone, Star, Filter, ChevronDown, CheckCircle2, Circle, X, UploadCloud, Upload, Download, Printer, MoreVertical, Edit, Trash2, Loader2, ExternalLink, Settings, Paperclip, FileX, HardDrive } from 'lucide-react';
 import Papa from 'papaparse';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { getPartners, deletePartner, savePartner } from '../lib/store';
+import { getPartners, deletePartner, savePartner, purgeCategoryGlobally } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
 import BusinessCardUpload from '../components/common/BusinessCardUpload';
 import { COUNTRIES, PARTNER_CATEGORIES } from '../lib/constants';
 
 
+import CompanyAutocomplete from '../components/common/CompanyAutocomplete';
+import PartnerDocuments from '../components/partners/PartnerDocuments';
 
 export default function Partners() {
     const { profile } = useAuth();
@@ -24,6 +26,16 @@ export default function Partners() {
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
     const [activeMenu, setActiveMenu] = useState(null);
+
+    const modules = {
+        toolbar: [
+            [{ 'header': [1, 2, false] }],
+            ['bold', 'italic', 'underline', 'strike', 'blockquote'],
+            [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
+            ['link', 'image'],
+            ['clean']
+        ]
+    };
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -46,17 +58,46 @@ export default function Partners() {
         business_card_back_url: ''
     });
     const [customCategory, setCustomCategory] = useState('');
+    const [showCategoryMgr, setShowCategoryMgr] = useState(false);
+    const [modalTab, setModalTab] = useState('details'); // 'details' or 'documents'
+    const [createdPartner, setCreatedPartner] = useState(null);
 
-    useEffect(() => {
-        loadPartners();
-    }, []);
+    const handlePurgeCategory = async (catName) => {
+        if (window.confirm(`Are you sure you want to delete "${catName}" globally? This will remove it from all partners.`)) {
+            try {
+                await purgeCategoryGlobally(catName);
+                await loadPartners();
+            } catch (err) {
+                alert('Purge failed: ' + err.message);
+            }
+        }
+    };
 
-    const loadPartners = async () => {
+    const loadPartners = React.useCallback(async () => {
         setLoading(true);
         const data = await getPartners(profile);
         const sorted = data.sort((a, b) => a.name.localeCompare(b.name));
         setPartners(sorted);
         setLoading(false);
+    }, [profile]);
+
+    useEffect(() => {
+        loadPartners();
+    }, [loadPartners]);
+
+    const handleSearchChange = (e) => {
+        setSearchTerm(e.target.value);
+        setCurrentPage(1);
+    };
+
+    const handleCountryChange = (e) => {
+        setSelectedCountry(e.target.value);
+        setCurrentPage(1);
+    };
+
+    const handleCategoryChange = (e) => {
+        setSelectedCategory(e.target.value);
+        setCurrentPage(1);
     };
 
     const handleDelete = async (e, id) => {
@@ -68,6 +109,16 @@ export default function Partners() {
             } catch (err) {
                 alert('Failed to delete partner: ' + err.message);
             }
+        }
+    };
+
+    const openWebsite = (url) => {
+        const link = (url || '').trim();
+        if (link) {
+            const fullUrl = link.startsWith('http') ? link : `https://${link}`;
+            window.open(fullUrl, '_blank');
+        } else {
+            window.open('https://www.google.com', '_blank');
         }
     };
 
@@ -93,7 +144,11 @@ export default function Partners() {
             };
 
             if (newPartner.city) {
-                dataToSave.address = `${newPartner.city}, ${dataToSave.address}`;
+                // We keep city separate in form but join in address if needed, 
+                // or just rely on the address being updated by handleCompanySelect
+                if (newPartner.address && !newPartner.address.includes(newPartner.city)) {
+                    dataToSave.address = `${newPartner.city}, ${newPartner.address}`;
+                }
             }
 
             if (newPartner.brand) {
@@ -104,14 +159,53 @@ export default function Partners() {
                 dataToSave.company_id = profile.company_id;
             }
 
-            await savePartner(dataToSave);
-            setShowModal(false);
+            const saved = await savePartner(dataToSave);
+            setCreatedPartner(saved);
+            setModalTab('documents');
             loadPartners(); // reload the grid
-            alert('Partner added successfully!');
+            // alert('Partner added successfully!'); // Removing alert for smoother tab transition
         } catch (error) {
             console.error('Failed to save partner', error);
             alert(`Failed to save: ${error.message || 'Check inputs.'}`);
         }
+    };
+
+    const handleOCR = (text) => {
+        if (!text) return;
+        const emailMatch = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+        const phoneMatch = text.match(/[+]?[(]?[0-9]{3}[)]?[-\s.]?[0-9]{3}[-\s.]?[0-9]{4,6}/);
+        const webMatch = text.match(/(https?:\/\/)?(www\.)?([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}/i);
+
+        setNewPartner(prev => ({
+            ...prev,
+            email1: prev.email1 || emailMatch?.[0] || '',
+            phone1: prev.phone1 || phoneMatch?.[0] || '',
+            weblink: prev.weblink || webMatch?.[0] || '',
+            notes: (prev.notes || '') + `<p><br></p><p><strong>[OCR EXTRACTED TEXT]</strong></p><p>${text.replace(/\n/g, '<br>')}</p>`
+        }));
+    };
+
+    const handleCompanySelect = (place) => {
+        const address = place.formatted_address || '';
+        const name = place.name || '';
+        const weblink = place.website || '';
+
+        let country = '';
+        let city = '';
+
+        place.address_components?.forEach(c => {
+            if (c.types.includes('country')) country = c.long_name;
+            if (c.types.includes('locality')) city = c.long_name;
+        });
+
+        setNewPartner(prev => ({
+            ...prev,
+            name,
+            address,
+            city: city || prev.city,
+            country: country || prev.country,
+            weblink: weblink || prev.weblink
+        }));
     };
 
     const handleImportCSV = (e) => {
@@ -173,9 +267,13 @@ export default function Partners() {
         const matchesSearch = !searchTerm || (
             (p.name && p.name.toLowerCase().includes(term)) ||
             (p.email1 && p.email1.toLowerCase().includes(term)) ||
+            (p.phone1 && p.phone1.toLowerCase().includes(term)) ||
             (p.country && p.country.toLowerCase().includes(term)) ||
+            (p.address && p.address.toLowerCase().includes(term)) ||
+            (p.weblink && p.weblink.toLowerCase().includes(term)) ||
             (p.types && p.types.some(t => t?.toLowerCase().includes(term))) ||
-            (p.brand && p.brand.toLowerCase().includes(term))
+            (p.brand && p.brand.toLowerCase().includes(term)) ||
+            (p.info && p.info.toLowerCase().includes(term))
         );
         const matchesCountry = !selectedCountry || (p.country && p.country === selectedCountry);
         const matchesCategory = !selectedCategory || (p.types && p.types.includes(selectedCategory));
@@ -187,10 +285,6 @@ export default function Partners() {
         (currentPage - 1) * itemsPerPage,
         currentPage * itemsPerPage
     );
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm, selectedCountry, selectedCategory]);
 
     const availableCategories = Array.from(new Set([...PARTNER_CATEGORIES, ...partners.flatMap(p => p.types || [])])).filter(Boolean).sort();
 
@@ -246,9 +340,9 @@ export default function Partners() {
                     <input
                         type="text"
                         style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '8px 0', fontSize: '0.95rem', color: '#334155' }}
-                        placeholder="Search by name, city, or brand..."
+                        placeholder="Search by name, website, brand, address, or notes..."
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={handleSearchChange}
                     />
                 </div>
 
@@ -257,7 +351,7 @@ export default function Partners() {
                         <MapPin size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
                         <select
                             value={selectedCountry}
-                            onChange={(e) => setSelectedCountry(e.target.value)}
+                            onChange={handleCountryChange}
                             style={{ appearance: 'none', background: 'transparent', border: 'none', outline: 'none', color: '#475569', fontSize: '0.9rem', fontWeight: 500, padding: '10px 24px 10px 0', cursor: 'pointer', width: '100%', minWidth: '150px' }}
                         >
                             <option value="">All Countries</option>
@@ -272,7 +366,7 @@ export default function Partners() {
                         <Filter size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
                         <select
                             value={selectedCategory}
-                            onChange={(e) => setSelectedCategory(e.target.value)}
+                            onChange={handleCategoryChange}
                             style={{ appearance: 'none', background: 'transparent', border: 'none', outline: 'none', color: '#475569', fontSize: '0.9rem', fontWeight: 500, padding: '10px 24px 10px 0', cursor: 'pointer', width: '100%', minWidth: '150px' }}
                         >
                             <option value="">All Categories</option>
@@ -282,22 +376,52 @@ export default function Partners() {
                         </select>
                         <ChevronDown size={14} color="#94a3b8" style={{ position: 'absolute', right: '16px', pointerEvents: 'none' }} />
                     </div>
+
+                    <button
+                        onClick={() => setShowCategoryMgr(true)}
+                        style={{ background: '#fff', border: '1px solid #e2e8f0', color: '#64748b', borderRadius: '8px', padding: '0 12px', display: 'flex', alignItems: 'center', cursor: 'pointer' }}
+                        title="Manage Categories"
+                    >
+                        <Settings size={18} />
+                    </button>
                 </div>
             </div>
 
-            {/* Results Grid Based on Partners.jsx list data */}
             {loading ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>Loading partners...</div>
+                <div style={{ padding: '40px', textAlign: 'center', color: '#64748b' }}>
+                    <Loader2 className="animate-spin" size={32} style={{ marginBottom: '16px', display: 'inline-block' }} />
+                    <p>Loading your business network...</p>
+                </div>
             ) : filteredPartners.length === 0 ? (
-                <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>No partners found.</div>
+                <div className="glass-panel" style={{ textAlign: 'center', padding: '80px 40px', background: '#fff' }}>
+                    <div style={{ width: '64px', height: '64px', background: '#f1f5f9', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+                        <Search size={32} color="#94a3b8" />
+                    </div>
+                    <h3 style={{ margin: '0 0 8px 0', color: '#1e293b' }}>No local partners found</h3>
+                    <p style={{ margin: '0 0 32px 0', color: '#64748b' }}>We couldn't find any partners matching "{searchTerm}" in your directory.</p>
+
+                    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                        <button onClick={() => { setSearchTerm(''); setSelectedCountry(''); setSelectedCategory(''); }} style={{ background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 500 }}>Clear Filters</button>
+                        <button onClick={() => {
+                            setNewPartner(prev => ({ ...prev, name: searchTerm }));
+                            setShowModal(true);
+                        }} style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Globe size={18} /> Search Worldwide
+                        </button>
+                    </div>
+                </div>
             ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '24px' }}>
                     {paginatedPartners.map(res => (
                         <div key={res.id} style={{ background: '#fff', borderRadius: '12px', padding: '24px', border: '1px solid #e2e8f0', position: 'relative', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', cursor: 'pointer' }} onClick={() => navigate(`/partners/${res.id}`)}>
 
                             <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
-                                <div style={{ width: '48px', height: '48px', background: '#e0e7ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1' }}>
-                                    <Building2 size={24} />
+                                <div style={{ width: '48px', height: '48px', background: res.business_card_url ? '#fff' : '#e0e7ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1', overflow: 'hidden', border: res.business_card_url ? '1px solid #e2e8f0' : 'none' }}>
+                                    {res.business_card_url ? (
+                                        <img src={res.business_card_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                        <Building2 size={24} />
+                                    )}
                                 </div>
                                 <div style={{ flex: 1, paddingRight: '24px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -310,6 +434,23 @@ export default function Partners() {
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#64748b', fontSize: '0.85rem' }}>
                                         <MapPin size={14} /> {res.country || 'No Location'}
+                                        {res.google_drive_link && (
+                                            <div style={{
+                                                marginLeft: 'auto',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '4px',
+                                                padding: '2px 8px',
+                                                background: '#eef2ff',
+                                                borderRadius: '6px',
+                                                color: '#4f46e5',
+                                                fontSize: '0.75rem',
+                                                fontWeight: 700,
+                                                border: '1px solid #c7d2fe'
+                                            }} title="Documents Linked to Google Drive">
+                                                <HardDrive size={12} /> DOCS
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
 
@@ -336,7 +477,7 @@ export default function Partners() {
                                                 onMouseOver={e => e.currentTarget.style.background = '#f1f5f9'}
                                                 onMouseOut={e => e.currentTarget.style.background = 'none'}
                                             >
-                                                <Edit2 size={14} /> Edit
+                                                <Edit size={14} /> Edit
                                             </button>
                                             <button
                                                 onClick={(e) => handleDelete(e, res.id)}
@@ -393,8 +534,6 @@ export default function Partners() {
                 </div>
             )}
 
-
-            {/* The BASE44 Replicated Modal */}
             {showModal && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
                     <div style={{ background: '#fff', width: '600px', maxHeight: '90vh', overflowY: 'auto', borderRadius: '12px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', position: 'relative' }}>
@@ -403,154 +542,277 @@ export default function Partners() {
                             <X size={24} />
                         </div>
 
-                        <h2 style={{ margin: '0 0 24px 0', fontSize: '1.25rem', fontWeight: 600, color: '#1e293b' }}>Add New Partner</h2>
+                        <h2 style={{ margin: '0 0 24px 0', fontSize: '1.25rem', fontWeight: 600, color: '#1e293b' }}>{createdPartner ? 'Manage Documents' : 'Add New Partner'}</h2>
 
-                        <form onSubmit={handleSaveNewPartner} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ display: 'flex', gap: '20px', borderBottom: '1px solid #e2e8f0', marginBottom: '24px' }}>
+                            <button
+                                type="button"
+                                onClick={() => !createdPartner && setModalTab('details')}
+                                style={{
+                                    padding: '10px 0',
+                                    background: 'none',
+                                    border: 'none',
+                                    borderBottom: modalTab === 'details' ? '2px solid #6366f1' : '2px solid transparent',
+                                    color: modalTab === 'details' ? '#6366f1' : '#64748b',
+                                    fontWeight: modalTab === 'details' ? 600 : 500,
+                                    cursor: createdPartner ? 'not-allowed' : 'pointer',
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                1. Partner Details
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => createdPartner && setModalTab('documents')}
+                                style={{
+                                    padding: '10px 0',
+                                    background: 'none',
+                                    border: 'none',
+                                    borderBottom: modalTab === 'documents' ? '2px solid #6366f1' : '2px solid transparent',
+                                    color: modalTab === 'documents' ? '#6366f1' : '#64748b',
+                                    fontWeight: modalTab === 'documents' ? 600 : 500,
+                                    cursor: createdPartner ? 'pointer' : 'not-allowed',
+                                    fontSize: '0.9rem',
+                                    opacity: createdPartner ? 1 : 0.5
+                                }}
+                            >
+                                2. Documents & Verification
+                            </button>
+                        </div>
 
-                            <div style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '24px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc', marginBottom: '16px' }}>
-                                <div style={{ width: '64px', height: '64px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    <Globe color="#6366f1" size={28} />
+                        {modalTab === 'details' ? (
+                            <form onSubmit={handleSaveNewPartner} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+                                <div style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '24px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc', marginBottom: '16px' }}>
+                                    <div style={{ width: '64px', height: '64px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <Building2 color="#6366f1" size={28} />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '6px' }}>Company Name *</label>
+                                        <CompanyAutocomplete
+                                            value={newPartner.name}
+                                            onChange={val => setNewPartner({ ...newPartner, name: val })}
+                                            onSelect={handleCompanySelect}
+                                        />
+                                        <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Start typing to search globally or enter custom name.</div>
+                                    </div>
                                 </div>
-                                <div style={{ flex: 1 }}>
-                                    <label style={{ fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '6px' }}>Company Website</label>
-                                    <input placeholder="https://partner.com" value={newPartner.weblink} onChange={e => setNewPartner({ ...newPartner, weblink: e.target.value })} style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                    <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Enter the primary website URL for the partner.</div>
-                                </div>
-                            </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Company Name *</label>
-                                    <input required placeholder="Partner company name" value={newPartner.name} onChange={e => setNewPartner({ ...newPartner, name: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Email *</label>
-                                    <input required type="email" placeholder="contact@partner.com" value={newPartner.email1} onChange={e => setNewPartner({ ...newPartner, email1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Phone</label>
-                                    <input placeholder="+1 234 567 8900" value={newPartner.phone1} onChange={e => setNewPartner({ ...newPartner, phone1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Full Address</label>
+                                    <input placeholder="Street, Building, etc." value={newPartner.address} onChange={e => setNewPartner({ ...newPartner, address: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
                                 </div>
 
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Country *</label>
-                                    <select
-                                        required
-                                        value={newPartner.country}
-                                        onChange={e => setNewPartner({ ...newPartner, country: e.target.value })}
-                                        style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: '#fff', cursor: 'pointer' }}
-                                    >
-                                        <option value="" disabled>Select Country</option>
-                                        {COUNTRIES.map(country => (
-                                            <option key={country} value={country}>{country}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>City</label>
-                                    <input placeholder="City" value={newPartner.city} onChange={e => setNewPartner({ ...newPartner, city: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Address</label>
-                                <input placeholder="Full address" value={newPartner.address} onChange={e => setNewPartner({ ...newPartner, address: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Categories</label>
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                    {Array.from(new Set([...availableCategories, ...(newPartner.types || [])])).map(cat => (
-                                        <div
-                                            key={cat}
-                                            onClick={() => handleCategoryToggle(cat)}
-                                            style={{ padding: '6px 14px', borderRadius: '24px', border: (newPartner.types || []).includes(cat) ? '1px solid #6366f1' : '1px solid #e2e8f0', background: (newPartner.types || []).includes(cat) ? '#e0e7ff' : '#fff', color: (newPartner.types || []).includes(cat) ? '#6366f1' : '#475569', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer' }}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>City</label>
+                                        <input placeholder="City" value={newPartner.city} onChange={e => setNewPartner({ ...newPartner, city: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Country *</label>
+                                        <select
+                                            required
+                                            value={newPartner.country}
+                                            onChange={e => setNewPartner({ ...newPartner, country: e.target.value })}
+                                            style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: '#fff', cursor: 'pointer' }}
                                         >
-                                            {cat}
-                                        </div>
-                                    ))}
+                                            <option value="">Select Country</option>
+                                            {COUNTRIES.map(country => (
+                                                <option key={country} value={country}>{country}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Phone</label>
+                                        <input placeholder="+1 234 567 8900" value={newPartner.phone1} onChange={e => setNewPartner({ ...newPartner, phone1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Email *</label>
+                                        <input required type="email" placeholder="contact@partner.com" value={newPartner.email1} onChange={e => setNewPartner({ ...newPartner, email1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                    </div>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                                    <input
-                                        placeholder="Add new custom category"
-                                        value={customCategory}
-                                        onChange={e => setCustomCategory(e.target.value)}
-                                        onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), handleAddCustomCategory())}
-                                        style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem' }}
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Company Website</label>
+                                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                        <input
+                                            placeholder="https://partner.com"
+                                            value={newPartner.weblink}
+                                            onChange={e => setNewPartner({ ...newPartner, weblink: e.target.value })}
+                                            style={{ width: '100%', padding: '10px 12px', paddingRight: '70px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => openWebsite(newPartner.weblink)}
+                                            style={{ position: 'absolute', right: '8px', background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}
+                                        >
+                                            <ExternalLink size={14} /> Visit
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Categories</label>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                        {Array.from(new Set([...availableCategories, ...(newPartner.types || [])])).map(cat => (
+                                            <div
+                                                key={cat}
+                                                onClick={() => handleCategoryToggle(cat)}
+                                                style={{ padding: '6px 14px', borderRadius: '24px', border: (newPartner.types || []).includes(cat) ? '1px solid #6366f1' : '1px solid #e2e8f0', background: (newPartner.types || []).includes(cat) ? '#e0e7ff' : '#fff', color: (newPartner.types || []).includes(cat) ? '#6366f1' : '#475569', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer' }}
+                                            >
+                                                {cat}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                                        <input
+                                            placeholder="Add new custom category"
+                                            value={customCategory}
+                                            onChange={e => setCustomCategory(e.target.value)}
+                                            onKeyPress={e => e.key === 'Enter' && (e.preventDefault(), handleAddCustomCategory())}
+                                            style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem' }}
+                                        />
+                                        <button type="button" onClick={handleAddCustomCategory} style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: '#e2e8f0', color: '#475569', fontWeight: 500, cursor: 'pointer', fontSize: '0.85rem' }}>
+                                            Add
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Brands Supported</label>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <input placeholder="Add brand name" value={newPartner.brand} onChange={e => setNewPartner({ ...newPartner, brand: e.target.value })} style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                        <button type="button" style={{ padding: '10px 16px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}><Plus size={16} /></button>
+                                    </div>
+                                </div>
+
+                                {(newPartner.types.includes('Customer') || newPartner.types.includes('Supplier')) && (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', padding: '24px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '8px' }}>
+                                        {newPartner.types.includes('Customer') && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Customer Credit</h4>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Limit</label>
+                                                    <input placeholder="e.g. 5000" value={newPartner.customerCredit} onChange={e => setNewPartner({ ...newPartner, customerCredit: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Days</label>
+                                                    <input placeholder="e.g. 30" value={newPartner.customerCreditTime} onChange={e => setNewPartner({ ...newPartner, customerCreditTime: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                                </div>
+                                            </div>
+                                        )}
+                                        {newPartner.types.includes('Supplier') && (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                <h4 style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Supplier Credit</h4>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Limit</label>
+                                                    <input placeholder="e.g. 10000" value={newPartner.supplierCredit} onChange={e => setNewPartner({ ...newPartner, supplierCredit: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                                </div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Days</label>
+                                                    <input placeholder="e.g. 60" value={newPartner.supplierCreditTime} onChange={e => setNewPartner({ ...newPartner, supplierCreditTime: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                <div style={{ padding: '20px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
+                                    <BusinessCardUpload
+                                        frontValue={newPartner.business_card_url}
+                                        backValue={newPartner.business_card_back_url}
+                                        onFrontChange={(url) => setNewPartner(prev => ({ ...prev, business_card_url: url }))}
+                                        onBackChange={(url) => setNewPartner(prev => ({ ...prev, business_card_back_url: url }))}
+                                        onOCR={handleOCR}
+                                        label="Business Card"
                                     />
-                                    <button type="button" onClick={handleAddCustomCategory} style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: '#e2e8f0', color: '#475569', fontWeight: 500, cursor: 'pointer', fontSize: '0.85rem' }}>
-                                        Add
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Notes (Rich Text Builder)</label>
+                                    <div style={{ background: '#fff' }}>
+                                        <ReactQuill
+                                            theme="snow"
+                                            value={newPartner.notes}
+                                            onChange={(val) => setNewPartner({ ...newPartner, notes: val })}
+                                            modules={modules}
+                                            style={{ height: '200px', marginBottom: '50px' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
+                                    <button type="button" onClick={() => setShowModal(false)} style={{ padding: '10px 24px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#475569', fontWeight: 600, cursor: 'pointer' }}>
+                                        Cancel
+                                    </button>
+                                    <button type="submit" style={{ padding: '10px 24px', background: '#6366f1', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>
+                                        Add Partner
+                                    </button>
+                                </div>
+                            </form>
+                        ) : (
+                            <div style={{ marginTop: '16px' }}>
+                                <PartnerDocuments
+                                    partnerId={createdPartner?.id}
+                                    partnerName={createdPartner?.name}
+                                    initialFolderId={createdPartner?.gdrive_folder_id}
+                                    initialDriveLink={createdPartner?.google_drive_link}
+                                    onUpdate={(data) => {
+                                        setCreatedPartner(prev => ({
+                                            ...prev,
+                                            gdrive_folder_id: data.id,
+                                            google_drive_link: data.link
+                                        }));
+                                        loadPartners();
+                                    }}
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
+                                    <button
+                                        onClick={() => {
+                                            setShowModal(false);
+                                            setCreatedPartner(null);
+                                            setModalTab('details');
+                                        }}
+                                        className="btn btn-primary"
+                                    >
+                                        Done & Close
                                     </button>
                                 </div>
                             </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Brands Supported</label>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <input placeholder="Add brand name" value={newPartner.brand} onChange={e => setNewPartner({ ...newPartner, brand: e.target.value })} style={{ flex: 1, padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                    <button type="button" style={{ padding: '10px 16px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff' }}><Plus size={16} /></button>
-                                </div>
-                            </div>
+            {/* Category Manager Modal */}
+            {showCategoryMgr && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100 }}>
+                    <div className="glass-panel" style={{ width: '100%', maxWidth: '500px', padding: '24px', position: 'relative' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#1e293b', margin: 0 }}>Manage Categories</h2>
+                            <button onClick={() => setShowCategoryMgr(false)} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer' }}><X /></button>
+                        </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Customer Credit Limit</label>
-                                    <input placeholder="e.g. 5000" value={newPartner.customerCredit} onChange={e => setNewPartner({ ...newPartner, customerCredit: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
+                        <div style={{ maxHeight: '400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {availableCategories.map(cat => (
+                                <div key={cat} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                    <span style={{ fontWeight: 500, color: '#334155' }}>{cat}</span>
+                                    <button
+                                        onClick={() => handlePurgeCategory(cat)}
+                                        style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                                        title="Delete globally from all partners"
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Customer Credit Time (Days)</label>
-                                    <input placeholder="e.g. 30" value={newPartner.customerCreditTime} onChange={e => setNewPartner({ ...newPartner, customerCreditTime: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Supplier Credit Limit</label>
-                                    <input placeholder="e.g. 10000" value={newPartner.supplierCredit} onChange={e => setNewPartner({ ...newPartner, supplierCredit: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Supplier Credit Time (Days)</label>
-                                    <input placeholder="e.g. 60" value={newPartner.supplierCreditTime} onChange={e => setNewPartner({ ...newPartner, supplierCreditTime: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                </div>
-                            </div>
+                            ))}
+                        </div>
 
-                            <div style={{ padding: '20px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
-                                <BusinessCardUpload
-                                    frontValue={newPartner.business_card_url}
-                                    backValue={newPartner.business_card_back_url}
-                                    onFrontChange={(url) => setNewPartner(prev => ({ ...prev, business_card_url: url }))}
-                                    onBackChange={(url) => setNewPartner(prev => ({ ...prev, business_card_back_url: url }))}
-                                    label="Business Card"
-                                />
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Notes (Rich Text Builder)</label>
-                                <div style={{ background: '#fff' }}>
-                                    <ReactQuill
-                                        theme="snow"
-                                        value={newPartner.notes}
-                                        onChange={(content) => setNewPartner({ ...newPartner, notes: content })}
-                                        style={{ height: '200px', marginBottom: '40px' }}
-                                        modules={{
-                                            toolbar: [
-                                                [{ 'header': [1, 2, false] }],
-                                                ['bold', 'italic', 'underline', 'strike', 'blockquote'],
-                                                [{ 'list': 'ordered' }, { 'list': 'bullet' }, { 'indent': '-1' }, { 'indent': '+1' }],
-                                                ['link', 'image'],
-                                                ['clean']
-                                            ]
-                                        }}
-                                    />
-                                </div>
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '16px' }}>
-                                <button type="button" onClick={() => setShowModal(false)} style={{ padding: '10px 24px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#475569', fontWeight: 600, cursor: 'pointer' }}>
-                                    Cancel
-                                </button>
-                                <button type="submit" style={{ padding: '10px 24px', background: '#6366f1', border: 'none', borderRadius: '8px', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>
-                                    Add Partner
-                                </button>
-                            </div>
-                        </form>
+                        <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+                            <button onClick={() => setShowCategoryMgr(false)} className="btn btn-secondary">Close</button>
+                        </div>
                     </div>
                 </div>
             )}

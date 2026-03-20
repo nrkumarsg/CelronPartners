@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Download, Users, Ship, BookOpen } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
-import { getPartners, getContacts } from '../lib/store';
+import { getPartners, getContacts, getDocumentSettings } from '../lib/store';
 import { useVesselsStore } from '../lib/vesselsStore';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
+import { BadgeDollarSign, TrendingUp, AlertTriangle, ExternalLink, Package } from 'lucide-react';
 
 export default function Reports() {
     const [loading, setLoading] = useState(false);
     const [partners, setPartners] = useState([]);
     const [contacts, setContacts] = useState([]);
     const { vessels, fetchVessels } = useVesselsStore();
+
+    const { profile } = useAuth();
+    const [jobs, setJobs] = useState([]);
+    const [allExpenses, setAllExpenses] = useState([]);
 
     useEffect(() => {
         const loadAllData = async () => {
@@ -17,9 +24,20 @@ export default function Reports() {
             setPartners(p);
             setContacts(c);
             fetchVessels();
+
+            if (profile?.company_id) {
+                const { data: jobRes } = await supabase.from('jobs').select('*').eq('company_id', profile.company_id);
+                const { data: expRes } = await supabase.from('job_expenses').select('*').eq('company_id', profile.company_id);
+                setJobs(jobRes || []);
+                setAllExpenses(expRes || []);
+            }
         };
         loadAllData();
-    }, [fetchVessels]);
+    }, [fetchVessels, profile]);
+
+    const totalOrderValue = jobs.reduce((sum, j) => sum + (j.po_amount || 0), 0);
+    const totalJobCosting = allExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const totalNetProfit = totalOrderValue - totalJobCosting;
 
     const generatePartnersPDF = () => {
         setLoading(true);
@@ -173,6 +191,62 @@ export default function Reports() {
             </div>
 
             <div className="form-grid">
+
+                {/* Profit Finder Dashboard */}
+                <div className="glass-panel" style={{ gridColumn: 'span 2', padding: '0' }}>
+                    <div style={{ background: 'linear-gradient(135deg, #0f172a, #1e293b)', padding: '24px', borderRadius: '16px 16px 0 0', color: 'white' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <BadgeDollarSign size={24} color="#10b981" /> Financial Profit Finder
+                                </h3>
+                                <p style={{ margin: '4px 0 0 0', opacity: 0.7, fontSize: '0.85rem' }}>Global summary of active jobs and gross margins</p>
+                            </div>
+                            <div style={{ display: 'flex', gap: '24px', textAlign: 'right' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.75rem', opacity: 0.6, textTransform: 'uppercase' }}>Total Order Value</div>
+                                    <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>${totalOrderValue.toLocaleString()}</div>
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.75rem', opacity: 0.6, textTransform: 'uppercase' }}>Total Net Profit</div>
+                                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#4ade80' }}>${totalNetProfit.toLocaleString()}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div style={{ padding: '20px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                            <thead>
+                                <tr style={{ textAlign: 'left', color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                                    <th style={{ padding: '12px 16px' }}>Job No</th>
+                                    <th style={{ padding: '12px 16px' }}>Order Value</th>
+                                    <th style={{ padding: '12px 16px' }}>Costing</th>
+                                    <th style={{ padding: '12px 16px' }}>Net Profit</th>
+                                    <th style={{ padding: '12px 16px', textAlign: 'right' }}>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {jobs.slice(0, 5).map(job => {
+                                    const jobCosts = allExpenses.filter(e => e.job_id === job.id).reduce((sum, e) => sum + (e.amount || 0), 0);
+                                    const jobProfit = (job.po_amount || 0) - jobCosts;
+                                    return (
+                                        <tr key={job.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                            <td style={{ padding: '12px 16px', fontWeight: 600 }}>{job.job_no}</td>
+                                            <td style={{ padding: '12px 16px' }}>${(job.po_amount || 0).toLocaleString()}</td>
+                                            <td style={{ padding: '12px 16px', color: '#ef4444' }}>-${jobCosts.toLocaleString()}</td>
+                                            <td style={{ padding: '12px 16px', fontWeight: 700, color: jobProfit >= 0 ? '#10b981' : '#ef4444' }}>${jobProfit.toLocaleString()}</td>
+                                            <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                                                <span style={{ fontSize: '0.75rem', padding: '4px 10px', borderRadius: '12px', background: job.status === 'Archived' ? '#f1f5f9' : '#fff7ed', color: job.status === 'Archived' ? '#64748b' : '#c2410c' }}>
+                                                    {job.status}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
                 {/* PDF Report: System Summary */}
                 <div className="glass-panel" style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

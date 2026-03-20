@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Users, DollarSign, Activity, FileSpreadsheet, Ship, MapPin } from 'lucide-react';
+import { Search, Users, DollarSign, Activity, FileSpreadsheet, Ship, MapPin, Brain, MessageSquare } from 'lucide-react';
 import { getPartners, getContacts } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,6 +23,7 @@ export default function Dashboard() {
 
     useEffect(() => {
         async function loadData() {
+            if (!profile) return; // Wait for profile to load to avoid wrong counts
             setLoading(true);
             try {
                 const [p, c] = await Promise.all([
@@ -173,6 +174,31 @@ export default function Dashboard() {
                     </button>
                 </div>
             )}
+            {/* Floating AI Assistant Trigger */}
+            <div style={{ position: 'fixed', bottom: '32px', right: '32px', zIndex: 100 }}>
+                <button
+                    onClick={() => window.open('https://notebooklm.google.com/notebook/0ee30281-09bf-4d58-9bc6-7cfc804552bf', '_blank')}
+                    style={{
+                        width: '60px',
+                        height: '60px',
+                        borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #6366f1 0%, #a855f7 100%)',
+                        color: 'white',
+                        border: 'none',
+                        boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.4)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'transform 0.2s'
+                    }}
+                    onMouseOver={e => e.currentTarget.style.transform = 'scale(1.1)'}
+                    onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
+                    title="Ask Job History AI"
+                >
+                    <Brain size={28} />
+                </button>
+            </div>
         </div>
     );
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Globe, Plus, ExternalLink, Bookmark, Shield, User, Filter, LayoutGrid, List } from 'lucide-react';
+import { Search, Globe, Plus, ExternalLink, Bookmark, Shield, User, Filter, LayoutGrid, List, Eye, EyeOff } from 'lucide-react';
 import { getUserTools } from '../lib/toolService';
 import { useNavigate } from 'react-router-dom';
 
@@ -9,11 +9,12 @@ export default function Tools() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedGroup, setSelectedGroup] = useState('All');
     const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+    const [visibleNotes, setVisibleNotes] = useState({}); // { id: boolean }
     const navigate = useNavigate();
 
-    useEffect(() => {
-        fetchTools();
-    }, []);
+    const toggleNoteVisibility = (id) => {
+        setVisibleNotes(prev => ({ ...prev, [id]: !prev[id] }));
+    };
 
     const fetchTools = async () => {
         setLoading(true);
@@ -21,6 +22,11 @@ export default function Tools() {
         if (data) setTools(data);
         setLoading(false);
     };
+
+    useEffect(() => {
+        fetchTools();
+    }, []);
+
 
     const groups = ['All', ...new Set(tools.map(t => t.group_name || 'General'))];
 
@@ -37,7 +43,7 @@ export default function Tools() {
             <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                     <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        Tools & Resources
+                        Weblinks & Resources
                     </h1>
                     <p style={{ margin: 0, color: '#64748b', fontSize: '0.95rem' }}>Quick access to your frequently visited maritime and business portals.</p>
                 </div>
@@ -119,8 +125,14 @@ export default function Tools() {
                             </div>
 
                             {tool.notes && (
-                                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', fontSize: '0.8rem', color: '#475569', whiteSpace: 'pre-wrap', fontFamily: 'monospace', border: '1px solid #f1f5f9' }}>
-                                    {tool.notes}
+                                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', fontSize: '0.8rem', color: '#475569', whiteSpace: 'pre-wrap', fontFamily: 'monospace', border: '1px solid #f1f5f9', position: 'relative' }}>
+                                    {visibleNotes[tool.id] ? tool.notes : tool.notes.split('\n').map((line, i) => i === 0 ? line : '•'.repeat(line.length)).join('\n')}
+                                    <button
+                                        onClick={() => toggleNoteVisibility(tool.id)}
+                                        style={{ position: 'absolute', right: '8px', top: '8px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}
+                                    >
+                                        {visibleNotes[tool.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                                    </button>
                                 </div>
                             )}
 
@@ -182,8 +194,20 @@ export default function Tools() {
                                         <td style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                             <a href={tool.url} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: '#6366f1' }}>{tool.url}</a>
                                         </td>
-                                        <td>
-                                            <code style={{ fontSize: '0.75rem', color: '#64748b' }}>{tool.notes || '-'}</code>
+                                        <td style={{ position: 'relative' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <code style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                                                    {tool.notes ? (visibleNotes[tool.id] ? tool.notes : tool.notes.split('\n').map((line, i) => i === 0 ? line : '••••••••').join('\n')) : '-'}
+                                                </code>
+                                                {tool.notes && (
+                                                    <button
+                                                        onClick={() => toggleNoteVisibility(tool.id)}
+                                                        style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', padding: 0 }}
+                                                    >
+                                                        {visibleNotes[tool.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                         <td style={{ textAlign: 'right' }}>
                                             <a href={tool.url} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>

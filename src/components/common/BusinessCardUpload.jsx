@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Camera, X, UploadCloud, User, CreditCard } from 'lucide-react';
 import { uploadFile } from '../../lib/store';
+import { performOCR } from '../../lib/googleAuthService';
 
-export default function BusinessCardUpload({ frontValue, backValue, onFrontChange, onBackChange, label = "Business Card" }) {
+export default function BusinessCardUpload({ frontValue, backValue, onFrontChange, onBackChange, onOCR, label = "Business Card" }) {
     const [uploadingFront, setUploadingFront] = useState(false);
     const [uploadingBack, setUploadingBack] = useState(false);
+    const [scanning, setScanning] = useState(false);
 
     const handleUpload = async (e, side) => {
         const file = e.target.files[0];
@@ -20,12 +22,21 @@ export default function BusinessCardUpload({ frontValue, backValue, onFrontChang
             });
             if (side === 'front') onFrontChange(url);
             else onBackChange(url);
+
+            // Trigger OCR
+            if (onOCR) {
+                setScanning(true);
+                const text = await performOCR(file);
+                if (text) onOCR(text);
+                setScanning(false);
+            }
         } catch (err) {
             console.error(err);
             alert(`Failed to upload business card ${side} side`);
         } finally {
             if (side === 'front') setUploadingFront(false);
             else setUploadingBack(false);
+            setScanning(false);
         }
     };
 
@@ -103,6 +114,68 @@ export default function BusinessCardUpload({ frontValue, backValue, onFrontChang
                     )}
                 </div>
             </div>
+
+            {(frontValue || backValue) && onOCR && (
+                <button
+                    onClick={async () => {
+                        setScanning(true);
+                        try {
+                            let combinedText = '';
+                            if (frontValue && backValue) {
+                                // Extract from both
+                                const frontFile = await fetch(frontValue).then(r => r.blob());
+                                const backFile = await fetch(backValue).then(r => r.blob());
+                                const [frontText, backText] = await Promise.all([
+                                    performOCR(frontFile),
+                                    performOCR(backFile)
+                                ]);
+                                combinedText = `[FRONT SIDE]\n${frontText}\n\n[BACK SIDE]\n${backText}`;
+                            } else {
+                                // Extract from whichever is available
+                                const url = frontValue || backValue;
+                                const file = await fetch(url).then(r => r.blob());
+                                combinedText = await performOCR(file);
+                            }
+                            if (combinedText) onOCR(combinedText);
+                        } catch (err) {
+                            console.error('Manual OCR failed', err);
+                        } finally {
+                            setScanning(false);
+                        }
+                    }}
+                    disabled={scanning}
+                    style={{
+                        marginTop: '16px',
+                        width: '100%',
+                        padding: '12px',
+                        background: '#6366f1',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '10px',
+                        boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.4)',
+                        transition: 'all 0.2s'
+                    }}
+                    onMouseOver={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+                    onMouseOut={e => e.currentTarget.style.transform = 'none'}
+                >
+                    {scanning ? <div className="spinner-small" style={{ width: '16px', height: '16px', borderTopColor: '#fff' }}></div> : <Camera size={18} />}
+                    {scanning ? 'EXTRACTING INFO...' : 'EXTRACT & SYNC INFO'}
+                </button>
+            )}
+
+            {scanning && (
+                <div style={{ marginTop: '12px', padding: '8px 12px', background: '#e0e7ff', color: '#6366f1', fontSize: '0.8rem', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div className="spinner-small" style={{ width: '14px', height: '14px', borderWidth: '2px' }}></div>
+                    <span>Scanning card for information...</span>
+                </div>
+            )}
 
             <style dangerouslySetInnerHTML={{
                 __html: `

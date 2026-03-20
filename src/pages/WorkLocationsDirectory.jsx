@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Upload, Download, Trash2, Edit2, MapPin, Printer } from 'lucide-react';
+import { Plus, Search, Upload, Download, Trash2, Edit, MapPin, Printer } from 'lucide-react';
 import { useWorkLocationsStore } from '../lib/workLocationsStore';
 import Papa from 'papaparse';
 import Pagination from '../components/Pagination';
@@ -219,7 +219,7 @@ export default function WorkLocationsDirectory() {
                                                     onClick={() => navigate(`/work-locations/${loc.id}`)}
                                                     title="Edit Location"
                                                 >
-                                                    <Edit2 size={16} />
+                                                    <Edit size={16} />
                                                 </button>
                                                 <button
                                                     className="action-btn delete"

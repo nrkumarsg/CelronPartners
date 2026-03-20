@@ -1,66 +1,173 @@
 // src/lib/universalFinder.js
 import { supabase } from './supabase.js';
+import { chatWithGemini } from './geminiService.js';
 
-const GOOGLE_API = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_API_KEY : process.env.VITE_GOOGLE_API_KEY);
-const GOOGLE_CX = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_CX : process.env.VITE_GOOGLE_CX);
-const GEOCODE_API = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_GEOCODE_KEY : process.env.VITE_GOOGLE_GEOCODE_KEY);
+const GOOGLE_API = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_API_KEY : (process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || 'AIzaSyA5YW4mWUo__7hwGjvLor-DDsh-spg2r5M'));
+const GOOGLE_CX = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_CX : (process.env.VITE_GOOGLE_CX || process.env.GOOGLE_CX || '259ae1101668d4071'));
+const GEOCODE_API = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_GEOCODE_KEY : (process.env.VITE_GOOGLE_GEOCODE_KEY || process.env.GOOGLE_GEOCODE_KEY || 'AIzaSyA5YW4mWUo__7hwGjvLor-DDsh-spg2r5M'));
+
+const COUNTRY_CODES = {
+    'Singapore': 'SG', 'Malaysia': 'MY', 'Indonesia': 'ID', 'Thailand': 'TH', 'Vietnam': 'VN',
+    'Philippines': 'PH', 'United Arab Emirates': 'AE', 'Saudi Arabia': 'SA', 'Qatar': 'QA',
+    'United Kingdom': 'GB', 'United States': 'US', 'Germany': 'DE', 'China': 'CN', 'India': 'IN'
+};
 
 /**
  * Run a universal search: Google Web + Image + optional AI enrichment.
  * Stores the search and its results in Supabase.
  * Returns the created search ID.
  */
-export async function runUniversalSearch({ query, userLat = null, userLng = null, userId }) {
+export async function runUniversalSearch({
+    query,
+    userLat = null,
+    userLng = null,
+    userId,
+    brand = '',
+    country = '',
+    category = '',
+    restrictToCountry = false
+}) {
     // 1️⃣ Insert a search record
     const { data: search, error: searchErr } = await supabase
         .from('searches')
-        .insert({ user_id: userId, query, source: 'google', total_results: 0 })
+        .insert({
+            user_id: userId,
+            query,
+            source: 'google',
+            total_results: 0,
+            metadata: { brand, category, country }
+        })
         .select()
         .single();
     if (searchErr) throw searchErr;
 
-    // 2️⃣ Parallel Google Web & Image searches
-    const webUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}`;
-    const imgUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API}&cx=${GOOGLE_CX}&searchType=image&q=${encodeURIComponent(query)}`;
+    // 2️⃣ Format query more naturally
+    let optimizedQuery = query;
+    if (brand) optimizedQuery += ` brand:${brand}`;
+    if (category) optimizedQuery += ` ${category}`;
+    if (country) optimizedQuery += ` in ${country}`;
+
+    // 3️⃣ Parallel Google Web & Image searches
+    let webUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API}&cx=${GOOGLE_CX}&q=${encodeURIComponent(optimizedQuery)}`;
+    let imgUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API}&cx=${GOOGLE_CX}&searchType=image&q=${encodeURIComponent(optimizedQuery)}`;
+
+    // Add country restriction/boosting if available
+    const cc = country ? (COUNTRY_CODES[country] || country) : null;
+    if (cc) {
+        // 'gl' boosts results from that geolocation (Soft filter)
+        webUrl += `&gl=${cc.toLowerCase()}`;
+        imgUrl += `&gl=${cc.toLowerCase()}`;
+
+        // 'cr' restricts ONLY to that country (Hard filter) - Only use if user explicitly asked
+        if (restrictToCountry) {
+            webUrl += `&cr=country${cc}`;
+            imgUrl += `&cr=country${cc}`;
+        }
+    }
 
     console.log(`[Finder] Searching for: "${query}" using CX: ${GOOGLE_CX}`);
 
     const [webRes, imgRes] = await Promise.all([fetch(webUrl), fetch(imgUrl)]);
-    const [webJson, imgJson] = await Promise.all([webRes.json(), imgRes.json()]);
+    const webJson = await webRes.json().catch(() => ({ error: { message: "JSON Parse Error" } }));
+    const imgJson = await imgRes.json().catch(() => ({}));
 
     if (webJson.error) {
-        console.error("[Finder] Google Web Search Error:", webJson.error);
+        console.warn("[Finder] Google Web Search Error:", webJson.error);
+        // We DON'T throw here, so we can return the ID and allow fallbacks
+        return search.id;
+    }
+    if (imgJson.error) {
+        console.warn("[Finder] Google Image Search Error:", imgJson.error.message);
     }
     console.log(`[Finder] Results: ${webJson.items?.length || 0} web, ${imgJson.items?.length || 0} img`);
 
-    // 3️⃣ Merge results (limit to 100 for better "100% effort")
-    const merged = [...(webJson.items || []), ...(imgJson.items || [])]
-        .slice(0, 100)
-        .map((item, idx) => {
-            const snippet = item.snippet || '';
-            const title = item.title || '';
+    // 3.5️⃣ Deep AI Enrichment (LiteLLM-style analysis of snippets)
+    const initialRawResults = [...(webJson.items || []), ...(imgJson.items || [])].slice(0, 15);
 
-            // Intelligent extraction
-            const email = snippet.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] || '';
-            const phone = snippet.match(/(\+?[0-9]{1,4}[-.\s]?)?(\(?[0-9]{2,5}\)?[-.\s]?)?[0-9]{3,4}[-.\s]?[0-9]{3,4}/)?.[0] || '';
+    const extractionPrompt = `
+    Analyze these ${initialRawResults.length} search results for the query "${optimizedQuery}".
+    Extract a structured list of suppliers with their:
+    - Official Supplier Name
+    - Contact Person (Name of a salesperson or manager if visible)
+    - Contact Email (if found in snippet)
+    - Contact Phone (if found in snippet)
+    - Location (City/Country)
+    - Full Business Address (if visible)
+    - A specific URL for their "Contact Us" or "About" page if detected.
+    - Notes (e.g. "Authorized Distributor", "Fast Shipping", "OEM Parts")
 
-            // Try to extract location from title or snippet
-            let location = '';
-            const locMatch = title.match(/–\s*([^–]+)$/) || snippet.match(/(?:in|at|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
-            if (locMatch) location = locMatch[1].trim();
+    Data to analyze:
+    ${initialRawResults.map((it, idx) => `[${idx}] Title: ${it.title}\nSnippet: ${it.snippet}\nURL: ${it.link}`).join('\n\n')}
 
-            return {
-                title,
-                url: item.link,
-                snippet,
-                thumbnail_url: item.pagemap?.cse_image?.[0]?.src || '',
-                supplier_name: extractSupplier(title, snippet),
-                email,
-                phone,
-                location,
-                rank: idx + 1,
-            };
-        });
+    Return ONLY a JSON array of objects: [{"name": "...", "contact_person": "...", "email": "...", "phone": "...", "location": "...", "address": "...", "notes": "...", "contact_url": "...", "original_index": ...}]
+    `;
+
+    let aiExtractedData = [];
+    try {
+        const aiResponse = await chatWithGemini(extractionPrompt);
+        const jsonMatch = aiResponse.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+            aiExtractedData = JSON.parse(jsonMatch[0]);
+        }
+    } catch (e) {
+        console.warn("[Finder] AI Extraction failed, using regex fallback.");
+    }
+
+    // 3.7️⃣ "Find Find" - Recursive Deep Search for missing contact details
+    const deepResults = [];
+    for (const item of aiExtractedData.slice(0, 5)) {
+        // If we have a name but NO email/phone, do a deep dive search
+        if (item.name && !item.email && !item.phone) {
+            console.log(`[Finder] Deep Lookup for: ${item.name}`);
+            const deepQuery = `${item.name} contact email phone address HQ`;
+            const deepUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API}&cx=${GOOGLE_CX}&q=${encodeURIComponent(deepQuery)}`;
+            try {
+                const deepRes = await fetch(deepUrl);
+                const deepJson = await deepRes.json();
+                if (deepJson.items?.[0]) {
+                    item.snippet = (item.snippet || '') + " | DEEP SEARCH: " + deepJson.items[0].snippet;
+                    // Extract again from deep result
+                    const deepEmail = deepJson.items[0].snippet.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0];
+                    const deepPhone = deepJson.items[0].snippet.match(/(\+?[0-9]{1,4}[-.\s]?)?(\(?[0-9]{2,5}\)?[-.\s]?)?[0-9]{3,4}[-.\s]?[0-9]{3,4}/)?.[0];
+                    if (deepEmail) item.email = deepEmail;
+                    if (deepPhone) item.phone = deepPhone;
+                }
+            } catch (e) {
+                console.warn(`[Finder] Deep lookup failed for ${item.name}`);
+            }
+        }
+    }
+
+    // 3.8️⃣ Merge & Map
+    const merged = initialRawResults.map((item, idx) => {
+        const aiData = aiExtractedData.find(d => d.original_index === idx) || {};
+        const snippet = item.snippet || '';
+        const title = item.title || '';
+
+        // Heuristic fallback
+        const email = aiData.email || snippet.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/)?.[0] || '';
+        const phone = aiData.phone || snippet.match(/(\+?[0-9]{1,4}[-.\s]?)?(\(?[0-9]{2,5}\)?[-.\s]?)?[0-9]{3,4}[-.\s]?[0-9]{3,4}/)?.[0] || '';
+
+        // Try to extract location from title or snippet
+        let location = '';
+        const locMatch = title.match(/–\s*([^–]+)$/) || snippet.match(/(?:in|at|near)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
+        if (locMatch) location = locMatch[1].trim();
+
+        return {
+            title,
+            url: item.link,
+            snippet,
+            thumbnail_url: item.pagemap?.cse_image?.[0]?.src || '',
+            supplier_name: aiData.name || extractSupplier(title, snippet),
+            contact_person: aiData.contact_person || '',
+            email,
+            phone,
+            location: aiData.location || location,
+            address: aiData.address || '',
+            notes: aiData.notes || '',
+            rank: idx + 1,
+        };
+    });
 
     // 4️⃣ Enrich with geocoding (cached)
     const enriched = await Promise.all(
@@ -106,22 +213,32 @@ export async function runUniversalSearch({ query, userLat = null, userLng = null
         })
     );
 
-    // 5️⃣ Persist results
-    const inserts = enriched.map((r) => ({
-        search_id: search.id,
-        title: r.title,
-        url: r.url,
-        snippet: r.snippet,
-        thumbnail_url: r.thumbnail_url,
-        supplier_name: r.supplier_name,
-        supplier_location: r.location,
-        email: r.email,
-        phone: r.phone,
-        latitude: r.latitude,
-        longitude: r.longitude,
-        distance_km: r.distance_km,
-        rank: r.rank,
-    }));
+    // 5️⃣ Persist results (Robust to missing DB columns)
+    const { data: colData } = await supabase.from('search_results').select('*').limit(1);
+    const existingCols = colData && colData.length > 0 ? Object.keys(colData[0]) : ['id', 'search_id', 'title', 'url', 'snippet', 'supplier_name', 'rank'];
+
+    const inserts = enriched.map((r) => {
+        const base = {
+            search_id: search.id,
+            title: r.title,
+            url: r.url,
+            snippet: r.snippet,
+            thumbnail_url: r.thumbnail_url,
+            supplier_name: r.supplier_name,
+            supplier_location: r.location,
+            email: r.email,
+            phone: r.phone,
+            latitude: r.latitude,
+            longitude: r.longitude,
+            distance_km: r.distance_km,
+            rank: r.rank,
+        };
+        // Safely add intelligence fields only if columns exist in DB
+        if (existingCols.includes('contact_person') && r.contact_person) base.contact_person = r.contact_person;
+        if (existingCols.includes('address') && r.address) base.address = r.address;
+        if (existingCols.includes('notes') && r.notes) base.notes = r.notes;
+        return base;
+    });
 
     const { error: insertErr } = await supabase.from('search_results').insert(inserts);
     if (insertErr) throw insertErr;

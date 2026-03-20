@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getEnquiries, getJobs } from '../lib/workflowService';
+import { getEnquiries, getJobs, updateJob, updateEnquiry } from '../lib/workflowService';
 import { getDocumentSettings } from '../lib/store';
-import { ExternalLink, Database, Search, Filter, ChevronDown, Folder, Briefcase, FileText } from 'lucide-react';
+import { ExternalLink, Database, Search, Filter, ChevronDown, Folder, Briefcase, FileText, Archive, Loader2 } from 'lucide-react';
+import { moveFolder } from '../lib/driveService';
+import { initializeVault } from '../lib/vaultService';
 
 export default function StorageDirectory() {
     const { profile } = useAuth();
@@ -10,6 +12,7 @@ export default function StorageDirectory() {
     const [jobs, setJobs] = useState([]);
     const [settings, setSettings] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [archivingId, setArchivingId] = useState(null);
     const [activeTab, setActiveTab] = useState('enquiries');
 
     useEffect(() => {
@@ -40,11 +43,51 @@ export default function StorageDirectory() {
         }
     };
 
+    const handleArchive = async (item) => {
+        const folderId = item.gdrive_folder_id || (item.google_drive_link?.match(/\/folders\/([a-zA-Z0-9_-]+)/)?.[1]);
+        if (!folderId) {
+            alert("No Google Drive folder found for this item.");
+            return;
+        }
+
+        if (!window.confirm(`Archive ${activeTab === 'enquiries' ? 'Enquiry' : 'Job'} ${activeTab === 'enquiries' ? item.enquiry_no : item.job_no} to Corporate Vault?`)) {
+            return;
+        }
+
+        setArchivingId(item.id);
+        try {
+            const accessToken = localStorage.getItem('google_access_token');
+            if (!accessToken) throw new Error("Google account not connected.");
+
+            // 1. Initialize/Get Vault Root for current year
+            const vaultRootId = await initializeVault(accessToken, profile.company_id);
+
+            // 2. Move Folder to Vault
+            await moveFolder(accessToken, folderId, vaultRootId);
+
+            // 3. Mark as Archived in DB
+            if (activeTab === 'enquiries') {
+                await updateEnquiry(item.id, { status: 'Archived' });
+            } else {
+                await updateJob(item.id, { status: 'Archived' });
+            }
+
+            alert("Successfully moved to Corporate Vault!");
+            fetchData();
+        } catch (err) {
+            console.error("Archive error:", err);
+            alert(`Failed to archive: ${err.message}`);
+        } finally {
+            setArchivingId(null);
+        }
+    };
+
     const openRootFolder = () => {
-        if (settings?.google_drive_folder_id) {
-            window.open(`https://drive.google.com/drive/folders/${settings.google_drive_folder_id}`, '_blank');
+        const rootId = settings?.gdrive_celron_root_id || settings?.google_drive_folder_id;
+        if (rootId) {
+            window.open(`https://drive.google.com/drive/folders/${rootId}`, '_blank');
         } else {
-            alert('Google Drive Root Folder ID is not configured in Settings.');
+            alert('Google Drive Root Folder is not configured in Settings.');
         }
     };
 
@@ -87,7 +130,7 @@ export default function StorageDirectory() {
                         boxShadow: '0 4px 6px -1px rgba(99, 102, 241, 0.2)'
                     }}
                 >
-                    <Folder size={18} /> Open Root Directory (CELRON2026)
+                    <Folder size={18} /> Open Root Directory (CELRON)
                 </button>
             </header>
 
@@ -174,26 +217,47 @@ export default function StorageDirectory() {
                                         </span>
                                     </td>
                                     <td style={{ padding: '16px 24px', textAlign: 'right' }}>
-                                        <button
-                                            onClick={() => openFolder(item.google_drive_link)}
-                                            disabled={!item.google_drive_link}
-                                            style={{
-                                                background: item.google_drive_link ? '#ecfdf5' : 'transparent',
-                                                color: item.google_drive_link ? '#059669' : '#cbd5e1',
-                                                border: `1px solid ${item.google_drive_link ? '#d1fae5' : '#e2e8f0'}`,
-                                                padding: '6px 12px',
-                                                borderRadius: '6px',
-                                                fontSize: '0.85rem',
-                                                cursor: item.google_drive_link ? 'pointer' : 'not-allowed',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '4px',
-                                                fontWeight: 500,
-                                                marginLeft: 'auto'
-                                            }}
-                                        >
-                                            <ExternalLink size={14} /> Open in Drive
-                                        </button>
+                                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                            <button
+                                                onClick={() => openFolder(item.google_drive_link)}
+                                                disabled={!item.google_drive_link}
+                                                style={{
+                                                    background: item.google_drive_link ? '#ecfdf5' : 'transparent',
+                                                    color: item.google_drive_link ? '#059669' : '#cbd5e1',
+                                                    border: `1px solid ${item.google_drive_link ? '#d1fae5' : '#e2e8f0'}`,
+                                                    padding: '6px 12px',
+                                                    borderRadius: '6px',
+                                                    fontSize: '0.85rem',
+                                                    cursor: item.google_drive_link ? 'pointer' : 'not-allowed',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    fontWeight: 500
+                                                }}
+                                            >
+                                                <ExternalLink size={14} /> Open in Drive
+                                            </button>
+                                            <button
+                                                onClick={() => handleArchive(item)}
+                                                disabled={!item.google_drive_link || archivingId === item.id || item.status === 'Archived'}
+                                                style={{
+                                                    background: item.status === 'Archived' ? '#f1f5f9' : (item.google_drive_link ? '#eff6ff' : 'transparent'),
+                                                    color: item.status === 'Archived' ? '#94a3b8' : (item.google_drive_link ? '#2563eb' : '#cbd5e1'),
+                                                    border: `1px solid ${item.status === 'Archived' ? '#e2e8f0' : (item.google_drive_link ? '#dbeafe' : '#e2e8f0')}`,
+                                                    padding: '6px 12px',
+                                                    borderRadius: '6px',
+                                                    fontSize: '0.85rem',
+                                                    cursor: (item.google_drive_link && item.status !== 'Archived') ? 'pointer' : 'not-allowed',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    fontWeight: 500
+                                                }}
+                                            >
+                                                {archivingId === item.id ? <Loader2 size={14} className="animate-spin" /> : <Archive size={14} />}
+                                                {item.status === 'Archived' ? 'Archived' : 'Archive to Vault'}
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             ))

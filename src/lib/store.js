@@ -1,9 +1,9 @@
 import { supabase } from './supabase';
 
 export const getPartners = async (profile = null) => {
-  let query = supabase.from('partners').select('*').order('created_at', { ascending: false });
+  let query = supabase.from('partners').select('*').order('name', { ascending: true });
 
-  // If we have a profile with a company_id, enforce isolation
+  // ONLY filter if user is NOT a superadmin. Superadmins should see global totals.
   if (profile?.company_id && profile.role !== 'superadmin') {
     query = query.eq('company_id', profile.company_id);
   }
@@ -51,8 +51,15 @@ export const deletePartner = async (id) => {
   // Contacts cascade delete based on Supabase schema definition
 };
 
-export const getContacts = async () => {
-  const { data, error } = await supabase.from('contacts').select('*');
+export const getContacts = async (profile = null) => {
+  let query = supabase.from('contacts').select('*');
+
+  // Isolation for non-superadmins
+  if (profile?.company_id && profile.role !== 'superadmin') {
+    query = query.eq('company_id', profile.company_id);
+  }
+
+  const { data, error } = await query;
   if (error) console.error('Error fetching contacts:', error);
   return data || [];
 };
@@ -117,6 +124,24 @@ export const deleteCategory = async (id) => {
   if (error) console.error('Error deleting category:', error);
 };
 
+export const purgeCategoryGlobally = async (categoryName) => {
+  const { data: partners, error: fetchError } = await supabase.from('partners').select('id, types');
+  if (fetchError) throw fetchError;
+
+  const updates = partners
+    .filter(p => (p.types || []).includes(categoryName))
+    .map(p => ({
+      id: p.id,
+      types: p.types.filter(t => t !== categoryName)
+    }));
+
+  if (updates.length > 0) {
+    for (const update of updates) {
+      await supabase.from('partners').update({ types: update.types }).eq('id', update.id);
+    }
+  }
+};
+
 // --- Brands ---
 export const getBrands = async () => {
   const { data, error } = await supabase.from('brands').select('*').order('name');
@@ -175,6 +200,33 @@ export const saveDocumentSettings = async (payload) => {
     if (error) throw error;
     return data[0];
   }
+};
+
+// --- Vessels ---
+export const getVessels = async () => {
+  const { data, error } = await supabase.from('vessels').select('*').order('vessel_name');
+  if (error) console.error('Error fetching vessels:', error);
+  return data || [];
+};
+
+export const saveVessel = async (vesselData) => {
+  const isExisting = !!vesselData.id;
+  if (isExisting) {
+    const { data, error } = await supabase.from('vessels').update(vesselData).eq('id', vesselData.id).select();
+    if (error) throw error;
+    return data[0];
+  } else {
+    const { data, error } = await supabase.from('vessels').insert([vesselData]).select();
+    if (error) throw error;
+    return data[0];
+  }
+};
+
+// --- Work Locations ---
+export const getWorkLocations = async () => {
+  const { data, error } = await supabase.from('work_locations').select('*').order('location_name');
+  if (error) console.error('Error fetching work locations:', error);
+  return data || [];
 };
 
 // --- Storage / File Uploads ---

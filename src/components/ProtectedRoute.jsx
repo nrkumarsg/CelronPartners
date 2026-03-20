@@ -24,8 +24,15 @@ const ProtectedRoute = ({ children, requiredModule }) => {
     }
 
     if (!profile) {
-        // Logged in but profile hasn't loaded yet? Wait.
-        return null;
+        // Logged in but profile hasn't loaded yet? Show loader instead of white screen.
+        return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'var(--bg-primary)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                    <Loader2 size={40} className="animate-spin" style={{ color: 'var(--accent)' }} />
+                    <p style={{ color: 'var(--text-secondary)' }}>Synchronizing profile...</p>
+                </div>
+            </div>
+        );
     }
 
     if (profile.status === 'pending') {

@@ -5,14 +5,15 @@ import { getDocumentSettings } from '../lib/store';
 export default function Calendar() {
     const [settings, setSettings] = React.useState(null);
 
-    React.useEffect(() => {
-        loadSettings();
-    }, []);
-
     const loadSettings = async () => {
         const data = await getDocumentSettings();
         if (data) setSettings(data);
     };
+
+    React.useEffect(() => {
+        loadSettings();
+    }, []);
+
 
     // Use 'primary' if no specific calendar ID is provided in settings
     const calendarId = settings?.google_calendar_id || 'primary';

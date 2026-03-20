@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, StickyNote, Calendar, Clock, Pin, MoreVertical, Trash2, Edit2, ChevronRight } from 'lucide-react';
+import { Plus, Search, StickyNote, Calendar, Clock, Pin, MoreVertical, Trash2, Edit, ChevronRight } from 'lucide-react';
 import { getNotes, deleteNote, updateNote } from '../lib/notesService';
 
 export default function NotesDirectory() {
@@ -9,16 +9,17 @@ export default function NotesDirectory() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
-    useEffect(() => {
-        fetchNotes();
-    }, []);
-
     const fetchNotes = async () => {
         setLoading(true);
         const { data } = await getNotes();
         if (data) setNotes(data);
         setLoading(false);
     };
+
+    useEffect(() => {
+        fetchNotes();
+    }, []);
+
 
     const handleDelete = async (e, id) => {
         e.stopPropagation();

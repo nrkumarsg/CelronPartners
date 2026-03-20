@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Hexagon, Filter, ChevronDown, Circle, X, UploadCloud, Upload, Download, Trash2, Edit2, Printer } from 'lucide-react';
+import { Plus, Search, Hexagon, Filter, ChevronDown, Circle, X, UploadCloud, Upload, Download, Trash2, Edit, Printer } from 'lucide-react';
 import Papa from 'papaparse';
 import { getBrands, deleteBrand, saveBrand } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,10 +19,6 @@ export default function BrandsDirectory() {
     const [showModal, setShowModal] = useState(false);
     const [newBrand, setNewBrand] = useState({ name: '' });
 
-    useEffect(() => {
-        loadBrands();
-    }, []);
-
     const loadBrands = async () => {
         setLoading(true);
         const data = await getBrands();
@@ -30,6 +26,11 @@ export default function BrandsDirectory() {
         setBrands(sorted);
         setLoading(false);
     };
+
+    useEffect(() => {
+        loadBrands();
+    }, []);
+
 
     const handleSaveNewBrand = async (e) => {
         e.preventDefault();
@@ -169,7 +170,7 @@ export default function BrandsDirectory() {
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button onClick={() => { setNewBrand({ id: res.id, name: res.name }); setShowModal(true); }} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }} title="Edit">
-                                    <Edit2 size={16} />
+                                    <Edit size={16} />
                                 </button>
                                 <button onClick={() => handleDelete(res.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '4px' }} title="Delete">
                                     <Trash2 size={16} />

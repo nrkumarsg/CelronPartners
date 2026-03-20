@@ -17,6 +17,7 @@ export default function VesselForm() {
     const [formData, setFormData] = useState({
         vessel_name: '',
         imo_number: '',
+        mmsi: '',
         vessel_type: '',
         vessel_management: '',
         vessel_owner: '',
@@ -65,7 +66,11 @@ export default function VesselForm() {
         }
 
         if (result?.success) {
-            navigate('/vessels');
+            if (isNew) {
+                navigate(`/vessel-tracking/${result.data.id}`);
+            } else {
+                navigate('/vessels');
+            }
         } else {
             alert('Error saving vessel:\n' + JSON.stringify(result?.error || 'Unknown Error further up'));
         }
@@ -121,12 +126,13 @@ export default function VesselForm() {
     };
 
     const handleGoogleSearch = () => {
-        if (!formData.vessel_name && !formData.imo_number) {
-            alert("Please provide a Vessel Name or IMO Number to search.");
+        const { vessel_name, imo_number, mmsi } = formData;
+        if (!vessel_name && !imo_number && !mmsi) {
+            alert("Please provide a Vessel Name, IMO, or MMSI to search.");
             return;
         }
-        const query = `${formData.vessel_name || ''} ${formData.imo_number || ''}`.trim();
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+        const query = `${vessel_name || ''} ${imo_number || ''} ${mmsi || ''}`.trim();
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query + " vessel details")}`;
         window.open(searchUrl, '_blank', 'noopener,noreferrer');
     };
 
@@ -154,8 +160,7 @@ export default function VesselForm() {
                     <button
                         className="btn btn-secondary"
                         onClick={handleGoogleSearch}
-                        title="Search Vessel Name + IMO on Google"
-                        disabled={!formData.vessel_name && !formData.imo_number}
+                        title="Search Vessel Name + IMO + MMSI on Google"
                     >
                         <Search size={18} />
                         Vessel Search
@@ -210,6 +215,18 @@ export default function VesselForm() {
                                 value={formData.imo_number}
                                 onChange={handleChange}
                                 placeholder="e.g. 9123456"
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label className="form-label">MMSI Number</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                name="mmsi"
+                                value={formData.mmsi}
+                                onChange={handleChange}
+                                placeholder="e.g. 314658000"
                             />
                         </div>
 

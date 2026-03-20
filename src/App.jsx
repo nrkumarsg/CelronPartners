@@ -1,4 +1,8 @@
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, useParams, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Smartphone } from 'lucide-react';
+import { downloadApkByIdentifier } from './lib/driveService';
+// Build cache invalidation: v1.0.1
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
 import Dashboard from './pages/Dashboard';
@@ -8,18 +12,23 @@ import ContactsForm from './pages/ContactsForm';
 import ContactsDirectory from './pages/ContactsDirectory';
 import VesselsDirectory from './pages/VesselsDirectory';
 import VesselForm from './pages/VesselForm';
+import VesselTracking from './pages/VesselTracking';
 import ModuleSettings from './pages/ModuleSettings';
 import Reports from './pages/Reports';
 import WorkLocationsDirectory from './pages/WorkLocationsDirectory';
 import WorkLocationForm from './pages/WorkLocationForm';
+import CorporateVault from './pages/CorporateVault';
 import CatalogDirectory from './pages/CatalogDirectory';
 import CatalogForm from './pages/CatalogForm';
+import PrintLabels from './pages/PrintLabels';
 import WorkflowBoard from './pages/workflows/WorkflowBoard';
 import UniversalFinder from './pages/workflows/UniversalFinder';
 import EnquiryDetails from './pages/workflows/EnquiryDetails';
 import JobDetails from './pages/workflows/JobDetails';
 import WorkflowV2Board from './pages/workflows/WorkflowV2Board';
+import EnquiryList from './pages/workflows/EnquiryList';
 import WorkflowEditor from './pages/workflows/WorkflowEditor';
+import WorkflowPrintPreview from './pages/workflows/WorkflowPrintPreview';
 import CategoriesDirectory from './pages/CategoriesDirectory';
 import BrandsDirectory from './pages/BrandsDirectory';
 import TodoList from './pages/TodoList';
@@ -29,6 +38,22 @@ import Calendar from './pages/Calendar';
 import StorageDirectory from './pages/StorageDirectory';
 import Tools from './pages/Tools';
 import MessagingHub from './pages/MessagingHub';
+import ManualsDirectory from './pages/ManualsDirectory';
+import ManualForm from './pages/ManualForm';
+import ScannerModule from './pages/ScannerModule';
+import SmartOCR from './pages/tools/SmartOCR';
+import Converter from './pages/tools/Converter';
+import LiveLocator from './pages/tools/LiveLocator';
+import HelpCenter from './pages/HelpCenter';
+import FormsDirectory from './pages/FormsDirectory';
+import FormEditor from './pages/FormEditor';
+import CalibrationLab from './pages/CalibrationLab';
+import SmartAssistant from './pages/workflows/SmartAssistant';
+import FloatSupplierOrder from './pages/workflows/FloatSupplierOrder';
+import CommercialWallPage from './pages/CommercialWallPage';
+import SearchResults from './pages/SearchResults';
+import ApkManagement from './pages/admin/ApkManagement';
+
 
 // Authentication & RBAC Components
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -38,6 +63,7 @@ import SignUp from './pages/auth/SignUp';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import UserManagement from './pages/UserManagement';
 import OAuthCallback from './pages/auth/OAuthCallback';
+import Unauthorized from './pages/auth/Unauthorized';
 
 // App Layout wrapper to only show sidebar when logged in
 const AppLayout = ({ children }) => {
@@ -78,6 +104,7 @@ function App() {
             <Routes>
               {/* Base Dashboard (Accessible if logged in and active, handled by wildcard ProtectedRoute) */}
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/search" element={<ProtectedRoute><SearchResults /></ProtectedRoute>} />
 
               {/* User Management (Superadmins & Admins only) */}
               <Route path="/admin/users" element={
@@ -100,6 +127,7 @@ function App() {
               {/* Vessels Module */}
               <Route path="/vessels" element={<ProtectedRoute requiredModule="vessels"><VesselsDirectory /></ProtectedRoute>} />
               <Route path="/vessels/:id" element={<ProtectedRoute requiredModule="vessels"><VesselForm /></ProtectedRoute>} />
+              <Route path="/vessel-tracking/:id" element={<ProtectedRoute requiredModule="vessels"><VesselTracking /></ProtectedRoute>} />
 
               {/* Work Locations Module */}
               <Route path="/work-locations" element={<ProtectedRoute requiredModule="work-locations"><WorkLocationsDirectory /></ProtectedRoute>} />
@@ -108,15 +136,40 @@ function App() {
               {/* Catalog Module */}
               <Route path="/catalog" element={<ProtectedRoute requiredModule="catalog"><CatalogDirectory /></ProtectedRoute>} />
               <Route path="/catalog/:id" element={<ProtectedRoute requiredModule="catalog"><CatalogForm /></ProtectedRoute>} />
+              <Route path="/catalog/labels" element={<ProtectedRoute requiredModule="catalog"><PrintLabels /></ProtectedRoute>} />
 
               {/* Workflows & Universal Finder Module */}
               <Route path="/workflows" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/enquiries" element={<ProtectedRoute><EnquiryList /></ProtectedRoute>} />
+              <Route path="/quotations" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/purchase-orders" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/delivery-orders" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/service-reports" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/invoices" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/proforma-invoices" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/packing-lists" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/certificates" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/payment-received" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/soa" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/payments" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
               <Route path="/workflows/legacy" element={<ProtectedRoute><WorkflowBoard /></ProtectedRoute>} />
               <Route path="/workflows/enquiry/:id" element={<ProtectedRoute><EnquiryDetails /></ProtectedRoute>} />
               <Route path="/workflows/job/:id" element={<ProtectedRoute><JobDetails /></ProtectedRoute>} />
               <Route path="/workflows/editor/:type/:id" element={<ProtectedRoute><WorkflowEditor /></ProtectedRoute>} />
+              <Route path="/workflows/float-supplier-order" element={<ProtectedRoute><FloatSupplierOrder /></ProtectedRoute>} />
+              <Route path="/workflows/print/:id" element={<ProtectedRoute><WorkflowPrintPreview /></ProtectedRoute>} />
+              <Route path="/workflows/universal-finder" element={<ProtectedRoute><UniversalFinder /></ProtectedRoute>} />
               <Route path="/workflows/finder" element={<ProtectedRoute><UniversalFinder /></ProtectedRoute>} />
+              <Route path="/workflows/ai-assistant" element={<ProtectedRoute><SmartAssistant /></ProtectedRoute>} />
               <Route path="/storage" element={<ProtectedRoute><StorageDirectory /></ProtectedRoute>} />
+              <Route path="/vault" element={<ProtectedRoute><CorporateVault /></ProtectedRoute>} />
+              <Route path="/vault/:folderId" element={<ProtectedRoute><CorporateVault /></ProtectedRoute>} />
+              <Route path="/manuals" element={<ProtectedRoute><ManualsDirectory /></ProtectedRoute>} />
+              <Route path="/manuals/:id" element={<ProtectedRoute><ManualForm /></ProtectedRoute>} />
+
+              <Route path="/forms" element={<ProtectedRoute><FormsDirectory /></ProtectedRoute>} />
+              <Route path="/forms/calibration-lab" element={<ProtectedRoute><CalibrationLab /></ProtectedRoute>} />
+              <Route path="/forms/:id" element={<ProtectedRoute><FormEditor /></ProtectedRoute>} />
 
               {/* Reports */}
               <Route path="/reports" element={<ProtectedRoute requiredModule="reports"><Reports /></ProtectedRoute>} />
@@ -127,11 +180,26 @@ function App() {
               <Route path="/notes" element={<ProtectedRoute><NotesDirectory /></ProtectedRoute>} />
               <Route path="/notes/:id" element={<ProtectedRoute><NoteForm /></ProtectedRoute>} />
               <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
+              <Route path="/scanner" element={<ProtectedRoute><ScannerModule /></ProtectedRoute>} />
+              <Route path="/tools/ocr" element={<ProtectedRoute><SmartOCR /></ProtectedRoute>} />
+              <Route path="/tools/converter" element={<ProtectedRoute><Converter /></ProtectedRoute>} />
+              <Route path="/tools/locator" element={<ProtectedRoute><LiveLocator /></ProtectedRoute>} />
               <Route path="/tools" element={<ProtectedRoute><Tools /></ProtectedRoute>} />
+
               <Route path="/messaging" element={<ProtectedRoute><MessagingHub /></ProtectedRoute>} />
+              <Route path="/commercial-wall" element={<ProtectedRoute><CommercialWallPage /></ProtectedRoute>} />
 
               {/* Settings (Accessible to all for personal tools, admins see more) */}
               <Route path="/settings" element={<ProtectedRoute><ModuleSettings /></ProtectedRoute>} />
+              
+              {/* Admin Tools */}
+              <Route path="/admin/apks" element={<ProtectedRoute><ApkManagement /></ProtectedRoute>} />
+
+              {/* Direct APK Download Redirect (Handles /apks/scanner etc) */}
+              <Route path="/apks/:identifier" element={<ApkDownloadHandler />} />
+
+              {/* Help Center */}
+              <Route path="/help" element={<ProtectedRoute><HelpCenter /></ProtectedRoute>} />
 
               {/* Fallback */}
               <Route path="*" element={<div style={{ textAlign: 'center', marginTop: '100px' }}><h1>Working on this feature...</h1></div>} />
@@ -140,6 +208,37 @@ function App() {
         } />
       </Routes>
     </AuthProvider>
+  );
+}
+
+/**
+ * Component to handle direct APK downloads from URLs
+ */
+function ApkDownloadHandler() {
+  const { identifier } = useParams();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Standardize input (remove file extension if present)
+    const id = identifier.replace('.apk', '');
+    downloadApkByIdentifier(id);
+    
+    // Redirect back to dashboard after a short delay
+    const timer = setTimeout(() => {
+      navigate('/', { replace: true });
+    }, 1500);
+    
+    return () => clearTimeout(timer);
+  }, [identifier, navigate]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)' }}>
+      <div className="glass-panel" style={{ padding: '40px', borderRadius: '24px', textAlign: 'center' }}>
+        <Smartphone size={48} color="var(--accent)" className="animate-bounce" style={{ margin: '0 auto 24px' }} />
+        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '8px' }}>Processing Download</h2>
+        <p style={{ color: 'var(--text-secondary)' }}>Connecting to secure APK storage...</p>
+      </div>
+    </div>
   );
 }
 

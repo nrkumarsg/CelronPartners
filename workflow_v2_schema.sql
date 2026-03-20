@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS public.workflow_documents (
     -- Content & Totals
     terms_conditions text,
     notes text,
+    internal_notes text, -- NEW: For internal admin comments
     status text NOT NULL DEFAULT 'Draft',
     subtotal numeric DEFAULT 0,
     tax_amount numeric DEFAULT 0, -- 9% GST calculated on subtotal
@@ -57,6 +58,7 @@ CREATE TABLE IF NOT EXISTS public.workflow_line_items (
     uom text DEFAULT 'Units',
     unit_price numeric DEFAULT 0,
     tax_rate numeric DEFAULT 9.0, -- Percentage
+    tax_enabled boolean DEFAULT true, -- NEW: Toggle tax per line
     amount numeric DEFAULT 0,
     
     -- Display Structure

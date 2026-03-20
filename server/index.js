@@ -10,40 +10,47 @@ app.use(express.json());
 
 // ---- 1️⃣ Search endpoint -------------------------------------------------
 app.post('/api/universal-finder/search', async (req, res) => {
-    const { query, userLat, userLng, userId } = req.body;
-    console.log(`[Backend] Search Request for: "${query}" from user: ${userId}`);
+    const { query, userLat, userLng, userId, country, restrictToCountry } = req.body;
+    console.log(`[Backend] Search Request for: "${query}" from user: ${userId} in country: ${country} (Local only: ${restrictToCountry})`);
 
-    const hasKeys = process.env.VITE_GOOGLE_API_KEY && process.env.VITE_GOOGLE_CX;
+    const key = process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || 'AIzaSyA5YW4mWUo__7hwGjvLor-DDsh-spg2r5M';
+    const cx = process.env.VITE_GOOGLE_CX || process.env.GOOGLE_CX || '259ae1101668d4071';
+    const hasKeys = true; // Always try if we have fallbacks
 
     try {
         let searchId;
 
         if (hasKeys) {
             console.log(`[Backend] API Keys found. Running real search for query: "${query}"...`);
-            searchId = await runUniversalSearch({ query, userLat, userLng, userId });
+            try {
+                searchId = await runUniversalSearch({ query, userLat, userLng, userId, country, restrictToCountry });
 
-            // CHECKING IF WE GOT RESULTS
-            console.log(`[Backend] Real search finished. Checking results for searchId: ${searchId}`);
-            const { data: resultsCheck, error: checkError } = await supabase
-                .from('search_results')
-                .select('id')
-                .eq('search_id', searchId);
+                // CHECK if real results were actually returned from Google
+                const { data: resultsCheck, error: checkError } = await supabase
+                    .from('search_results')
+                    .select('id')
+                    .eq('search_id', searchId);
 
-            if (checkError) console.error("[Backend] Error checking results:", checkError);
+                if (checkError) console.error("[Backend] Error checking results:", checkError);
 
-            if (!resultsCheck || resultsCheck.length === 0) {
-                console.log("[Backend] Real search returned 0 items. Triggering quality mock data...");
+                if (!resultsCheck || resultsCheck.length === 0) {
+                    console.log("[Backend] Real search returned 0 items. Inserting fallback mocks...");
+                    await insertMockResults(searchId, query);
+                    await supabase.from('searches').update({ is_simulated: true }).eq('id', searchId);
+                }
+
+            } catch (searchError) {
+                console.error("[Backend] Search Execution Failed:", searchError);
+
+                // Fallback to mock data on certain failures (like 403)
+                console.log("[Backend] Falling back to mock results due to error...");
                 await insertMockResults(searchId, query);
-            } else {
-                console.log(`[Backend] Real search returned ${resultsCheck.length} items.`);
+                await supabase.from('searches').update({ is_simulated: true }).eq('id', searchId);
             }
+
         } else {
-            console.warn("[Backend] Google API keys missing. Returning mock data for demo.");
-            const { data: search } = await supabase.from('searches').insert({
-                user_id: userId, query, source: 'mock', total_results: 3
-            }).select().single();
-            searchId = search.id;
-            await insertMockResults(searchId, query);
+            console.warn("[Backend] Google API keys missing. Cannot perform live search.");
+            return res.status(400).json({ error: "Google API keys missing. Please configure .env file." });
         }
 
         console.log(`[Backend] Search completed with ID: ${searchId}`);
@@ -111,9 +118,11 @@ app.get('/api/universal-finder/results', async (req, res) => {
         .order('rank', { ascending: true })
         .range(offset, offset + parseInt(pageSize) - 1);
 
+    const { data: searchInfo } = await supabase.from('searches').select('is_simulated').eq('id', searchId).single();
     if (err1) return res.status(500).json({ error: err1.message });
-    res.json({ results, total: count });
+    res.json({ results, total: count, isSimulated: searchInfo?.is_simulated });
 });
+
 
 // ---- 3️⃣ Save result as a partner -----------------------------------------
 app.post('/api/partners/from-search', async (req, res) => {
@@ -141,13 +150,73 @@ app.post('/api/partners/from-search', async (req, res) => {
 
     if (err2) return res.status(500).json({ error: err2.message });
 
+    // Fetch the inserted partner's ID
+    const { data: partner, error: err3 } = await supabase
+        .from('partners')
+        .select('id')
+        .eq('name', result.supplier_name)
+        .eq('company_id', company_id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
     // Mark result as saved
     await supabase
         .from('search_results')
         .update({ saved_to_partner: true })
         .eq('id', resultId);
 
-    res.json({ success: true });
+    res.json({ success: true, partner_id: partner?.id });
+});
+
+// ---- 3.5️⃣ Popular Suppliers ----------------------------------------------
+app.get('/api/partners/popular', async (req, res) => {
+    const { limit = 20 } = req.query;
+    try {
+        const { data: partners, error } = await supabase
+            .from('partners')
+            .select('id, name, country, city')
+            .limit(parseInt(limit))
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        res.json({ partners });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ---- 4️⃣ Database-aware AI Chat --------------------------------------------
+app.post('/api/universal-finder/chat', async (req, res) => {
+    const { prompt, history, company_id, searchId } = req.body;
+
+    try {
+        // Fetch context from DB: Partners, Catalog, AND the latest Search Results
+        const [partnersRes, catalogRes, searchResultsRes] = await Promise.all([
+            supabase.from('partners').select('name, country, weblink').eq('company_id', company_id).limit(10),
+            supabase.from('catalog').select('name, brand, part_number, price').eq('company_id', company_id).limit(10),
+            searchId ? supabase.from('search_results').select('supplier_name, supplier_location, url, snippet').eq('search_id', searchId).limit(5) : Promise.resolve({ data: [] })
+        ]);
+
+        const context = `
+        Current Celron Hub Context (Internal Data):
+        Partners: ${partnersRes.data?.map(p => `${p.name} (${p.country})`).join(', ') || 'None found'}
+        Catalog Items: ${catalogRes.data?.map(c => `${c.brand} ${c.name} (${c.part_number})`).join(', ') || 'None found'}
+
+        LIVE Search Results (Findings from Web):
+        ${searchResultsRes.data?.map(r => `- ${r.supplier_name} in ${r.supplier_location || 'Worldwide'}: ${r.snippet} (Link: ${r.url})`).join('\n') || 'No live results found yet.'}
+        `;
+
+        // We use the geminiService from the frontend path (since it's imported in server)
+        const { chatWithGemini } = await import('../src/lib/geminiService.js');
+        const finalPrompt = req.body.system_prompt ? `${req.body.system_prompt}\n\n${context}\n\nUser Question: ${prompt}` : `${context}\n\nUser Question: ${prompt}`;
+        const aiResponse = await chatWithGemini(finalPrompt, null, history);
+
+        res.json({ response: aiResponse });
+    } catch (e) {
+        console.error("[Chat Error]:", e);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // -------------------------------------------------------------------------

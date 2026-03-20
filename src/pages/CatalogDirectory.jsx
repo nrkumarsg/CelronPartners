@@ -10,8 +10,10 @@ import {
     ChevronLeft,
     ChevronRight,
     Package,
-    Wrench
+    Wrench,
+    QrCode
 } from 'lucide-react';
+import ScannerModal from '../components/ScannerModal';
 import { getCatalogItems, getAllCatalogItemsForExport, createCatalogItem } from '../lib/catalogService';
 import Papa from 'papaparse';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,11 +32,8 @@ const CatalogDirectory = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
+    const [showScanner, setShowScanner] = useState(false);
     const itemsPerPage = 50;
-
-    useEffect(() => {
-        fetchItems();
-    }, [currentPage, searchQuery, typeFilter]);
 
     const fetchItems = async () => {
         setLoading(true);
@@ -59,10 +58,21 @@ const CatalogDirectory = () => {
         setLoading(false);
     };
 
+    useEffect(() => {
+        fetchItems();
+    }, [currentPage, searchQuery, typeFilter]);
+
+
     const handleSearch = (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
         setCurrentPage(1); // Reset to first page on search
         fetchItems();
+    };
+
+    const handleScanSuccess = (decodedText) => {
+        setSearchQuery(decodedText);
+        setShowScanner(false);
+        // fetchItems is called automatically by useEffect due to searchQuery change
     };
 
     const handleExportCSV = async () => {
@@ -78,7 +88,8 @@ const CatalogDirectory = () => {
             'Specification': item.specification,
             'Quantity Available': item.quantity,
             'Selling Price': item.selling_price,
-            'Stored Location': item.stored_location
+            'Stored Location': item.stored_location,
+            'Barcode': item.barcode
         }));
 
         const csv = Papa.unparse(exportData);
@@ -119,6 +130,7 @@ const CatalogDirectory = () => {
                             quantity: row['Qty'] || row['Quantity Available'] || row['quantity'] ? parseInt(row['Qty'] || row['Quantity Available'] || row['quantity'], 10) : 0,
                             selling_price: row['Price'] || row['Selling Price'] || row['selling_price'] ? parseFloat(row['Price'] || row['Selling Price'] || row['selling_price']) : 0,
                             stored_location: row['Location'] || row['Stored Location'] || row['stored_location'] || '',
+                            barcode: row['Barcode'] || row['barcode'] || '',
                             company_id: profile?.company_id || 'd0000000-0000-0000-0000-000000000001'
                         };
                         await createCatalogItem(payload);
@@ -141,9 +153,19 @@ const CatalogDirectory = () => {
     return (
         <div className="animate-fade-in">
             <div className="page-header">
-                <div>
-                    <h1 className="page-title">Products & Services Catalog</h1>
-                    <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>Manage your supply parts and services</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="btn btn-secondary hide-on-print"
+                        style={{ padding: '8px', minWidth: 'auto', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px' }}
+                        title="Go Back"
+                    >
+                        <ChevronLeft size={20} />
+                    </button>
+                    <div>
+                        <h1 className="page-title">Products & Services Catalog</h1>
+                        <p style={{ color: 'var(--text-secondary)', marginTop: '4px' }}>Manage your supply parts and services</p>
+                    </div>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }} className="hide-on-print">
                     <input type="file" accept=".csv" ref={fileInputRef} onChange={handleImportCSV} style={{ display: 'none' }} />
@@ -155,6 +177,9 @@ const CatalogDirectory = () => {
                     </button>
                     <button className="btn btn-secondary" onClick={handlePrint}>
                         <Printer size={18} /> Print
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => navigate('/catalog/labels')}>
+                        <Printer size={18} /> Print Labels
                     </button>
                     <button className="btn btn-primary" onClick={() => navigate('/catalog/new')}>
                         <Plus size={18} /> Add New Item
@@ -168,11 +193,19 @@ const CatalogDirectory = () => {
                         <Search size={20} style={{ color: 'var(--text-secondary)' }} />
                         <input
                             type="text"
-                            placeholder="Search by name, specification, location..."
+                            placeholder="Scan or Search catalog..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
-                        <button type="submit" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>Search</button>
+                        <button
+                            type="button"
+                            className="btn btn-secondary"
+                            style={{ padding: '6px 10px', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', background: showScanner ? 'var(--accent)' : '', color: showScanner ? '#fff' : '' }}
+                            onClick={() => setShowScanner(true)}
+                        >
+                            <QrCode size={16} /> Scan
+                        </button>
+                        <button type="submit" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.85rem' }}>Search</button>
                     </form>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -204,6 +237,7 @@ const CatalogDirectory = () => {
                                 <th>Location</th>
                                 <th>Qty</th>
                                 <th>Price</th>
+                                <th>Barcode</th>
                                 <th>Specification</th>
                                 <th className="no-print">Actions</th>
                             </tr>
@@ -239,6 +273,13 @@ const CatalogDirectory = () => {
                                         <td>{item.stored_location || '-'}</td>
                                         <td>{item.quantity !== null && item.quantity !== undefined ? item.quantity : '-'}</td>
                                         <td>{item.selling_price ? `$${item.selling_price}` : '-'}</td>
+                                        <td>
+                                            {item.barcode ? (
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent)', fontSize: '0.85rem' }}>
+                                                    <QrCode size={14} /> {item.barcode}
+                                                </div>
+                                            ) : '-'}
+                                        </td>
                                         <td style={{ maxWidth: '300px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.specification}>{item.specification || '-'}</td>
                                         <td className="hide-on-print">
                                             <button
@@ -297,6 +338,12 @@ const CatalogDirectory = () => {
                     </div>
                 )}
             </div>
+
+            <ScannerModal
+                isOpen={showScanner}
+                onClose={() => setShowScanner(false)}
+                onScanSuccess={handleScanSuccess}
+            />
         </div>
     );
 };

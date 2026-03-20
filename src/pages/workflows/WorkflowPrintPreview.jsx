@@ -1,0 +1,152 @@
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { getWorkflowDocumentById } from '../../lib/workflowV2Service';
+import { getDocumentSettings } from '../../lib/store';
+import { useAuth } from '../../contexts/AuthContext';
+import { Printer, ArrowLeft, Download } from 'lucide-react';
+import html2pdf from 'html2pdf.js';
+import WorkflowDocumentLayout from '../../components/workflow/WorkflowDocumentLayout';
+
+export default function WorkflowPrintPreview() {
+    const { id } = useParams();
+    const navigate = useNavigate();
+    const { profile } = useAuth();
+    const [doc, setDoc] = useState(null);
+    const [settings, setSettings] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [logoBase64, setLogoBase64] = useState('');
+    const [signatureBase64, setSignatureBase64] = useState('');
+    const [paynowBase64, setPaynowBase64] = useState('');
+
+    const toBase64 = url => fetch(url, { mode: 'cors' })
+        .then(response => response.blob())
+        .then(blob => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        }));
+
+    useEffect(() => {
+        if (id && profile?.company_id) {
+            fetchData();
+        }
+    }, [id, profile]);
+
+    const fetchData = async () => {
+        setLoading(true);
+        try {
+            const [docRes, settingsRes] = await Promise.all([
+                getWorkflowDocumentById(id),
+                getDocumentSettings(profile?.company_id)
+            ]);
+
+            if (docRes.data) {
+                setDoc(docRes.data);
+            }
+            if (settingsRes) {
+                setSettings(settingsRes);
+                if (settingsRes.logo_url) {
+                    toBase64(settingsRes.logo_url).then(setLogoBase64).catch(e => console.error("Logo B64 error:", e));
+                }
+                if (settingsRes.signature_url) {
+                    toBase64(settingsRes.signature_url).then(setSignatureBase64).catch(e => console.error("Signature B64 error:", e));
+                }
+                if (settingsRes.paynow_url) {
+                    toBase64(settingsRes.paynow_url).then(setPaynowBase64).catch(e => console.error("PayNow B64 error:", e));
+                }
+            }
+
+        } catch (error) {
+            console.error("Error fetching print data:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleBack = () => {
+        if (window.history.length > 2) {
+            navigate(-1);
+        } else {
+            window.close();
+            setTimeout(() => navigate('/workflows'), 100);
+        }
+    };
+
+    const handleDownload = () => {
+        const element = document.getElementById('print-paper-content');
+        const opt = {
+            margin: 10,
+            filename: `${doc.document_type || 'Document'}_${doc.document_no || 'Draft'}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true, logging: false },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+        html2pdf().set(opt).from(element).save();
+    };
+
+    if (loading) return <div className="text-center py-20">Loading Document Preview...</div>;
+    if (!doc) return <div className="text-center py-20 text-red-500">Document not found</div>;
+
+    return (
+        <div style={{ background: '#e2e8f0', minHeight: '100vh', padding: '20px', fontFamily: 'Inter, sans-serif' }}>
+            {/* Screen Actions (Hidden in Print) */}
+            <div className="print-hide" style={{ maxWidth: '210mm', margin: '0 auto 20px', display: 'flex', justifyContent: 'space-between' }}>
+                <button
+                    onClick={handleBack}
+                    style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}
+                >
+                    <ArrowLeft size={16} /> Back
+                </button>
+                <div style={{ display: 'flex', gap: '12px' }}>
+                    <button
+                        onClick={handleDownload}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                    >
+                        <Download size={18} /> Download PDF
+                    </button>
+                    <button
+                        onClick={() => window.print()}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 24px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                    >
+                        <Printer size={18} /> Print Document
+                    </button>
+                </div>
+            </div>
+
+            {/* A4 Paper Container using Unified Layout */}
+            <div id="print-paper-content">
+                <WorkflowDocumentLayout 
+                    doc={doc} 
+                    settings={settings}
+                    logoBase64={logoBase64}
+                    signatureBase64={signatureBase64}
+                    paynowBase64={paynowBase64}
+                />
+            </div>
+
+            <style dangerouslySetInnerHTML={{
+                __html: `
+                @media print {
+                    body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #fff !important; }
+                    .print-hide { display: none !important; }
+                    .print-paper { 
+                        box-shadow: none !important; 
+                        margin: 0 !important; 
+                        padding: 0 !important;
+                        width: 100% !important; 
+                        max-width: 100% !important;
+                        min-height: auto !important;
+                        border: none !important;
+                        border-radius: 0 !important;
+                        background: transparent !important;
+                        box-sizing: border-box !important;
+                    }
+                    @page { margin: 10mm; size: A4 portrait; }
+                }
+                `
+            }} />
+        </div>
+    );
+}
+

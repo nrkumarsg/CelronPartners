@@ -7,8 +7,20 @@ import {
     ArrowLeft,
     Plus,
     Search as SearchIcon,
-    Globe
+    Globe,
+    Camera,
+    UploadCloud,
+    Image as ImageIcon,
+    Loader,
+    Cloud,
+    QrCode,
+    CheckCircle2,
+    AlertCircle,
+    Link,
+    RefreshCw,
+    ExternalLink
 } from 'lucide-react';
+import ScannerModal from '../components/ScannerModal';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { useAuth } from '../contexts/AuthContext';
@@ -24,8 +36,13 @@ import {
     updatePurchaseHistory,
     deletePurchaseHistory
 } from '../lib/purchaseHistoryService';
+import { getDocumentSettings } from '../lib/store';
 import { supabase } from '../lib/supabase';
+
 import { uploadFile } from '../lib/store';
+import { uploadFileToDrive, getOrCreateFolder, makeFilePublic, getDirectImageUrl, checkFileExists } from '../lib/driveService';
+import { connectGoogleAPI, validateToken } from '../lib/googleAuthService';
+import GDriveConnectionModal from '../components/common/GDriveConnectionModal';
 
 const CatalogForm = () => {
     const { id } = useParams();
@@ -37,7 +54,17 @@ const CatalogForm = () => {
 
     const [loading, setLoading] = useState(!isNewItem);
     const [saving, setSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState('details'); // 'details' or 'purchaseHistory'
+    const [activeTab, setActiveTab] = useState('details'); // 'details', 'purchaseHistory', or 'photos'
+    const [uploadingPhotos, setUploadingPhotos] = useState(false);
+    const [showScanner, setShowScanner] = useState(false);
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const [driveFolderId, setDriveFolderId] = useState(null);
+    const [photosFolderId, setPhotosFolderId] = useState(null);
+    const [datasheetsFolderId, setDatasheetsFolderId] = useState(null);
+    const [photoExistence, setPhotoExistence] = useState({}); // { [index]: boolean }
+    const photoInputRef = useRef(null);
+    const datasheetInputRef = useRef(null);
+    const [uploadingDatasheet, setUploadingDatasheet] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -47,28 +74,66 @@ const CatalogForm = () => {
         quantity: '',
         selling_price: '',
         stored_location: '',
-        details: ''
+        details: '',
+        photos: [],
+        datasheet_url: '',
+        barcode: ''
     });
 
     // Purchase History State
     const [purchaseHistory, setPurchaseHistory] = useState([]);
     const [partners, setPartners] = useState([]);
     const [showPurchaseModal, setShowPurchaseModal] = useState(false);
-    const [editingPurchaseId, setEditingPurchaseId] = useState(null);
+    const [editingPurchaseId, setEditingPurchaseId] = useState(null);    // State to track if we need to show the purchase modal
     const [purchaseFormData, setPurchaseFormData] = useState({
         supplier_id: '',
-        last_purchase_price: '',
         purchase_date: new Date().toISOString().split('T')[0],
+        last_purchase_price: '',
         details: ''
     });
 
     useEffect(() => {
-        if (!isNewItem) {
+        // Restore pending data from before Google redirect
+        const pendingData = sessionStorage.getItem('pending_catalog_data');
+        if (pendingData) {
+            try {
+                const parsed = JSON.parse(pendingData);
+                setFormData(parsed);
+                setActiveTab('photos'); // Jump back to photos tab
+                sessionStorage.removeItem('pending_catalog_data');
+            } catch (e) {
+                console.error('Failed to parse pending catalog data:', e);
+            }
+        }
+
+        if (!isNewItem && profile) {
             fetchItemData();
             fetchPurchaseHistory();
+            checkDriveConnectivity();
         }
         fetchPartners();
-    }, [id]);
+    }, [id, profile]);
+
+    const checkDriveConnectivity = async () => {
+        const token = sessionStorage.getItem('google_contacts_token');
+        const isValid = await validateToken(token);
+        if (token && isValid) {
+            try {
+                const settings = await getDocumentSettings(profile?.company_id);
+                if (settings?.gdrive_inventory_photos_id) {
+                    setPhotosFolderId(settings.gdrive_inventory_photos_id);
+                }
+                if (settings?.gdrive_inventory_datasheets_id) {
+                    setDatasheetsFolderId(settings.gdrive_inventory_datasheets_id);
+                }
+                // Fallback / Legacy root
+                const folderId = await getOrCreateFolder(token, 'Catalog Photos');
+                setDriveFolderId(folderId);
+            } catch (err) {
+                console.error('Failed to get Drive folder:', err);
+            }
+        }
+    };
 
     const fetchItemData = async () => {
         setLoading(true);
@@ -81,7 +146,10 @@ const CatalogForm = () => {
                 quantity: data.quantity !== null ? data.quantity : '',
                 selling_price: data.selling_price !== null ? data.selling_price : '',
                 stored_location: data.stored_location || '',
-                details: data.details || ''
+                details: data.details || '',
+                photos: data.photos || [],
+                datasheet_url: data.datasheet_url || '',
+                barcode: data.barcode || ''
             });
         } else {
             console.error('Failed to fetch item', error);
@@ -109,8 +177,25 @@ const CatalogForm = () => {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
+    const handleScanSuccess = (decodedText) => {
+        setFormData(prev => ({ ...prev, barcode: decodedText }));
+        setShowScanner(false);
+    };
+
     const handleDetailsChange = (content) => {
         setFormData(prev => ({ ...prev, details: content }));
+    };
+
+    const generateAutoBarcode = () => {
+        const timestamp = Date.now().toString().slice(-6);
+        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        return `CEL-${timestamp}-${random}`;
+    };
+
+    const handleBarcodeFocus = () => {
+        if (isNewItem && !formData.barcode) {
+            setFormData(prev => ({ ...prev, barcode: generateAutoBarcode() }));
+        }
     };
 
     const handleSave = async (e) => {
@@ -123,6 +208,11 @@ const CatalogForm = () => {
             selling_price: formData.selling_price === '' ? null : parseFloat(formData.selling_price)
         };
 
+        // Auto-generate barcode if empty for new item
+        if (isNewItem && !dataToSave.barcode) {
+            dataToSave.barcode = generateAutoBarcode();
+        }
+
         if (isNewItem && profile?.company_id) {
             dataToSave.company_id = profile.company_id;
         }
@@ -133,7 +223,8 @@ const CatalogForm = () => {
             if (!result.error && result.data) {
                 navigate(`/catalog/${result.data.id}`);
             } else {
-                alert('Failed to create item');
+                console.error('Create item error:', result.error);
+                alert('Failed to create item: ' + (result.error?.message || 'Unknown error'));
             }
         } else {
             result = await updateCatalogItem(id, dataToSave);
@@ -241,6 +332,128 @@ const CatalogForm = () => {
                 fetchPurchaseHistory();
             }
         }
+    };
+
+    const handleInitiateUpload = async () => {
+        const token = sessionStorage.getItem('google_contacts_token');
+        const isValid = await validateToken(token);
+        
+        if (!token || !isValid) {
+            setIsAuthModalOpen(true);
+            return;
+        }
+        photoInputRef.current.click();
+    };
+
+    const handlePhotoUpload = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        const token = sessionStorage.getItem('google_contacts_token');
+        const expires = sessionStorage.getItem('google_contacts_expires');
+
+        if (!token) {
+            setIsAuthModalOpen(true);
+            return;
+        }
+
+        setUploadingPhotos(true);
+        const newPhotos = [...(formData.photos || [])];
+
+        try {
+            // Get or create a specific folder named 'Catalog Photos' in the user's root
+            const folderId = photosFolderId || await getOrCreateFolder(token, 'Catalog Photos');
+
+            for (const file of files) {
+                // Upload with folder context
+                const driveFile = await uploadFileToDrive(token, file, {
+                    title: `Item_${id || 'new'}_${Date.now()}_${file.name}`,
+                    folderId: folderId
+                });
+
+                // Make file publicly viewable so thumbnails work
+                await makeFilePublic(token, driveFile.id);
+
+                // Store the webViewLink (accessible via browser)
+                newPhotos.push(driveFile.webViewLink);
+            }
+            setFormData(prev => ({ ...prev, photos: newPhotos }));
+            // Re-check folder
+            if (!photosFolderId) {
+                setPhotosFolderId(folderId);
+            }
+        } catch (err) {
+            console.error('Photo upload to GDrive failed:', err);
+            alert('Error: ' + err.message);
+        } finally {
+            setUploadingPhotos(false);
+            if (e.target) e.target.value = '';
+        }
+    };
+    
+    const handleInitiateDatasheetUpload = async () => {
+        const token = sessionStorage.getItem('google_contacts_token');
+        const isValid = await validateToken(token);
+        
+        if (!token || !isValid) {
+            setIsAuthModalOpen(true);
+            return;
+        }
+        datasheetInputRef.current.click();
+    };
+
+    const handleDatasheetUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const token = sessionStorage.getItem('google_contacts_token');
+        if (!token) {
+            setIsAuthModalOpen(true);
+            return;
+        }
+
+        setUploadingDatasheet(true);
+
+        try {
+            // Use Tier 05 Datasheets folder or fallback
+            const folderId = datasheetsFolderId || await getOrCreateFolder(token, 'Catalog Datasheets');
+
+            const driveFile = await uploadFileToDrive(token, file, {
+                title: `Datasheet_${id || 'new'}_${Date.now()}_${file.name}`,
+                folderId: folderId
+            });
+
+            await makeFilePublic(token, driveFile.id);
+
+            setFormData(prev => ({ ...prev, datasheet_url: driveFile.webViewLink }));
+            
+            if (!datasheetsFolderId) setDatasheetsFolderId(folderId);
+            
+            alert('Datasheet uploaded successfully!');
+        } catch (err) {
+            console.error('Datasheet upload failed:', err);
+            alert('Error: ' + err.message);
+        } finally {
+            setUploadingDatasheet(false);
+            if (e.target) e.target.value = '';
+        }
+    };
+
+    const handleDeletePhoto = (indexToDelete) => {
+        if (window.confirm('Are you sure you want to remove this photo?')) {
+            setFormData(prev => ({
+                ...prev,
+                photos: prev.photos.filter((_, index) => index !== indexToDelete)
+            }));
+        }
+    };
+
+    const getThumbnailUrl = (photoUrl) => {
+        if (!photoUrl) return '';
+        // If it's a Supabase URL (fallback for old items)
+        if (photoUrl.includes('supabase.co')) return photoUrl;
+        // Use the direct GDrive image URL helper
+        return getDirectImageUrl(photoUrl);
     };
 
     // -------------------------------------
@@ -385,287 +598,563 @@ const CatalogForm = () => {
                             Purchase History ({purchaseHistory.length})
                         </button>
                     )}
+                    <button
+                        style={{
+                            padding: '12px 24px',
+                            background: activeTab === 'photos' ? '#ffffff' : 'transparent',
+                            border: '1px solid',
+                            borderColor: activeTab === 'photos' ? 'var(--border-color) var(--border-color) transparent' : 'transparent',
+                            borderRadius: '8px 8px 0 0',
+                            fontWeight: activeTab === 'photos' ? 600 : 500,
+                            color: activeTab === 'photos' ? 'var(--accent)' : 'var(--text-secondary)',
+                            marginBottom: '-1px',
+                            cursor: 'pointer'
+                        }}
+                        onClick={() => setActiveTab('photos')}
+                    >
+                        Media & Photos ({(formData.photos || []).length})
+                    </button>
+
                 </div>
             </div>
 
-            {activeTab === 'details' && (
-                <div className="glass-panel">
-                    <form onSubmit={handleSave}>
+            {
+                activeTab === 'details' && (
+                    <div className="glass-panel">
+                        <form onSubmit={handleSave}>
 
-                        <div className="grid-2">
-                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                                <label className="form-label">Type</label>
-                                <select
-                                    className="form-select"
-                                    name="type"
-                                    value={formData.type}
-                                    onChange={handleInputChange}
-                                >
-                                    <option value="Supply Part">Supply Part</option>
-                                    <option value="Service">Service</option>
-                                </select>
-                            </div>
-
-                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                    <label className="form-label" style={{ marginBottom: 0 }}>Item Name *</label>
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary"
-                                        style={{ padding: '4px 12px', fontSize: '0.85rem' }}
-                                        onClick={handleWebSearch}
-                                        title="Search Web for this item"
+                            <div className="grid-2">
+                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                    <label className="form-label">Type</label>
+                                    <select
+                                        className="form-select"
+                                        name="type"
+                                        value={formData.type}
+                                        onChange={handleInputChange}
                                     >
-                                        <Globe size={14} /> Search Web
-                                    </button>
+                                        <option value="Supply Part">Supply Part</option>
+                                        <option value="Service">Service</option>
+                                    </select>
                                 </div>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    name="name"
-                                    value={formData.name}
-                                    onChange={handleInputChange}
-                                    required
-                                    placeholder="e.g. Cummins KTA50 Fuel Injector"
-                                />
-                            </div>
 
-                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                                <label className="form-label">Specification</label>
-                                <textarea
-                                    className="form-textarea"
-                                    name="specification"
-                                    value={formData.specification}
-                                    onChange={handleInputChange}
-                                    rows="3"
-                                    placeholder="Make, Model, Serial, Technical Specs..."
-                                />
-                            </div>
+                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <label className="form-label" style={{ marginBottom: 0 }}>Item Name *</label>
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            style={{ padding: '4px 12px', fontSize: '0.85rem' }}
+                                            onClick={handleWebSearch}
+                                            title="Search Web for this item"
+                                        >
+                                            <Globe size={14} /> Search Web
+                                        </button>
+                                    </div>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        name="name"
+                                        value={formData.name}
+                                        onChange={handleInputChange}
+                                        required
+                                        placeholder="e.g. Cummins KTA50 Fuel Injector"
+                                    />
+                                </div>
 
-                            <div className="form-group">
-                                <label className="form-label">Selling Price</label>
-                                <div style={{ position: 'relative' }}>
-                                    <span style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>$</span>
+                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                    <label className="form-label">Specification</label>
+                                    <textarea
+                                        className="form-textarea"
+                                        name="specification"
+                                        value={formData.specification}
+                                        onChange={handleInputChange}
+                                        rows="3"
+                                        placeholder="Make, Model, Serial, Technical Specs..."
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Selling Price</label>
+                                    <div style={{ position: 'relative' }}>
+                                        <span style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>$</span>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="form-input"
+                                            style={{ paddingLeft: '32px' }}
+                                            name="selling_price"
+                                            value={formData.selling_price}
+                                            onChange={handleInputChange}
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Quantity Available</label>
                                     <input
                                         type="number"
-                                        step="0.01"
                                         className="form-input"
-                                        style={{ paddingLeft: '32px' }}
-                                        name="selling_price"
-                                        value={formData.selling_price}
+                                        name="quantity"
+                                        value={formData.quantity}
                                         onChange={handleInputChange}
-                                        placeholder="0.00"
+                                        placeholder="e.g. 5"
                                     />
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>Leave empty for services.</span>
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Stored Location</label>
+                                    <input
+                                        type="text"
+                                        className="form-input"
+                                        name="stored_location"
+                                        value={formData.stored_location}
+                                        onChange={handleInputChange}
+                                        placeholder="e.g. Warehouse A, Shelf 3"
+                                    />
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Barcode / QR Code</label>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <div style={{ position: 'relative', flex: 1 }}>
+                                            <QrCode size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }} />
+                                            <input
+                                                type="text"
+                                                className="form-input"
+                                                style={{ paddingLeft: '40px' }}
+                                                name="barcode"
+                                                value={formData.barcode}
+                                                onChange={handleInputChange}
+                                                onFocus={handleBarcodeFocus}
+                                                placeholder="Scan or enter barcode"
+                                            />
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            onClick={() => setShowScanner(true)}
+                                            style={{ padding: '0 12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            title="Scan with Camera"
+                                        >
+                                            <Camera size={20} />
+                                        </button>
+                                    </div>
+                                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>Unique ID for mobile auto-scanning</span>
+                                </div>
+
+                                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                    <label className="form-label">Additional Details & Photos</label>
+                                    <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-secondary)', overflow: 'hidden' }}>
+                                        <ReactQuill
+                                            ref={quillRef}
+                                            theme="snow"
+                                            value={formData.details}
+                                            onChange={handleDetailsChange}
+                                            modules={quillModules}
+                                            style={{ height: '300px', borderBottom: 'none' }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="form-group">
-                                <label className="form-label">Quantity Available</label>
-                                <input
-                                    type="number"
-                                    className="form-input"
-                                    name="quantity"
-                                    value={formData.quantity}
-                                    onChange={handleInputChange}
-                                    placeholder="e.g. 5"
-                                />
-                                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'block' }}>Leave empty for services.</span>
-                            </div>
+                            <button type="submit" style={{ display: 'none' }}>Submit</button>
+                        </form>
+                    </div>
+                )
+            }
 
-                            <div className="form-group">
-                                <label className="form-label">Stored Location</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    name="stored_location"
-                                    value={formData.stored_location}
-                                    onChange={handleInputChange}
-                                    placeholder="e.g. Warehouse A, Shelf 3"
-                                />
-                            </div>
+            <ScannerModal
+                isOpen={showScanner}
+                onClose={() => setShowScanner(false)}
+                onScanSuccess={handleScanSuccess}
+            />
 
-                            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                                <label className="form-label">Additional Details & Photos</label>
-                                <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', background: 'var(--bg-secondary)', overflow: 'hidden' }}>
-                                    <ReactQuill
-                                        ref={quillRef}
-                                        theme="snow"
-                                        value={formData.details}
-                                        onChange={handleDetailsChange}
-                                        modules={quillModules}
-                                        style={{ height: '300px', borderBottom: 'none' }}
-                                    />
-                                </div>
-                            </div>
+            {
+                activeTab === 'purchaseHistory' && !isNewItem && (
+                    <div className="glass-panel animate-fade-in">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Past Purchases</h3>
+                            <button
+                                className="btn btn-primary"
+                                style={{ padding: '6px 16px', fontSize: '0.9rem' }}
+                                onClick={openNewPurchaseModal}
+                            >
+                                <Plus size={16} /> Record Purchase
+                            </button>
                         </div>
 
-                        <button type="submit" style={{ display: 'none' }}>Submit</button>
-                    </form>
+                        <div className="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Supplier</th>
+                                        <th>Price/pc</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {purchaseHistory.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="4" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-secondary)' }}>
+                                                No purchase history recorded yet.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        purchaseHistory.map(purchase => (
+                                            <tr key={purchase.id}>
+                                                <td>{purchase.purchase_date ? new Date(purchase.purchase_date).toLocaleDateString() : '-'}</td>
+                                                <td>{purchase.supplier?.name || 'Unknown Supplier'}</td>
+                                                <td>{purchase.last_purchase_price ? `$${purchase.last_purchase_price}` : '-'}</td>
+                                                <td>
+                                                    <div style={{ display: 'flex', gap: '16px' }}>
+                                                        <button
+                                                            style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}
+                                                            onClick={() => openEditPurchaseModal(purchase)}
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                        <button
+                                                            style={{ color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}
+                                                            onClick={() => handleDeletePurchase(purchase.id)}
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )
+            }
+
+            {activeTab === 'photos' && isNewItem && (
+                <div className="glass-panel animate-fade-in" style={{ padding: '48px', textAlign: 'center' }}>
+                    <div style={{
+                        width: '64px', height: '64px', background: '#f1f5f9', borderRadius: '50%',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        margin: '0 auto 16px', color: '#94a3b8'
+                    }}>
+                        <ImageIcon size={32} />
+                    </div>
+                    <h4 style={{ color: '#475569', fontSize: '1.1rem', fontWeight: 600 }}>Save the item first</h4>
+                    <p style={{ color: '#94a3b8', marginTop: '8px', marginBottom: '24px' }}>
+                        Please fill in the item details and click <strong>Save Changes</strong> before uploading photos.
+                    </p>
+                    <button
+                        className="btn btn-primary"
+                        onClick={() => setActiveTab('details')}
+                    >
+                        Go to Item Details
+                    </button>
                 </div>
             )}
 
-            {activeTab === 'purchaseHistory' && !isNewItem && (
-                <div className="glass-panel">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                        <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Past Purchases</h3>
-                        <button
-                            className="btn btn-primary"
-                            style={{ padding: '6px 16px', fontSize: '0.9rem' }}
-                            onClick={openNewPurchaseModal}
-                        >
-                            <Plus size={16} /> Record Purchase
-                        </button>
+            {activeTab === 'photos' && !isNewItem && (
+                <div className="glass-panel animate-fade-in" style={{ padding: '32px' }}>
+                    {/* Datasheet Section */}
+                    <div style={{ 
+                        background: '#f8fafc', 
+                        borderRadius: '16px', 
+                        padding: '24px', 
+                        marginBottom: '32px',
+                        border: '1px solid #e2e8f0',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                    }}>
+                        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                            <div style={{ 
+                                width: '48px', 
+                                height: '48px', 
+                                background: '#fff', 
+                                borderRadius: '12px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center',
+                                color: formData.datasheet_url ? 'var(--accent)' : '#94a3b8',
+                                border: '1px solid #e2e8f0'
+                            }}>
+                                <ImageIcon size={24} />
+                            </div>
+                            <div>
+                                <h4 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Product Datasheet</h4>
+                                <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '2px' }}>
+                                    {formData.datasheet_url ? 'Technical PDF/Doc linked successfully' : 'Not uploaded yet'}
+                                </p>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            {formData.datasheet_url && (
+                                <a 
+                                    href={formData.datasheet_url} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="btn btn-secondary"
+                                    style={{ padding: '8px 16px', fontSize: '0.9rem' }}
+                                >
+                                    <ExternalLink size={16} /> View Current
+                                </a>
+                            )}
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={handleInitiateDatasheetUpload}
+                                disabled={uploadingDatasheet}
+                                style={{ padding: '8px 16px', fontSize: '0.9rem' }}
+                            >
+                                {uploadingDatasheet ? <Loader size={16} className="animate-spin" /> : <UploadCloud size={16} />}
+                                {uploadingDatasheet ? 'Uploading...' : (formData.datasheet_url ? 'Update Datasheet' : 'Upload Datasheet')}
+                            </button>
+                            <input
+                                ref={datasheetInputRef}
+                                type="file"
+                                accept=".pdf,.doc,.docx,.xls,.xlsx"
+                                onChange={handleDatasheetUpload}
+                                hidden
+                            />
+                        </div>
                     </div>
 
-                    <div className="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Date</th>
-                                    <th>Supplier</th>
-                                    <th>Price/pc</th>
-                                    <th>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {purchaseHistory.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="4" style={{ textAlign: 'center', padding: '32px 0', color: 'var(--text-secondary)' }}>
-                                            No purchase history recorded yet.
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    purchaseHistory.map(purchase => (
-                                        <tr key={purchase.id}>
-                                            <td>{purchase.purchase_date ? new Date(purchase.purchase_date).toLocaleDateString() : '-'}</td>
-                                            <td>{purchase.supplier?.name || 'Unknown Supplier'}</td>
-                                            <td>{purchase.last_purchase_price ? `$${purchase.last_purchase_price}` : '-'}</td>
-                                            <td>
-                                                <div style={{ display: 'flex', gap: '16px' }}>
-                                                    <button
-                                                        style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}
-                                                        onClick={() => openEditPurchaseModal(purchase)}
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                    <button
-                                                        style={{ color: 'var(--danger)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500 }}
-                                                        onClick={() => handleDeletePurchase(purchase.id)}
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                        <div>
+                            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>Product Gallery</h3>
+                            <p style={{ color: '#64748b', fontSize: '0.9rem', marginTop: '4px' }}>Upload and manage high-quality photos for this item</p>
+                        </div>
+                        <button 
+                            className={`btn ${uploadingPhotos ? 'btn-secondary' : 'btn-primary'}`} 
+                            onClick={handleInitiateUpload}
+                            disabled={uploadingPhotos}
+                            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            {uploadingPhotos ? <Loader size={18} className="animate-spin" /> : <UploadCloud size={18} />}
+                            {uploadingPhotos ? 'Uploading...' : 'Upload Photos'}
+                        </button>
+                        <input
+                            ref={photoInputRef}
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            onChange={handlePhotoUpload}
+                            hidden
+                        />
                     </div>
+
+                    {(formData.photos || []).length === 0 ? (
+                        <div style={{
+                            border: '2px dashed var(--border-color)',
+                            borderRadius: '16px',
+                            padding: '64px',
+                            textAlign: 'center',
+                            background: 'rgba(248, 250, 252, 0.5)'
+                        }}>
+                            <div style={{
+                                width: '64px',
+                                height: '64px',
+                                background: '#f1f5f9',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                margin: '0 auto 16px',
+                                color: '#94a3b8'
+                            }}>
+                                <ImageIcon size={32} />
+                            </div>
+                            <h4 style={{ color: '#475569', fontSize: '1.1rem', fontWeight: 600 }}>No photos yet</h4>
+                            <p style={{ color: '#94a3b8', marginTop: '8px', marginBottom: '24px' }}>Add photos to help identify this item in the catalog</p>
+                            <button className="btn btn-secondary" onClick={handleInitiateUpload}>
+                                Browse Files
+                            </button>
+                        </div>
+                    ) : (
+                        <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                            gap: '24px'
+                        }}>
+                            {(formData.photos || []).map((photo, index) => (
+                                <div key={index} className="glass-panel" style={{ padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0', background: '#fff' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                                        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                            <div style={{ width: '60px', height: '60px', background: '#f8fafc', borderRadius: '12px', overflow: 'hidden', border: '1px solid #f1f5f9' }}>
+                                                <img 
+                                                    src={getThumbnailUrl(photo)} 
+                                                    alt={`Photo ${index + 1}`} 
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                    onClick={() => window.open(photo, '_blank')}
+                                                />
+                                            </div>
+                                            <div>
+                                                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>Item Photo #{index + 1}</h3>
+                                                <code style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ID: {photo.split('/d/')[1]?.split('/')[0] || 'GDRIVE_FILE'}</code>
+                                            </div>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleDeletePhoto(index)}
+                                            style={{ background: '#fef2f2', border: 'none', color: '#ef4444', padding: '8px', borderRadius: '10px', cursor: 'pointer' }}
+                                            title="Delete Photo"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            {driveFolderId ? <CheckCircle2 size={14} color="#22c55e" /> : <AlertCircle size={14} color="#f59e0b" />}
+                                            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Drive Folder Ready</span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <CheckCircle2 size={14} color="#22c55e" />
+                                            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Photo Linked</span>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        <a 
+                                            href={photo} 
+                                            target="_blank" 
+                                            rel="noreferrer" 
+                                            className="btn btn-secondary"
+                                            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.9rem', padding: '8px' }}
+                                        >
+                                            <ExternalLink size={16} /> View
+                                        </a>
+                                        <a 
+                                            href={photo}
+                                            target="_blank" 
+                                            rel="noreferrer" 
+                                            className="btn btn-secondary"
+                                            style={{ padding: '8px', borderRadius: '10px' }}
+                                            title="Open Folder"
+                                        >
+                                            <Link size={16} />
+                                        </a>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <style>{`
+                        .photo-card:hover { transform: scale(1.02); }
+                        .photo-card:hover .photo-overlay { opacity: 1; }
+                    `}</style>
                 </div>
             )}
 
             {/* Purchase Modal */}
-            {showPurchaseModal && (
-                <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', padding: '24px' }}>
-                    <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', background: 'var(--bg-secondary)' }}>
-                        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>
-                                {editingPurchaseId ? 'Edit Purchase Record' : 'Add Purchase Record'}
-                            </h3>
-                            <button
-                                onClick={() => setShowPurchaseModal(false)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
+            {
+                showPurchaseModal && (
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', padding: '24px' }}>
+                        <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden', background: 'var(--bg-secondary)' }}>
+                            <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>
+                                    {editingPurchaseId ? 'Edit Purchase Record' : 'Add Purchase Record'}
+                                </h3>
+                                <button
+                                    onClick={() => setShowPurchaseModal(false)}
+                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                                >
+                                    <X size={20} />
+                                </button>
+                            </div>
 
-                        <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
-                            <form id="purchaseForm" onSubmit={handleSavePurchase}>
-                                <div className="grid-2">
-                                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                                        <label className="form-label">Supplier *</label>
-                                        <select
-                                            className="form-select"
-                                            name="supplier_id"
-                                            value={purchaseFormData.supplier_id}
-                                            onChange={handlePurchaseInputChange}
-                                            required
-                                        >
-                                            <option value="">Select a supplier...</option>
-                                            {partners.map(p => (
-                                                <option key={p.id} value={p.id}>{p.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div className="form-group">
-                                        <label className="form-label">Purchase Date</label>
-                                        <input
-                                            type="date"
-                                            className="form-input"
-                                            name="purchase_date"
-                                            value={purchaseFormData.purchase_date}
-                                            onChange={handlePurchaseInputChange}
-                                        />
-                                    </div>
-
-                                    <div className="form-group">
-                                        <label className="form-label">Price per pc</label>
-                                        <div style={{ position: 'relative' }}>
-                                            <span style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>$</span>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                className="form-input"
-                                                style={{ paddingLeft: '32px' }}
-                                                name="last_purchase_price"
-                                                value={purchaseFormData.last_purchase_price}
+                            <div style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
+                                <form id="purchaseForm" onSubmit={handleSavePurchase}>
+                                    <div className="grid-2">
+                                        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                            <label className="form-label">Supplier *</label>
+                                            <select
+                                                className="form-select"
+                                                name="supplier_id"
+                                                value={purchaseFormData.supplier_id}
                                                 onChange={handlePurchaseInputChange}
-                                                placeholder="0.00"
+                                                required
+                                            >
+                                                <option value="">Select a supplier...</option>
+                                                {partners.map(p => (
+                                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="form-group">
+                                            <label className="form-label">Purchase Date</label>
+                                            <input
+                                                type="date"
+                                                className="form-input"
+                                                name="purchase_date"
+                                                value={purchaseFormData.purchase_date}
+                                                onChange={handlePurchaseInputChange}
                                             />
                                         </div>
-                                    </div>
 
-                                    <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                                        <label className="form-label">Purchase Details / Invoice Snippets</label>
-                                        <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
-                                            <ReactQuill
-                                                ref={purchaseQuillRef}
-                                                theme="snow"
-                                                value={purchaseFormData.details}
-                                                onChange={handlePurchaseDetailsChange}
-                                                modules={purchaseQuillModules}
-                                                style={{ height: '200px' }}
-                                            />
+                                        <div className="form-group">
+                                            <label className="form-label">Price per pc</label>
+                                            <div style={{ position: 'relative' }}>
+                                                <span style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)' }}>$</span>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="form-input"
+                                                    style={{ paddingLeft: '32px' }}
+                                                    name="last_purchase_price"
+                                                    value={purchaseFormData.last_purchase_price}
+                                                    onChange={handlePurchaseInputChange}
+                                                    placeholder="0.00"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                                            <label className="form-label">Purchase Details / Invoice Snippets</label>
+                                            <div style={{ border: '1px solid var(--border-color)', borderRadius: '8px', overflow: 'hidden' }}>
+                                                <ReactQuill
+                                                    ref={purchaseQuillRef}
+                                                    theme="snow"
+                                                    value={purchaseFormData.details}
+                                                    onChange={handlePurchaseDetailsChange}
+                                                    modules={purchaseQuillModules}
+                                                    style={{ height: '200px' }}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </form>
-                        </div>
+                                </form>
+                            </div>
 
-                        <div style={{ padding: '20px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: 'var(--bg-primary)' }}>
-                            <button
-                                type="button"
-                                className="btn btn-secondary"
-                                onClick={() => setShowPurchaseModal(false)}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="submit"
-                                form="purchaseForm"
-                                className="btn btn-primary"
-                            >
-                                Save Record
-                            </button>
+                            <div style={{ padding: '20px 24px', borderTop: '1px solid var(--border-color)', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: 'var(--bg-primary)' }}>
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary"
+                                    onClick={() => setShowPurchaseModal(false)}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    form="purchaseForm"
+                                    className="btn btn-primary"
+                                >
+                                    Save Record
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-        </div>
+            <GDriveConnectionModal 
+                isOpen={isAuthModalOpen} 
+                onClose={() => setIsAuthModalOpen(false)} 
+                state="catalog_photo_upload"
+            />
+        </div >
     );
 };
 

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "1ec24ec2-2647-49d9-be00-d1837ef3c03e",
+    "types": [
+      "Partner"
+    ],
+    "others": "",
+    "name": "Cel-ron enterprises pte ltd",
+    "address": "NAH HOTEL, 54, JALAN IMPIAN EMAS\nTAMAN IMPIAN EMAS, JOHOR BAHRU",
+    "country": "Indonesia",
+    "email1": "nrkumarsg@gmail.com",
+    "email2": "",
+    "phone1": "+6597685891",
+    "phone2": "",
+    "weblink": "www.celron.net",
+    "info": "",
+    "customerCredit": null,
+    "supplierCredit": null,
+    "created_at": "2026-03-15T03:07:13.847113+00:00",
+    "updated_at": "2026-03-15T03:07:13.847113+00:00",
+    "company_id": "8431cd0b-7449-44a5-8213-2a8680d09ebe",
+    "latitude": null,
+    "longitude": null,
+    "source_search_id": null,
+    "customerCreditTime": null,
+    "supplierCreditTime": null,
+    "business_card_back_url": "",
+    "business_card_url": "",
+    "uen": "2014E102939a",
+    "company_type": "",
+    "logo_url": null,
+    "city": "SINGAPORE",
+    "status": "Active",
+    "gdrive_folder_id": "",
+    "google_drive_link": "",
+    "pincode": null
+  }
+]

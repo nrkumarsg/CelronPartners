@@ -1,0 +1,731 @@
+﻿
+> celronhub@0.0.0 lint
+> eslint .
+
+
+C:\GoogleGravityDemo\CelronHub\api\index.js
+   21:10  error  'process' is not defined                                                                no-undef
+   22:9   error  'process' is not defined                                                                no-undef
+   24:10  error  'process' is not defined                                                                no-undef
+   25:9   error  'process' is not defined                                                                no-undef
+  139:21  error  'process' is not defined                                                                no-undef
+  139:56  error  'process' is not defined                                                                no-undef
+  143:11  error  'prompt' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  276:10  error  'process' is not defined                                                                no-undef
+  277:9   error  'process' is not defined                                                                no-undef
+  279:10  error  'process' is not defined                                                                no-undef
+  280:9   error  'process' is not defined                                                                no-undef
+  354:22  error  'Buffer' is not defined                                                                 no-undef
+
+C:\GoogleGravityDemo\CelronHub\check_apks_diag.js
+  1:26  error  'require' is not defined  no-undef
+
+C:\GoogleGravityDemo\CelronHub\server\index.js
+   16:11  error  'key' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u   no-unused-vars
+   16:17  error  'process' is not defined                                                              no-undef
+   16:52  error  'process' is not defined                                                              no-undef
+   17:11  error  'cx' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u    no-unused-vars
+   17:16  error  'process' is not defined                                                              no-undef
+   17:46  error  'process' is not defined                                                              no-undef
+  154:35  error  'err3' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  223:14  error  'process' is not defined                                                              no-undef
+
+C:\GoogleGravityDemo\CelronHub\src\components\CustomerEnquiryForm.jsx
+   3:23  error    'savePartner' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                   no-unused-vars
+   3:58  error    'saveContact' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                   no-unused-vars
+  16:10  error    'isTokenValid' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                  no-unused-vars
+  65:12  error    'isOcrImg' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                             no-unused-vars
+  82:12  error    'editingItemIdx' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                       no-unused-vars
+  82:28  error    'setEditingItemIdx' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                    no-unused-vars
+  93:8   warning  React Hook useEffect has missing dependencies: 'checkExistingFile', 'editingEnquiry?.gdrive_file_id', 'fetchVessels', 'fetchWorkLocations', and 'loadCustomers'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\components\ScannerModal.jsx
+  30:21  error    'error' is defined but never used                                                                                                                                                                                                          no-unused-vars
+  42:30  error    'e' is defined but never used                                                                                                                                                                                                              no-unused-vars
+  48:8   warning  React Hook useEffect has a missing dependency: 'onScanSuccess'. Either include it or remove the dependency array. If 'onScanSuccess' changes too often, find the parent component that defines it and wrap that definition in useCallback  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\components\Sidebar.jsx
+    2:23  error  'useNavigate' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 no-unused-vars
+    7:24  error  'connectGoogleAPI' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+   11:22  error  'signOut' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+   11:31  error  'companies' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          no-unused-vars
+   11:42  error  'activeCompanyId' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    no-unused-vars
+   36:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  34 |     useEffect(() => {
+  35 |         if (profile) {
+> 36 |             fetchTodoCount();
+     |             ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  37 |         }
+  38 |
+  39 |         // Check Drive status periodically  react-hooks/set-state-in-effect
+  338:30  error  'e' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\components\UniversalFinder\AIChatInterface.jsx
+  3:10  error  'chatWithGemini' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\components\UniversalFinder\ResultsList.jsx
+  29:23  error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  27 |
+  28 |     useEffect(() => {
+> 29 |         if (searchId) fetchResults(1);
+     |                       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  30 |     }, [searchId]);
+  31 |
+  32 |     const totalPages = Math.ceil(total / pageSize);  react-hooks/set-state-in-effect
+  30:8   warning  React Hook useEffect has a missing dependency: 'fetchResults'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\components\common\CommunicationWall.jsx
+   23:12  error    'uploadLink' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                        no-unused-vars
+   32:8   warning  React Hook useEffect has a missing dependency: 'fetchMessages'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  123:18  error    'error' is defined but never used                                                                                 no-unused-vars
+  214:58  error    'idx' is defined but never used                                                                                   no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\components\common\CompanyAutocomplete.jsx
+  36:13  error    Error: Cannot access variable before it is declared
+
+`loadGoogleSDK` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  34 |             setSdkReady(true);
+  35 |         } else {
+> 36 |             loadGoogleSDK();
+     |             ^^^^^^^^^^^^^ `loadGoogleSDK` accessed before it is declared
+  37 |             // Poll for readiness
+  38 |             const interval = setInterval(() => {
+  39 |                 if (window.google && window.google.maps && window.google.maps.places) {
+
+  107 |     };
+  108 |
+> 109 |     const loadGoogleSDK = () => {
+      |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 110 |         if (document.getElementById('google-maps-sdk')) return;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 111 |
+      ΓÇª
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 121 |         document.head.appendChild(script);
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 122 |     };
+      | ^^^^^^^ `loadGoogleSDK` is declared here
+  123 |
+  124 |     const handleInputChange = (e) => {
+  125 |         const val = e.target.value;  react-hooks/immutability
+  46:8   warning  React Hook useEffect has a missing dependency: 'loadGoogleSDK'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\components\common\DriveFileMover.jsx
+   21:12  error    'tierRoots' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                      no-unused-vars
+   29:8   warning  React Hook useEffect has a missing dependency: 'setupRoots'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  106:18  error    'error' is defined but never used                                                                              no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\components\common\SafeDriveLink.jsx
+  11:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+   9 |     useEffect(() => {
+  10 |         if (!url) {
+> 11 |             setExists(false);
+     |             ^^^^^^^^^ Avoid calling setState() directly within an effect
+  12 |             return;
+  13 |         }
+  14 |  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\components\dashboard\StageReminders.jsx
+  20:8  warning  React Hook useEffect has a missing dependency: 'fetchReminders'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\components\partners\PartnerDocuments.jsx
+  39:8  warning  React Hook useEffect has a missing dependency: 'fetchFiles'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\components\workflow\QuickAddForms.jsx
+  4:10  error  'savePartner' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\components\workflows\DocumentManager.jsx
+  25:8   warning  React Hook useEffect has a missing dependency: 'fetchDocs'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  66:18  error    'error' is defined but never used                                                                             no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\components\workflows\EditJobModal.jsx
+  42:8  warning  React Hook useEffect has missing dependencies: 'checkPoExistence' and 'fetchContacts'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\contexts\AuthContext.jsx
+    8:14  error    Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components                             react-refresh/only-export-components
+   36:22  error    'e' is defined but never used                                                                                                                              no-unused-vars
+  150:8   warning  React Hook useEffect has missing dependencies: 'initializeAuth', 'refreshProfileData', and 'user?.id'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\hooks\useSupplierActions.js
+  5:58  error  'initialEnquiry' is defined but never used  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\lib\driveService.js
+  20:11  error  'delimiter' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u    no-unused-vars
+  21:11  error  'close_delim' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  96:26  error  'e' is defined but never used                                                                no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\lib\geminiService.js
+  4:41  error  'process' is not defined  no-undef
+  4:77  error  'process' is not defined  no-undef
+
+C:\GoogleGravityDemo\CelronHub\src\lib\pdfGeneratorV2.js
+  10:9  error  'contacts' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u        no-unused-vars
+  12:9  error  'work_locations' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  13:9  error  'subject' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u         no-unused-vars
+  17:9  error  'subtotal' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u        no-unused-vars
+  18:9  error  'tax_amount' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u      no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\lib\supabase.js
+  24:40  error  'process' is not defined       no-undef
+  29:40  error  'process' is not defined       no-undef
+  41:14  error  'e' is defined but never used  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\lib\universalFinder.js
+    5:101  error  'process' is not defined                                                                     no-undef
+    5:136  error  'process' is not defined                                                                     no-undef
+    6:95   error  'process' is not defined                                                                     no-undef
+    6:125  error  'process' is not defined                                                                     no-undef
+    7:106  error  'process' is not defined                                                                     no-undef
+    7:145  error  'process' is not defined                                                                     no-undef
+  112:14   error  'e' is defined but never used                                                                no-unused-vars
+  117:11   error  'deepResults' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  135:22   error  'e' is defined but never used                                                                no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\lib\vaultService.js
+    5:10  error  'getOrCreateFolder' is defined but never used. Allowed unused vars must match /^[A-Z_]/u               no-unused-vars
+    5:48  error  'uploadFileToDrive' is defined but never used. Allowed unused vars must match /^[A-Z_]/u               no-unused-vars
+    5:67  error  'deleteFile' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                      no-unused-vars
+   53:15  error  'settingKey' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u             no-unused-vars
+  115:7   error  'mirrorFolderStructure' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  165:14  error  'e' is defined but never used                                                                          no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\lib\workflowV2Service.js
+  149:13  error  'items' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u           no-unused-vars
+  149:20  error  'partners' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u        no-unused-vars
+  149:30  error  'contacts' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u        no-unused-vars
+  149:40  error  'vessels' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u         no-unused-vars
+  149:49  error  'work_locations' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  406:20  error  'id' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u              no-unused-vars
+  406:24  error  'created_at' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u      no-unused-vars
+  406:36  error  'updated_at' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u      no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\BrandsDirectory.jsx
+    2:10  error  'useNavigate' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+   10:13  error  'profile' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   no-unused-vars
+   31:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  29 |
+  30 |     useEffect(() => {
+> 31 |         loadBrands();
+     |         ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  32 |     }, []);
+  33 |
+  34 |                                         react-hooks/set-state-in-effect
+  115:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  113 |
+  114 |     useEffect(() => {
+> 115 |         setCurrentPage(1);
+      |         ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  116 |     }, [searchTerm]);
+  117 |
+  118 |     return (  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\Calendar.jsx
+  25:26  error  'iframe.src' is assigned to itself  no-self-assign
+
+C:\GoogleGravityDemo\CelronHub\src\pages\CalibrationLab.jsx
+   32:12  error    'loading' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                       no-unused-vars
+   35:12  error    'fileToUpload' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                  no-unused-vars
+  118:70  error    Unnecessary escape character: \&                                                                              no-useless-escape
+  118:79  error    Unnecessary escape character: \&                                                                              no-useless-escape
+  118:81  error    Unnecessary escape character: \?                                                                              no-useless-escape
+  137:8   warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  159:27  error    'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                         no-unused-vars
+  219:11  error    'navigate' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                      no-unused-vars
+  373:37  error    'deleteCalibrationRecord' is not defined                                                                      no-undef
+  379:11  error    'handleFileUpload' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u              no-unused-vars
+  472:32  error    'updateCalibrationRecord' is not defined                                                                      no-undef
+  484:43  error    'pdfBlob' is not defined                                                                                      no-undef
+  527:27  error    'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                         no-unused-vars
+  535:11  error    'filteredRecords' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u               no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\CatalogDirectory.jsx
+  20:13  error    'html2pdf' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+  62:9   error    Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  60 |
+  61 |     useEffect(() => {
+> 62 |         fetchItems();
+     |         ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  63 |     }, [currentPage, searchQuery, typeFilter]);
+  64 |
+  65 |  react-hooks/set-state-in-effect
+  63:8   warning  React Hook useEffect has a missing dependency: 'fetchItems'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\CatalogForm.jsx
+   41:83  error    'checkFileExists' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                 no-unused-vars
+   42:10  error    'connectGoogleAPI' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                no-unused-vars
+   62:12  error    'photoExistence' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                         no-unused-vars
+   62:28  error    'setPhotoExistence' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                      no-unused-vars
+  113:8   warning  React Hook useEffect has missing dependencies: 'checkDriveConnectivity', 'fetchItemData', 'fetchPurchaseHistory', and 'isNewItem'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  120:40  error    'getDocumentSettings' is not defined                                                                                                                                                   no-undef
+  351:15  error    'expires' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\CategoriesDirectory.jsx
+    2:10  error  'useNavigate' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        no-unused-vars
+   10:13  error  'profile' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   no-unused-vars
+   31:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  29 |
+  30 |     useEffect(() => {
+> 31 |         loadCategories();
+     |         ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  32 |     }, []);
+  33 |
+  34 |                                 react-hooks/set-state-in-effect
+  115:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  113 |
+  114 |     useEffect(() => {
+> 115 |         setCurrentPage(1);
+      |         ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  116 |     }, [searchTerm]);
+  117 |
+  118 |     return (  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\ContactsForm.jsx
+  234:69   error  Unnecessary escape character: \+  no-useless-escape
+  234:93   error  Unnecessary escape character: \.  no-useless-escape
+  234:109  error  Unnecessary escape character: \.  no-useless-escape
+
+C:\GoogleGravityDemo\CelronHub\src\pages\CorporateVault.jsx
+   14:10  error    'getDocumentSettings' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                     no-unused-vars
+   15:10  error    'performOCR' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                              no-unused-vars
+   15:37  error    'connectGoogleAPI' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                        no-unused-vars
+   29:12  error    'searchParams' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                   no-unused-vars
+   41:12  error    'breadcrumbs' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                    no-unused-vars
+   41:25  error    'setBreadcrumbs' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                 no-unused-vars
+   44:26  error    'setSelectedYear' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                no-unused-vars
+   56:8   warning  React Hook useEffect has a missing dependency: 'setupVault'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  170:30  error    'file' is defined but never used                                                                               no-unused-vars
+  171:9   error    'setIsOcrLoading' is not defined                                                                               no-undef
+  175:17  error    'setOcrResult' is not defined                                                                                  no-undef
+  176:17  error    'setIsOcrLoading' is not defined                                                                               no-undef
+  178:18  error    'error' is defined but never used                                                                              no-unused-vars
+  179:13  error    'setIsOcrLoading' is not defined                                                                               no-undef
+  555:14  error    'ocrResult' is not defined                                                                                     no-undef
+  570:48  error    'setOcrResult' is not defined                                                                                  no-undef
+  587:34  error    'ocrResult' is not defined                                                                                     no-undef
+  592:84  error    'ocrResult' is not defined                                                                                     no-undef
+  596:84  error    'setOcrResult' is not defined                                                                                  no-undef
+
+C:\GoogleGravityDemo\CelronHub\src\pages\FormEditor.jsx
+  42:8  warning  React Hook useEffect has missing dependencies: 'isNew' and 'loadForm'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\FormsDirectory.jsx
+  18:8  warning  React Hook useEffect has a missing dependency: 'tryDetectFolder'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\HelpCenter.jsx
+  43:40  error  'node' is defined but never used  no-unused-vars
+  44:40  error  'node' is defined but never used  no-unused-vars
+  45:40  error  'node' is defined but never used  no-unused-vars
+  46:39  error  'node' is defined but never used  no-unused-vars
+  47:40  error  'node' is defined but never used  no-unused-vars
+  48:40  error  'node' is defined but never used  no-unused-vars
+  49:40  error  'node' is defined but never used  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\ManualForm.jsx
+  39:8  warning  React Hook useEffect has missing dependencies: 'isNew' and 'loadManual'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\ManualsDirectory.jsx
+  18:8  warning  React Hook useEffect has a missing dependency: 'tryDetectFolder'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\MessagingHub.jsx
+   21:26  error    'setMockMessages' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                  no-unused-vars
+   92:8   warning  React Hook useEffect has missing dependencies: 'loadRealMessages' and 'loadUnifiedMessages'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  123:26  error    'err' is defined but never used                                                                                                                  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\ModuleSettings.jsx
+   36:12  error    'loadingTools' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                     no-unused-vars
+   50:12  error    'loadingComms' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                     no-unused-vars
+  102:8   warning  React Hook useEffect has a missing dependency: 'loadSettings'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\NoteForm.jsx
+  29:8   warning  React Hook useEffect has missing dependencies: 'fetchNote' and 'isNew'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  33:23  error    'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                       no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\NotesDirectory.jsx
+  20:9  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  18 |
+  19 |     useEffect(() => {
+> 20 |         fetchNotes();
+     |         ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  21 |     }, []);
+  22 |
+  23 |  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\PartnerForm.jsx
+    6:73  error  'uploadFile' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+  487:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  485 |
+  486 |     useEffect(() => {
+> 487 |         loadContacts();
+      |         ^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  488 |     }, [loadContacts]);
+  489 |
+  490 |     const remove = async (id) => {  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\Partners.jsx
+  76:44  error  Compilation Skipped: Existing memoization could not be preserved
+
+React Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output.
+
+  74 |     };
+  75 |
+> 76 |     const loadPartners = React.useCallback(async () => {
+     |                                            ^^^^^^^^^^^^^
+> 77 |         setLoading(true);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 78 |         const data = await getPartners(profile);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 79 |         const sorted = data.sort((a, b) => a.name.localeCompare(b.name));
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 80 |         setPartners(sorted);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 81 |         setLoading(false);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 82 |     }, [profile]);
+     | ^^^^^^ Could not preserve existing memoization
+  83 |
+  84 |     useEffect(() => {
+  85 |         loadPartners();  react-hooks/preserve-manual-memoization
+
+C:\GoogleGravityDemo\CelronHub\src\pages\PrintLabels.jsx
+  27:9  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  25 |
+  26 |     useEffect(() => {
+> 27 |         fetchItems();
+     |         ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  28 |     }, []);
+  29 |
+  30 |  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\Reports.jsx
+  4:36  error  'getDocumentSettings' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\ScannerModule.jsx
+  14:28  error    'setDriveConnected' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u              no-unused-vars
+  64:8   warning  React Hook useEffect has a missing dependency: 'fetchScans'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\SearchResults.jsx
+  11:22  error    'useNavigate' is not defined                                                                                     no-undef
+  20:8   warning  React Hook useEffect has a missing dependency: 'handleSearch'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\StorageDirectory.jsx
+  26:8  warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\TodoList.jsx
+  33:23  error  'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+  41:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  39 |
+  40 |     useEffect(() => {
+> 41 |         loadTodos();
+     |         ^^^^^^^^^ Avoid calling setState() directly within an effect
+  42 |     }, []);
+  43 |
+  44 |  react-hooks/set-state-in-effect
+  47:23  error  'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+  61:23  error  'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\Tools.jsx
+  27:9  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  25 |
+  26 |     useEffect(() => {
+> 27 |         fetchTools();
+     |         ^^^^^^^^^^ Avoid calling setState() directly within an effect
+  28 |     }, []);
+  29 |
+  30 |  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\UniversalFinder.jsx
+   7:10  error  'runUniversalSearch' is defined but never used. Allowed unused vars must match /^[A-Z_]/u       no-unused-vars
+  11:11  error  'navigate' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u        no-unused-vars
+  13:12  error  'loadingResults' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\UserManagement.jsx
+   4:10  error    'getAllProfiles' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                no-unused-vars
+  32:8   warning  React Hook useEffect has a missing dependency: 'fetchInitialData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  50:23  error    'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\VesselForm.jsx
+  38:17  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  36 |             const existingVessel = vessels.find(v => v.id === id);
+  37 |             if (existingVessel) {
+> 38 |                 setFormData(existingVessel);
+     |                 ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  39 |             }
+  40 |         }
+  41 |     }, [id, isNew, vessels]);  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\VesselTracking.jsx
+  29:13  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  27 |         const found = vessels.find(v => v.id === id);
+  28 |         if (found) {
+> 29 |             setVessel(found);
+     |             ^^^^^^^^^ Avoid calling setState() directly within an effect
+  30 |         }
+  31 |     }, [id, vessels]);
+  32 |  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\VesselsDirectory.jsx
+  30:43  error  'other_details' is defined but never used                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 no-unused-vars
+  90:9   error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  88 |     // Reset pagination when searching
+  89 |     useEffect(() => {
+> 90 |         setCurrentPage(1);
+     |         ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  91 |     }, [searchTerm]);
+  92 |
+  93 |     return (  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\WorkLocationForm.jsx
+  31:17  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  29 |             const existingLoc = workLocations.find(l => l.id === id);
+  30 |             if (existingLoc) {
+> 31 |                 setFormData(existingLoc);
+     |                 ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  32 |             }
+  33 |         }
+  34 |     }, [id, isNew, workLocations]);  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\WorkLocationsDirectory.jsx
+  35:9  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+  33 |     // Reset pagination when searching
+  34 |     useEffect(() => {
+> 35 |         setCurrentPage(1);
+     |         ^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  36 |     }, [searchTerm]);
+  37 |
+  38 |     const handleExportCSV = () => {  react-hooks/set-state-in-effect
+
+C:\GoogleGravityDemo\CelronHub\src\pages\admin\ApkManagement.jsx
+  66:8  warning  React Hook useEffect has a missing dependency: 'fetchApks'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\auth\ForgotPassword.jsx
+  2:10  error  'useNavigate' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\auth\OAuthCallback.jsx
+  65:42  error  'count' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\auth\SignUp.jsx
+  10:11  error  'navigate' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\tools\Converter.jsx
+  99:8  warning  React Hook useEffect has missing dependencies: 'activeTab' and 'fetchRate'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\tools\SmartOCR.jsx
+    7:10  error  'connectGoogleAPI' is defined but never used. Allowed unused vars must match /^[A-Z_]/u         no-unused-vars
+   58:12  error  'isLoadingCloud' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  127:29  error  'profile' is not defined                                                                        no-undef
+
+C:\GoogleGravityDemo\CelronHub\src\pages\workflows\EnquiryDetails.jsx
+  564:17  error  Parsing error: Adjacent JSX elements must be wrapped in an enclosing tag
+
+C:\GoogleGravityDemo\CelronHub\src\pages\workflows\EnquiryList.jsx
+  14:25  error    'connectGoogleAPI' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                           no-unused-vars
+  41:8   warning  React Hook useEffect has missing dependencies: 'activeTab' and 'queryParams'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  47:8   warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array                      react-hooks/exhaustive-deps
+  82:17  error    'e' is defined but never used                                                                                                     no-unused-vars
+  82:20  error    Empty block statement                                                                                                             no-empty
+
+C:\GoogleGravityDemo\CelronHub\src\pages\workflows\FloatSupplierOrder.jsx
+    2:10  error  'useParams' is defined but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+  184:66  error  'err' is defined but never used                                                   no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\workflows\JobDetails.jsx
+    6:5   error    'getDocuments' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                           no-unused-vars
+   34:12  error    'fileExistence' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                 no-unused-vars
+   68:8   warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  149:18  error    'err' is defined but never used                                                                               no-unused-vars
+  159:18  error    'err' is defined but never used                                                                               no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\workflows\SmartAssistant.jsx
+  12:27  error  'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\workflows\UniversalFinder.jsx
+    4:10  error    'savePartner' is defined but never used. Allowed unused vars must match /^[A-Z_]/u                                                      no-unused-vars
+   76:12  error    'userCountry' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                             no-unused-vars
+  101:8   warning  React Hook useEffect has a missing dependency: 'getUserLocation'. Either include it or remove the dependency array                      react-hooks/exhaustive-deps
+  115:8   warning  React Hook useEffect has missing dependencies: 'handleSearch' and 'results.length'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  797:81  error    'idx' is defined but never used                                                                                                         no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\workflows\WorkflowBoard.jsx
+  14:12  error    'partners' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                      no-unused-vars
+  21:12  error    'newEnquiry' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                    no-unused-vars
+  21:24  error    'setNewEnquiry' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                 no-unused-vars
+  31:8   warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  51:11  error    'handleCreateEnquiry' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u           no-unused-vars
+  51:40  error    'e' is defined but never used                                                                                 no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\workflows\WorkflowEditor.jsx
+  1006:51  error  'files' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\src\pages\workflows\WorkflowPrintPreview.jsx
+  34:8  warning  React Hook useEffect has a missing dependency: 'fetchData'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\GoogleGravityDemo\CelronHub\src\pages\workflows\WorkflowV2Board.jsx
+  61:13  error    Error: Cannot access variable before it is declared
+
+`fetchDocs` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.
+
+  59 |     useEffect(() => {
+  60 |         if (profile?.company_id) {
+> 61 |             fetchDocs();
+     |             ^^^^^^^^^ `fetchDocs` accessed before it is declared
+  62 |         }
+  63 |     }, [profile, activeType]);
+  64 |
+
+  73 |     }, [dropdownRef]);
+  74 |
+> 75 |     const fetchDocs = async () => {
+     |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+> 76 |         setLoading(true);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 77 |         const typeFilter = activeType === 'All' ? null : activeType;
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 78 |         const { data, error } = await getWorkflowDocuments(profile.company_id, typeFilter);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 79 |         if (data) setDocuments(data);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 80 |         setLoading(false);
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^
+> 81 |     };
+     | ^^^^^^^ `fetchDocs` is declared here
+  82 |
+  83 |     const handleDelete = async (id) => {
+  84 |         if (window.confirm('Are you sure you want to delete this document?')) {  react-hooks/immutability
+  63:8   warning  React Hook useEffect has a missing dependency: 'fetchDocs'. Either include it or remove the dependency array                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  react-hooks/exhaustive-deps
+  78:23  error    'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         no-unused-vars
+
+C:\GoogleGravityDemo\CelronHub\tmp_migrate_jobs.js
+   5:21  error  'process' is not defined  no-undef
+   6:21  error  'process' is not defined  no-undef
+   7:20  error  'process' is not defined  no-undef
+  11:5   error  'process' is not defined  no-undef
+
+Γ£û 241 problems (205 errors, 36 warnings)
+

@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Settings, UploadCloud, ToggleRight, ToggleLeft, Save, Plus, Globe, Trash2, ExternalLink, Shield, User, MessageSquare, Share2 } from 'lucide-react';
+import { Settings, UploadCloud, ToggleRight, ToggleLeft, Save, Plus, Globe, Trash2, ExternalLink, Shield, User, MessageSquare, Share2, HardDrive, Sparkles, Loader2 } from 'lucide-react';
 import { getDocumentSettings, saveDocumentSettings, uploadFile } from '../lib/store';
 import { getUserTools, createUserTool, updateUserTool, deleteUserTool } from '../lib/toolService';
 import { getCommunicationAccounts, createCommunicationAccount, updateCommunicationAccount, deleteCommunicationAccount } from '../lib/communicationService';
+import { initializeVault } from '../lib/vaultService';
+import { updateCompany } from '../lib/companyService';
 import { useAuth } from '../contexts/AuthContext';
+import { isTokenValid } from '../lib/googleAuthService';
 
 export default function ModuleSettings() {
     const [loading, setLoading] = useState(true);
@@ -14,12 +17,14 @@ export default function ModuleSettings() {
         address: '10, Jln, Besar, #03-05, Singapore 208787',
         phone: '+65 6123 4567',
         email: 'sales@celron.net',
-        logo_url: 'https://celron.net/wp-content/uploads/2023/12/celronlogowithtranslogorotating.gif',
+        logo_url: '/logo.png',
         signature_url: '',
         watermark: false,
         allow_signup: true,
         google_drive_folder_id: '',
-        google_calendar_id: ''
+        google_calendar_id: '',
+        paynow_url: '',
+        bank_details: ''
     });
 
     const { profile } = useAuth();
@@ -54,8 +59,31 @@ export default function ModuleSettings() {
         auth_data: {}
     });
 
+    const [initializingVault, setInitializingVault] = useState(false);
+
     const logoInputRef = useRef(null);
     const signatureInputRef = useRef(null);
+    const paynowInputRef = useRef(null);
+    const canvasRef = useRef(null);
+    const [showSignaturePad, setShowSignaturePad] = useState(false);
+    const [isDrawing, setIsDrawing] = useState(false);
+
+    const handleVaultInit = async () => {
+        setInitializingVault(true);
+        try {
+            const accessToken = localStorage.getItem('google_access_token');
+            if (!accessToken) {
+                alert('Please connect your Google account in the Communications tab first.');
+                return;
+            }
+            await initializeVault(accessToken, profile.company_id);
+            alert('Corporate Vault initialized successfully with year-wise organization!');
+        } catch (error) {
+            alert('Vault Initialization failed: ' + error.message);
+        } finally {
+            setInitializingVault(false);
+        }
+    };
 
     useEffect(() => {
         if (profile) {
@@ -110,8 +138,15 @@ export default function ModuleSettings() {
             const payload = { ...settings };
             if (!payload.company_id) payload.company_id = profile.company_id;
 
+            // Sync with global companies table
+            await updateCompany(profile.company_id, {
+                name: settings.company_name,
+                logo_url: settings.logo_url
+            });
+
             await saveDocumentSettings(payload);
-            alert('Settings Saved Successfully!');
+            alert('Settings Saved Successfully! Reloading to apply branding changes...');
+            window.location.reload();
         } catch (error) {
             console.error(error);
             alert('Failed to save settings. Make sure you ran the latest Supabase schema updates.');
@@ -139,6 +174,73 @@ export default function ModuleSettings() {
         }
         setSaving(false);
     };
+
+    // Signature Pad Logic
+    const startDrawing = (e) => {
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const ctx = canvas.getContext('2d');
+        const x = (e.clientX || e.touches[0].clientX) - rect.left;
+        const y = (e.clientY || e.touches[0].clientY) - rect.top;
+
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        setIsDrawing(true);
+    };
+
+    const draw = (e) => {
+        if (!isDrawing) return;
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const ctx = canvas.getContext('2d');
+        const x = (e.clientX || e.touches[0].clientX) - rect.left;
+        const y = (e.clientY || e.touches[0].clientY) - rect.top;
+
+        ctx.lineTo(x, y);
+        ctx.stroke();
+    };
+
+    const stopDrawing = () => {
+        setIsDrawing(false);
+    };
+
+    const clearCanvas = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Reset context styles after clear
+        ctx.strokeStyle = '#1e3a8a';
+        ctx.lineWidth = 3;
+        ctx.lineCap = 'round';
+    };
+
+    const saveSignaturePad = async () => {
+        const canvas = canvasRef.current;
+        canvas.toBlob(async (blob) => {
+            if (!blob) return;
+            const file = new File([blob], 'signature.png', { type: 'image/png' });
+            setSaving(true);
+            try {
+                const url = await uploadFile('company_assets', 'settings', file);
+                setSettings(prev => ({ ...prev, signature_url: url }));
+                setShowSignaturePad(false);
+            } catch (error) {
+                console.error(error);
+                alert('Failed to save drawn signature');
+            }
+            setSaving(false);
+        }, 'image/png');
+    };
+
+    useEffect(() => {
+        if (showSignaturePad && canvasRef.current) {
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            ctx.strokeStyle = '#1e3a8a';
+            ctx.lineWidth = 3;
+            ctx.lineCap = 'round';
+        }
+    }, [showSignaturePad]);
 
     const handleToolSubmit = async (e) => {
         e.preventDefault();
@@ -407,12 +509,24 @@ export default function ModuleSettings() {
                                                         {comm.provider === 'gmail' && (
                                                             <button
                                                                 onClick={() => {
-                                                                    import('../lib/gmailService').then(m => m.connectGmailAPI(comm.id));
+                                                                    import('../lib/googleAuthService').then(m => m.connectGoogleAPI(comm.id));
                                                                 }}
-                                                                title="Connect Gmail API"
-                                                                style={{ border: 'none', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', padding: '4px', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', fontWeight: 600 }}
+                                                                title="Connect Google API"
+                                                                style={{
+                                                                    background: !isTokenValid() ? '#fff7ed' : '#fef2f2',
+                                                                    color: !isTokenValid() ? '#f59e0b' : '#dc2626',
+                                                                    cursor: 'pointer',
+                                                                    padding: '4px 8px',
+                                                                    borderRadius: '4px',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '4px',
+                                                                    fontSize: '0.7rem',
+                                                                    fontWeight: 700,
+                                                                    border: !isTokenValid() ? '1px solid #fdba74' : 'none'
+                                                                }}
                                                             >
-                                                                <Globe size={14} /> {comm.auth_data?.access_token ? 'Re-sync' : 'Sync API'}
+                                                                <Globe size={14} /> {!isTokenValid() ? 'RECONNECT' : 'Re-sync'}
                                                             </button>
                                                         )}
                                                         <button onClick={() => openCommModal(comm)} style={{ border: 'none', background: 'none', color: '#6366f1', cursor: 'pointer', padding: '4px' }}><Settings size={16} /></button>
@@ -454,8 +568,42 @@ export default function ModuleSettings() {
                                     <input type="text" name="phone" value={settings.phone || ''} onChange={handleChange} style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.95rem' }} />
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b' }}>Email</label>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b' }}>Primary Email</label>
                                     <input type="email" name="email" value={settings.email || ''} onChange={handleChange} style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.95rem' }} />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Company Communications Block */}
+                        <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '32px' }}>
+                            <h3 style={{ margin: '0 0 24px 0', fontSize: '1.1rem', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <MessageSquare size={20} className="text-indigo-600" />
+                                Communications & Email Sending (SMTP)
+                            </h3>
+                            <p style={{ margin: '0 0 24px 0', color: '#64748b', fontSize: '0.85rem' }}>Configure the direct integration for automatically sending workflows to customers via email. App Passwords must be generated in your email provider's security settings.</p>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b' }}>Sales Email (Sent from Workflows)</label>
+                                    <input type="email" name="sales_email" value={settings.sales_email || ''} onChange={handleChange} placeholder="Type sales email here..." style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.95rem' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b' }}>Sales App Password (SMTP)</label>
+                                    <input type="password" name="sales_password" value={settings.sales_password || ''} onChange={handleChange} placeholder="e.g. FMYW m2Z8 b1p5" style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.95rem' }} />
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b' }}>Accounts Email (Sent from Invoices)</label>
+                                    <input type="email" name="accounts_email" value={settings.accounts_email || ''} onChange={handleChange} placeholder="Type accounts email here..." style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.95rem' }} />
+                                </div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b' }}>Accounts App Password (SMTP)</label>
+                                    <input type="password" name="accounts_password" value={settings.accounts_password || ''} onChange={handleChange} placeholder="Enter secure App Password" style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.95rem' }} />
+                                </div>
+
+                                <div style={{ gridColumn: '1 / -1', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.8rem', color: '#64748b' }}>
+                                    <div style={{ fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>Database Synchronization Note</div>
+                                    If the passwords fail to save, ensure you have executed the <code>smtp_update.sql</code> script in the Supabase SQL Editor to add the necessary columns.
                                 </div>
                             </div>
                         </div>
@@ -495,10 +643,51 @@ export default function ModuleSettings() {
                                             )}
                                         </div>
                                         <input type="file" accept="image/*" ref={signatureInputRef} style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'signature_url')} />
-                                        <button onClick={() => signatureInputRef.current?.click()} style={{ background: '#fff', color: '#64748b', border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <UploadCloud size={16} /> Upload Signature
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <button onClick={() => signatureInputRef.current?.click()} style={{ background: '#fff', color: '#64748b', border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+                                                <UploadCloud size={16} /> Upload Image
+                                            </button>
+                                            <button onClick={() => setShowSignaturePad(true)} style={{ background: '#f8fafc', color: '#6366f1', border: '1px solid #e0e7ff', padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', width: '100%' }}>
+                                                <Sparkles size={16} /> Draw Signature
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Payment & Bank Details Block */}
+                        <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '32px' }}>
+                            <h3 style={{ margin: '0 0 24px 0', fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>Payment & Bank Information</h3>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '48px' }}>
+                                <div>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '12px' }}>PayNow QR / Image</label>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                        <div style={{ width: '100px', height: '100px', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px', background: '#f8fafc' }}>
+                                            {settings.paynow_url ? (
+                                                <img src={settings.paynow_url} alt="PayNow" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                                            ) : (
+                                                <div style={{ color: '#cbd5e1', fontSize: '0.7rem', textAlign: 'center' }}>No PayNow Image</div>
+                                            )}
+                                        </div>
+                                        <input type="file" accept="image/*" ref={paynowInputRef} style={{ display: 'none' }} onChange={(e) => handleFileUpload(e, 'paynow_url')} />
+                                        <button onClick={() => paynowInputRef.current?.click()} style={{ background: '#fff', color: '#64748b', border: '1px dashed #cbd5e1', padding: '8px 16px', borderRadius: '6px', fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <UploadCloud size={16} /> Upload PayNow
                                         </button>
                                     </div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b' }}>Bank Account Details</label>
+                                    <textarea
+                                        name="bank_details"
+                                        value={settings.bank_details || ''}
+                                        onChange={handleChange}
+                                        placeholder="Enter Bank Name, Account Number, SWIFT code, etc."
+                                        style={{ padding: '12px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.9rem', minHeight: '100px', resize: 'vertical' }}
+                                    />
+                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>This information will be displayed on invoices and documents.</span>
                                 </div>
                             </div>
                         </div>
@@ -549,9 +738,42 @@ export default function ModuleSettings() {
                                         onChange={handleChange}
                                         style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', color: '#475569', fontSize: '0.95rem' }}
                                     />
-                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ID of the `CELRON2026` folder in your drive.</span>
+                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ID of the `CELRON` root folder in your drive.</span>
                                 </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+
+                                <div style={{ gridColumn: '1 / -1', marginTop: '16px', padding: '24px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                        <div>
+                                            <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <HardDrive size={18} className="text-indigo-600" /> 01-99 Tiered Hierarchy Setup
+                                            </h4>
+                                            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>Initialize the consolidated structure: 01. Time Based, 02. Permanent, 03. Short-term, 04. Vault, 99. Scans Inbox.</p>
+                                        </div>
+                                        <button
+                                            onClick={handleVaultInit}
+                                            disabled={initializingVault || !settings.google_drive_folder_id}
+                                            style={{ padding: '10px 20px', background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', opacity: (initializingVault || !settings.google_drive_folder_id) ? 0.6 : 1 }}
+                                        >
+                                            {initializingVault ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                                            Sync Tiered Structure
+                                        </button>
+                                    </div>
+
+                                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                                        <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Consolidated Road Map</h5>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.75rem', color: '#64748b' }}>
+                                            <div style={{ padding: '8px', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}><strong>01. TIME_BASED:</strong> Jobs & Expenses (Yearwise)</div>
+                                            <div style={{ padding: '8px', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}><strong>02. PERMANENT:</strong> Long-term Records</div>
+                                            <div style={{ padding: '8px', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}><strong>03. SHORT_TERM:</strong> Active Project Loans</div>
+                                            <div style={{ padding: '8px', background: '#fff', borderRadius: '6px', border: '1px solid #e2e8f0' }}><strong>04. VAULT:</strong> Standards & Stationery</div>
+                                            <div style={{ padding: '8px', background: '#fef2f2', borderRadius: '6px', border: '1px solid #fee2e2', gridColumn: 'span 2' }}>
+                                                <strong>99. SCANS_INBOX:</strong> Default landing for Mobile App scans.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', gridColumn: '2' }}>
                                     <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#1e293b' }}>Google Calendar ID</label>
                                     <input
                                         type="text"
@@ -668,6 +890,21 @@ export default function ModuleSettings() {
                                 <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Email Address / Username</label>
                                 <input type="text" value={commForm.email_address} onChange={e => setCommForm({ ...commForm, email_address: e.target.value })} placeholder="email@example.com" style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
                             </div>
+
+                            {commForm.platform === 'email' && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>App Password (SMTP Integration)</label>
+                                    <input
+                                        type="password"
+                                        value={commForm.auth_data?.password || ''}
+                                        onChange={e => setCommForm({ ...commForm, auth_data: { ...commForm.auth_data, password: e.target.value } })}
+                                        placeholder="Enter secure app password"
+                                        style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                                    />
+                                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Used by the application to automatically send PDFs and notifications on your behalf.</span>
+                                </div>
+                            )}
+
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                 <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Portal URL (Auto-link)</label>
                                 <input type="url" value={commForm.account_url} onChange={e => setCommForm({ ...commForm, account_url: e.target.value })} placeholder="https://mail.zoho.com" style={{ padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
@@ -685,6 +922,58 @@ export default function ModuleSettings() {
                                 <button type="submit" style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', background: '#8b5cf6', color: '#fff', fontWeight: 600, cursor: 'pointer' }}>{editingComm ? 'Update Account' : 'Connect Account'}</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Signature Pad Modal */}
+            {showSignaturePad && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', backdropFilter: 'blur(4px)' }}>
+                    <div style={{ background: '#fff', borderRadius: '16px', width: '100%', maxWidth: '600px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', overflow: 'hidden' }}>
+                        <div style={{ padding: '24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#1e3a8a' }}>Digital Signature Pad</h3>
+                                <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#64748b' }}>Draw your signature using your mouse or touch screen</p>
+                            </div>
+                            <button onClick={() => setShowSignaturePad(false)} style={{ background: '#fff', border: '1px solid #e2e8f0', color: '#94a3b8', cursor: 'pointer', padding: '8px', borderRadius: '8px', display: 'flex' }}>✕</button>
+                        </div>
+
+                        <div style={{ padding: '32px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
+                            <div style={{ width: '100%', background: '#fff', border: '2px dashed #cbd5e1', borderRadius: '12px', overflow: 'hidden', cursor: 'crosshair', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)' }}>
+                                <canvas
+                                    ref={canvasRef}
+                                    width={500}
+                                    height={200}
+                                    onMouseDown={startDrawing}
+                                    onMouseMove={draw}
+                                    onMouseUp={stopDrawing}
+                                    onMouseLeave={stopDrawing}
+                                    onTouchStart={startDrawing}
+                                    onTouchMove={draw}
+                                    onTouchEnd={stopDrawing}
+                                    style={{ display: 'block', maxWidth: '100%', height: 'auto', margin: '0 auto' }}
+                                />
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '16px', width: '100%' }}>
+                                <button
+                                    onClick={clearCanvas}
+                                    style={{ flex: 1, padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1', background: '#fff', color: '#64748b', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                                    onMouseOver={(e) => e.target.style.background = '#f8fafc'}
+                                    onMouseOut={(e) => e.target.style.background = '#fff'}
+                                >
+                                    Clear Canvas
+                                </button>
+                                <button
+                                    onClick={saveSignaturePad}
+                                    disabled={saving}
+                                    style={{ flex: 2, padding: '12px', borderRadius: '10px', border: 'none', background: '#6366f1', color: '#fff', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: saving ? 0.7 : 1 }}
+                                >
+                                    {saving ? <Loader2 size={20} className="animate-spin" /> : <Save size={20} />}
+                                    Save Signature
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

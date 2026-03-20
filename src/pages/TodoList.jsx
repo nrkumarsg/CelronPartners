@@ -28,10 +28,6 @@ export default function TodoList() {
         priority: 'medium'
     });
 
-    useEffect(() => {
-        loadTodos();
-    }, []);
-
     const loadTodos = async () => {
         setLoading(true);
         const { data, error } = await getTodos();
@@ -40,6 +36,11 @@ export default function TodoList() {
         }
         setLoading(false);
     };
+
+    useEffect(() => {
+        loadTodos();
+    }, []);
+
 
     const handleCreateTodo = async (e) => {
         e.preventDefault();
