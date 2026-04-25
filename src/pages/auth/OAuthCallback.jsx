@@ -52,6 +52,13 @@ export default function OAuthCallback() {
                         return;
                     }
 
+                    if (state.startsWith('job_')) {
+                        const jobId = state.split('_')[1];
+                        alert('Google Drive Connected! You can now view and upload project files.');
+                        navigate(`/workflows/editor/job/${jobId}`);
+                        return;
+                    }
+
                     // Ensure we have a session before updating
                     const { data: { user } } = await supabase.auth.getUser();
                     if (!user) {
