@@ -1420,7 +1420,7 @@ export default function WorkflowEditor() {
                                         value={formData.terms_conditions}
                                         onChange={(val) => handleEditorChange('terms_conditions', val)}
                                         placeholder="Payment terms, delivery details..."
-                                        height="150px"
+                                        height="160px"
                                     />
                                 </div>
                             </div>
@@ -1440,7 +1440,7 @@ export default function WorkflowEditor() {
                                         value={formData.notes}
                                         onChange={(val) => handleEditorChange('notes', val)}
                                         placeholder="Add additional notes, technical details, or comments for this document (Included in PDF)..."
-                                        height="200px"
+                                        height="210px"
                                     />
                                 </div>
                             </div>
