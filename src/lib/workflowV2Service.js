@@ -751,15 +751,19 @@ export const revertJobToQuotation = async (jobNo) => {
 export const getGDriveFolderIdForStage = (stage) => {
     // This mapping aligns with driveService.provisionFullProjectStructure
     switch (stage) {
-        case 'Enquiry': return '1. Customer_Request_&_Offer';
-        case 'Quotation': return '1. Customer_Request_&_Offer';
-        case 'Purchase Order': return '2. Supplier_Quotes_&_PO';
-        case 'Delivery Order': return '3. Operations_DO_SR_&_Certificates';
-        case 'Proforma Invoice': return '4. Finance_Invoices_&_Payments';
-        case 'Tax Invoice': return '4. Finance_Invoices_&_Payments';
-        case 'Payment Received': return '4. Finance_Invoices_&_Payments';
-        case 'Statement of Account': return '4. Finance_Invoices_&_Payments';
-        default: return '1. Customer_Request_&_Offer';
+        case 'Enquiry': return '1. Enquiries & Quotations';
+        case 'Quotation': return '1. Enquiries & Quotations';
+        case 'Order Acknowledgment': return '1. Enquiries & Quotations';
+        case 'Purchase Order': return '2. Supplier Bids & POs';
+        case 'Delivery Order': return '3. Operations & Logistics';
+        case 'Packing List': return '3. Operations & Logistics';
+        case 'Service Report': return '3. Operations & Logistics';
+        case 'Certificate': return '3. Operations & Logistics';
+        case 'Proforma Invoice': return '4. Finance & Invoices';
+        case 'Tax Invoice': return '4. Finance & Invoices';
+        case 'Statement of Account': return '4. Finance & Invoices';
+        case 'Payment Received': return '5. Expenses & Payments';
+        default: return '7. Correspondence & Admin';
     }
 };
 

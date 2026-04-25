@@ -100,3 +100,72 @@ export const getAllCompanies = async () => {
         return { data: null, error };
     }
 };
+
+// --- STAFF DIRECTORY (NEW TABLE) ---
+
+export const getAllStaff = async () => {
+    try {
+        const { data, error } = await supabase
+            .from('staff')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return { data, error: null };
+    } catch (error) {
+        console.error('Error fetching staff:', error);
+        return { data: null, error };
+    }
+};
+
+export const createStaff = async (staffData) => {
+    try {
+        const { data, error } = await supabase
+            .from('staff')
+            .insert([staffData])
+            .select()
+            .single();
+
+        if (error) throw error;
+        return { data, error: null };
+    } catch (error) {
+        console.error('Error creating staff:', error);
+        return { data: null, error };
+    }
+};
+
+export const updateStaff = async (staffId, updates) => {
+    try {
+        const payload = { ...updates };
+        delete payload.id;
+        delete payload.created_at;
+
+        const { data, error } = await supabase
+            .from('staff')
+            .update(payload)
+            .eq('id', staffId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return { data, error: null };
+    } catch (error) {
+        console.error('Error updating staff:', error);
+        return { data: null, error };
+    }
+};
+
+export const deleteStaff = async (staffId) => {
+    try {
+        const { error } = await supabase
+            .from('staff')
+            .delete()
+            .eq('id', staffId);
+
+        if (error) throw error;
+        return { error: null };
+    } catch (error) {
+        console.error('Error deleting staff:', error);
+        return { error };
+    }
+};

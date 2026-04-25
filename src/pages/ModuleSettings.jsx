@@ -60,6 +60,7 @@ export default function ModuleSettings() {
     });
 
     const [initializingVault, setInitializingVault] = useState(false);
+    const [showFloatingHub, setShowFloatingHub] = useState(localStorage.getItem('show_floating_hub') !== 'false');
 
     const logoInputRef = useRef(null);
     const signatureInputRef = useRef(null);
@@ -461,6 +462,30 @@ export default function ModuleSettings() {
                                     )}
                                 </tbody>
                             </table>
+                        </div>
+
+                        {/* App Preferences */}
+                        <div style={{ background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', padding: '24px', marginTop: '24px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                                <Sparkles size={18} className="text-indigo-600" />
+                                <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>App Preferences</h3>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <div style={{ fontSize: '0.95rem', fontWeight: 500, color: '#1e293b' }}>Show Floating Command Hub</div>
+                                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Display the draggable Drive & AI status hub in project screens</div>
+                                </div>
+                                <div 
+                                    onClick={() => {
+                                        const newValue = !showFloatingHub;
+                                        setShowFloatingHub(newValue);
+                                        localStorage.setItem('show_floating_hub', newValue);
+                                    }} 
+                                    style={{ cursor: 'pointer', color: showFloatingHub ? '#10b981' : '#cbd5e1', transition: 'all 0.2s' }}
+                                >
+                                    {showFloatingHub ? <ToggleRight size={36} /> : <ToggleLeft size={36} />}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 )}

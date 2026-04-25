@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map, ExternalLink, Plus, Sparkles, Loader2 } from 'lucide-react';
+import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map, ExternalLink, Plus, Sparkles, Loader2, ChevronDown, Paperclip, FileCheck, Calculator, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { savePartner } from '../../lib/store';
+import { saveJobExpense } from '../../lib/jobExpenseService';
 import BusinessCardUpload from '../common/BusinessCardUpload';
 import { COUNTRIES, PARTNER_CATEGORIES } from '../../lib/constants';
 import { smartSearchCompany, researchContactWithGemini, researchVesselWithGemini } from '../../lib/geminiService';
@@ -975,6 +976,299 @@ export const QuickLocationAdd = ({ company_id, onSuccess, onCancel }) => {
                 <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
                 <button className="btn btn-primary" onClick={handleSave} disabled={loading || !locationName}>
                     <Save size={18} /> {loading ? 'Saving...' : 'Save Location'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// Quick Expense Add
+export const QuickExpenseAdd = ({ job_id, partners, expense, onSuccess, onCancel, onUploadBill }) => {
+    const [formData, setFormData] = useState(expense || {
+        job_id,
+        supplier_id: '',
+        invoice_no: '',
+        invoice_date: new Date().toISOString().split('T')[0],
+        description: '',
+        unit_price: 0,
+        quantity: 1,
+        gst_rate: 9,
+        gst_amount: 0,
+        grand_total: 0,
+        category: 'Material'
+    });
+    const [supplierSearch, setSupplierSearch] = useState('');
+    const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [uploading, setUploading] = useState(false);
+
+    // Initial supplier name if editing
+    React.useEffect(() => {
+        if (expense?.supplier_id) {
+            const s = partners.find(p => p.id === expense.supplier_id);
+            if (s) setSupplierSearch(s.name);
+        }
+    }, [expense, partners]);
+
+    const suppliers = partners.filter(p => 
+        (p.types && p.types.includes('Supplier')) || 
+        (p.category === 'Supplier') ||
+        (p.name && p.name.toLowerCase().includes('supplier'))
+    );
+
+    const filteredSuppliers = suppliers.filter(s => 
+        s.name.toLowerCase().includes(supplierSearch.toLowerCase())
+    );
+
+    const handleSelectSupplier = (s) => {
+        setFormData(prev => ({ ...prev, supplier_id: s.id }));
+        setSupplierSearch(s.name);
+        setShowSupplierDropdown(false);
+    };
+
+    const calculateTotals = (updated) => {
+        const up = parseFloat(updated.unit_price) || 0;
+        const qty = parseFloat(updated.quantity) || 0;
+        const sub = up * qty;
+        const rate = parseFloat(updated.gst_rate) || 0;
+        const gst = sub * (rate / 100);
+        return {
+            ...updated,
+            total_before_tax: sub,
+            gst_amount: gst,
+            grand_total: sub + gst
+        };
+    };
+
+    const handleChange = (field, value) => {
+        let updated = { ...formData, [field]: value };
+        if (['unit_price', 'quantity', 'gst_rate'].includes(field)) {
+            updated = calculateTotals(updated);
+        }
+        setFormData(updated);
+    };
+
+    const handleSave = async () => {
+        if (!formData.supplier_id) return alert('Please select a supplier');
+        if (!formData.description) return alert('Description is required');
+        
+        setLoading(true);
+        try {
+            const { data, error } = await saveJobExpense(formData);
+            if (error) throw error;
+            onSuccess(data);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to save expense: ' + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        setUploading(true);
+        try {
+            const url = await onUploadBill(file);
+            if (url) {
+                setFormData(prev => ({ ...prev, bill_url: url }));
+            }
+        } catch (err) {
+            console.error('Bill upload failed:', err);
+            alert('Upload failed: ' + err.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="grid-2">
+                <div className="form-item full-width" style={{ position: 'relative' }}>
+                    <label>Supplier *</label>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{ flex: 1, position: 'relative' }}>
+                            <input
+                                className="form-input"
+                                placeholder="Search supplier from database..."
+                                value={supplierSearch}
+                                onChange={(e) => {
+                                    setSupplierSearch(e.target.value);
+                                    setShowSupplierDropdown(true);
+                                }}
+                                onFocus={() => setShowSupplierDropdown(true)}
+                                style={{ paddingRight: '32px' }}
+                            />
+                            {showSupplierDropdown && (
+                                <div className="dropdown-content" style={{ 
+                                    display: 'block', 
+                                    width: '100%', 
+                                    top: '100%', 
+                                    position: 'absolute',
+                                    zIndex: 100,
+                                    background: '#fff',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                                    borderRadius: '8px',
+                                    maxHeight: '200px',
+                                    overflowY: 'auto'
+                                }}>
+                                    {filteredSuppliers.length > 0 ? filteredSuppliers.map(s => (
+                                        <button 
+                                            key={s.id} 
+                                            type="button"
+                                            onClick={() => handleSelectSupplier(s)}
+                                            style={{
+                                                width: '100%',
+                                                padding: '10px 16px',
+                                                textAlign: 'left',
+                                                background: 'none',
+                                                border: 'none',
+                                                borderBottom: '1px solid #f1f5f9',
+                                                cursor: 'pointer',
+                                                fontSize: '0.9rem'
+                                            }}
+                                            onMouseOver={(e) => e.target.style.background = '#f8fafc'}
+                                            onMouseOut={(e) => e.target.style.background = 'none'}
+                                        >
+                                            {s.name}
+                                        </button>
+                                    )) : (
+                                        <div style={{ padding: '12px', fontSize: '0.85rem', color: '#94a3b8', textAlign: 'center' }}>
+                                            No suppliers matching "{supplierSearch}"
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="form-item">
+                    <label>Invoice / Reference No</label>
+                    <input 
+                        className="form-input" 
+                        value={formData.invoice_no} 
+                        onChange={(e) => handleChange('invoice_no', e.target.value)} 
+                        placeholder="e.g. INV-2024-001" 
+                    />
+                </div>
+                <div className="form-item">
+                    <label>Invoice Date</label>
+                    <input 
+                        className="form-input" 
+                        type="date" 
+                        value={formData.invoice_date} 
+                        onChange={(e) => handleChange('invoice_date', e.target.value)} 
+                    />
+                </div>
+
+                <div className="form-item full-width">
+                    <label>Expense Description *</label>
+                    <textarea 
+                        className="form-textarea" 
+                        value={formData.description} 
+                        onChange={(e) => handleChange('description', e.target.value)} 
+                        placeholder="Describe the material, service, or cost item..." 
+                        rows={2} 
+                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                    />
+                </div>
+
+                <div className="form-item">
+                    <label>Unit Price</label>
+                    <input 
+                        className="form-input" 
+                        type="number" 
+                        value={formData.unit_price} 
+                        onChange={(e) => handleChange('unit_price', e.target.value)} 
+                    />
+                </div>
+                <div className="form-item">
+                    <label>Quantity / Units</label>
+                    <input 
+                        className="form-input" 
+                        type="number" 
+                        value={formData.quantity} 
+                        onChange={(e) => handleChange('quantity', e.target.value)} 
+                    />
+                </div>
+
+                <div className="form-item">
+                    <label>GST Rate (%)</label>
+                    <input 
+                        className="form-input" 
+                        type="number" 
+                        value={formData.gst_rate} 
+                        onChange={(e) => handleChange('gst_rate', e.target.value)} 
+                    />
+                </div>
+                <div className="form-item">
+                    <label>GST Amount</label>
+                    <input 
+                        className="form-input" 
+                        type="number" 
+                        value={parseFloat(formData.gst_amount).toFixed(2)} 
+                        readOnly 
+                        style={{ background: '#f8fafc', fontWeight: 600 }} 
+                    />
+                </div>
+            </div>
+
+            <div style={{ 
+                padding: '24px', 
+                background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', 
+                borderRadius: '16px', 
+                border: '1px solid #e2e8f0', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+            }}>
+                <div>
+                    <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Final Grand Total</div>
+                    <div style={{ fontSize: '1.75rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '1rem', color: '#94a3b8' }}>SGD</span>
+                        {formData.grand_total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                    <label className={`btn ${formData.bill_url ? 'btn-secondary' : 'btn-primary'}`} style={{ cursor: 'pointer', padding: '10px 20px', gap: '10px' }}>
+                        {uploading ? <Loader2 size={18} className="animate-spin" /> : (formData.bill_url ? <RefreshCw size={18} /> : <Upload size={18} />)}
+                        {formData.bill_url ? 'Update Bill' : 'Upload Bill'}
+                        <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={uploading} />
+                    </label>
+                    {formData.bill_url && (
+                        <a 
+                            href={formData.bill_url} 
+                            target="_blank" 
+                            rel="noreferrer" 
+                            style={{ 
+                                fontSize: '0.75rem', 
+                                color: '#10b981', 
+                                fontWeight: 700, 
+                                textDecoration: 'none',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                            }}
+                        >
+                            <FileCheck size={14} /> View Attached Bill
+                        </a>
+                    )}
+                </div>
+            </div>
+
+            <div className="quick-form-actions" style={{ marginTop: '10px' }}>
+                <button type="button" className="btn btn-secondary" onClick={onCancel}>Discard Changes</button>
+                <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    onClick={handleSave} 
+                    disabled={loading || !formData.supplier_id || !formData.description}
+                    style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', border: 'none' }}
+                >
+                    <Save size={18} /> {loading ? 'Saving Expense...' : (expense ? 'Update Expense Record' : 'Save Expense Record')}
                 </button>
             </div>
         </div>

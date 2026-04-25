@@ -3,19 +3,19 @@ import {
     HardDrive, FolderOpen, Grid, List, Search, Plus, 
     FileText, ImageIcon, Truck, DollarSign, BadgeCheck,
     Download, ExternalLink, Trash2, Loader2, ChevronRight,
-    Filter, MoreVertical, X
+    Filter, MoreVertical, X, Info
 } from 'lucide-react';
 import { listFolderContent, uploadFileToDrive } from '../../lib/driveService';
 
 const VAULT_CATEGORIES = [
-    { id: '1. Enquiries_&_Landing_Notes', label: 'Enquiries', icon: <FileText size={16} />, color: '#6366f1' },
-    { id: '2. Supplier_Quotations', label: 'Supplier Quotes', icon: <ImageIcon size={16} />, color: '#f59e0b' },
-    { id: '3. Supplier_Payments', label: 'Supplier Payments', icon: <DollarSign size={16} />, color: '#10b981' },
-    { id: '4. Customer_Bank_Slips', label: 'Bank Slips', icon: <BadgeCheck size={16} />, color: '#ef4444' },
-    { id: '5. Expenses_Bills', label: 'Expenses (Bills)', icon: <FileText size={16} />, color: '#8b5cf6' },
-    { id: '6. Photos', label: 'Photos & Site', icon: <ImageIcon size={16} />, color: '#ec4899' },
-    { id: '7. Other_Documents', label: 'Other Docs', icon: <FolderOpen size={16} />, color: '#64748b' },
-    { id: '8. Certificates', label: 'Certificates', icon: <BadgeCheck size={16} />, color: '#0ea5e9' }
+    { id: '1. Enquiries & Quotations', label: 'Enquiries & QTN', icon: <FileText size={16} />, color: '#6366f1' },
+    { id: '2. Supplier Bids & POs', label: 'Supplier & PO', icon: <ImageIcon size={16} />, color: '#f59e0b' },
+    { id: '3. Operations & Logistics', label: 'Operations & Log', icon: <Truck size={16} />, color: '#10b981' },
+    { id: '4. Finance & Invoices', label: 'Finance & INV', icon: <DollarSign size={16} />, color: '#0ea5e9' },
+    { id: '5. Expenses & Payments', label: 'Expenses & PAY', icon: <BadgeCheck size={16} />, color: '#ef4444' },
+    { id: '6. Job Gallery & Photos', label: 'Job Gallery', icon: <ImageIcon size={16} />, color: '#ec4899' },
+    { id: '7. Correspondence & Admin', label: 'Admin & Misc', icon: <FolderOpen size={16} />, color: '#64748b' },
+    { id: '8. Technical Documents', label: 'Technical Docs', icon: <FileText size={16} />, color: '#8b5cf6' }
 ];
 
 export default function JobVault({ job, googleToken }) {
@@ -26,6 +26,7 @@ export default function JobVault({ job, googleToken }) {
     const [viewMode, setViewMode] = useState('grid');
     const [searchTerm, setSearchTerm] = useState('');
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [showGuide, setShowGuide] = useState(false);
 
     const projectFolderId = job.enquiries?.gdrive_folder_id || job.gdrive_folder_id;
 
@@ -110,6 +111,13 @@ export default function JobVault({ job, googleToken }) {
                 <div>
                     <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e293b', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <HardDrive size={24} color="var(--primary)" /> Project Vault & Vault-UI
+                        <button 
+                            onClick={() => setShowGuide(true)}
+                            style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '4px' }}
+                            title="View Folder Structure Guide"
+                        >
+                            <Info size={18} />
+                        </button>
                     </h2>
                     <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>Technical documents & job evidence stored securely on Google Drive.</p>
                 </div>
@@ -244,6 +252,53 @@ export default function JobVault({ job, googleToken }) {
                         <div style={{ height: '6px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
                             <div style={{ width: `${uploadProgress}%`, height: '100%', background: 'var(--primary)', transition: 'width 0.3s ease' }} />
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {showGuide && (
+                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '20px' }}>
+                    <div className="glass-panel animate-scale-up" style={{ background: '#fff', maxWidth: '600px', width: '100%', padding: '32px', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+                        <button 
+                            onClick={() => setShowGuide(false)}
+                            style={{ position: 'absolute', top: '16px', right: '16px', background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                        >
+                            <X size={24} />
+                        </button>
+                        
+                        <h3 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '8px', color: '#1e293b' }}>Project Folder Guide</h3>
+                        <p style={{ fontSize: '0.9rem', color: '#64748b', marginBottom: '24px' }}>Standard operating procedure for project document segregation (8-Folder Max System).</p>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {VAULT_CATEGORIES.map((cat, idx) => (
+                                <div key={cat.id} style={{ display: 'flex', gap: '16px', padding: '12px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #f1f5f9' }}>
+                                    <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: `${cat.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: cat.color }}>
+                                        {cat.icon}
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>{cat.id}</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2px' }}>
+                                            {idx === 0 && 'Includes Customer Enquiries, Quotations, and Order Acknowledgments.'}
+                                            {idx === 1 && 'Supplier Bids, Quotations, and Purchase Orders sent to vendors.'}
+                                            {idx === 2 && 'Delivery Orders, Service Reports, Certificates, and Packing Lists.'}
+                                            {idx === 3 && 'Tax Invoices, Proforma Invoices, and Statements of Account.'}
+                                            {idx === 4 && 'Expenditure bills, Bank slips, and general Payment records.'}
+                                            {idx === 5 && 'Job site photos, equipment media, and project gallery.'}
+                                            {idx === 6 && 'Official correspondence, emails, and administrative files.'}
+                                            {idx === 7 && 'Technical drawings, equipment manuals, and data sheets.'}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        
+                        <button 
+                            className="btn btn-primary" 
+                            style={{ width: '100%', marginTop: '24px', padding: '12px' }}
+                            onClick={() => setShowGuide(false)}
+                        >
+                            Understood
+                        </button>
                     </div>
                 </div>
             )}

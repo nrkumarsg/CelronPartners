@@ -249,13 +249,14 @@ export const provisionFullProjectStructure = async (accessToken, celronRootId, y
 
     // 5. Create Kumar's requested sub-folders
     const subFolders = [
-        '1. Enquiries_&_Landing_Notes',
-        '2. Supplier_Quotations',
-        '3. Supplier_Payments',
-        '4. Customer_Bank_Slips',
-        '5. Expenses_Bills',
-        '6. Photos',
-        '7. Other_Documents'
+        '1. Enquiries & Quotations',
+        '2. Supplier Bids & POs',
+        '3. Operations & Logistics',
+        '4. Finance & Invoices',
+        '5. Expenses & Payments',
+        '6. Job Gallery & Photos',
+        '7. Correspondence & Admin',
+        '8. Technical Documents'
     ];
 
     for (const sub of subFolders) {

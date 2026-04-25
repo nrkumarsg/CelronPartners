@@ -23,13 +23,16 @@ import {
 import { getPartners, getContacts, getDocumentSettings } from '../../lib/store';
 import { getCatalogItems } from '../../lib/catalogService';
 import { supabase } from '../../lib/supabase';
+import { getJobExpenses, saveJobExpense, deleteJobExpense } from '../../lib/jobExpenseService';
 import {
     Modal,
     QuickPartnerAdd,
     QuickContactAdd,
     QuickVesselAdd,
-    QuickLocationAdd
+    QuickLocationAdd,
+    QuickExpenseAdd
 } from '../../components/workflow/QuickAddForms';
+import FloatingControlHub from '../../components/FloatingControlHub';
 import RichTextEditor from '../../components/common/RichTextEditor';
 import { ITEM_UNITS } from '../../utils/units';
 import WorkflowDocumentLayout from '../../components/workflow/WorkflowDocumentLayout';
@@ -56,6 +59,11 @@ export default function WorkflowEditor() {
     const [poModal, setPoModal] = useState({ isOpen: false });
     const [lineItems, setLineItems] = useState([]);
     const [workflowDocs, setWorkflowDocs] = useState([]); // Documents in the same job suite
+    const [expenses, setExpenses] = useState([]);
+    const [loadingExpenses, setLoadingExpenses] = useState(false);
+    const [expenseModal, setExpenseModal] = useState({ isOpen: false, data: null });
+    const [galleryFiles, setGalleryFiles] = useState([]);
+    const [loadingGallery, setLoadingGallery] = useState(false);
 
     // Explorer State
     const [explorerFiles, setExplorerFiles] = useState([]);
@@ -88,6 +96,7 @@ export default function WorkflowEditor() {
     const [vessels, setVessels] = useState([]);
     const [workLocations, setWorkLocations] = useState([]);
     const [catalog, setCatalog] = useState([]);
+    const [staff, setStaff] = useState([]);
     const [catalogSearch, setCatalogSearch] = useState('');
     const [showCatalogDropdown, setShowCatalogDropdown] = useState(false);
 
@@ -108,9 +117,9 @@ export default function WorkflowEditor() {
         contact_id: '',
         vessel_id: '',
         work_location_id: '',
-        salesperson_name: 'N.R.KUMAR',
-        salesperson_phone: '+6597685891',
-        salesperson_email: 'kumar@celron.net',
+        salesperson_name: profile?.full_name || 'N.R.KUMAR',
+        salesperson_phone: profile?.phone || '+6597685891',
+        salesperson_email: profile?.professional_email || 'kumar@celron.net',
         subject: '',
         customer_ref: 'WALK IN',
         currency: 'SGD',
@@ -165,6 +174,9 @@ export default function WorkflowEditor() {
             if (sRes.paynow_url) toBase64(sRes.paynow_url).then(setPaynowBase64).catch(console.error);
         }
         if (allContacts) setContacts(allContacts);
+        
+        const { data: staffData } = await supabase.from('staff').select('*').order('full_name');
+        if (staffData) setStaff(staffData);
     };
 
     const checkGoogleAuth = async () => {
@@ -239,8 +251,143 @@ export default function WorkflowEditor() {
                 }
             };
             run();
+        } else if (activeTab === 'costing' && !isNew) {
+            fetchExpenses();
+        } else if (activeTab === 'gallery' && !isNew) {
+            fetchGallery();
         }
     }, [activeTab, formData.assigned_job_no]);
+
+    const fetchGallery = async () => {
+        if (!formData.assigned_job_no) return;
+        setLoadingGallery(true);
+        try {
+            const token = getStoredToken();
+            const rootId = await ensureJobFolder();
+            const mediaFolderId = await getOrCreateFolder(token, rootId, '6. Media / Photos');
+            const files = await listFolderContent(token, mediaFolderId);
+            setGalleryFiles(files.filter(f => f.mimeType.startsWith('image/')));
+        } catch (err) {
+            console.error('Error fetching gallery:', err);
+        } finally {
+            setLoadingGallery(false);
+        }
+    };
+
+    const handleGalleryUpload = async (file) => {
+        if (!file) return;
+        setLoadingGallery(true);
+        try {
+            const token = getStoredToken();
+            const rootId = await ensureJobFolder();
+            const mediaFolderId = await getOrCreateFolder(token, rootId, '6. Media / Photos');
+            await uploadFileToDrive(token, file, { folderId: mediaFolderId });
+            fetchGallery();
+        } catch (err) {
+            console.error('Gallery upload failed:', err);
+            alert('Upload failed: ' + err.message);
+        } finally {
+            setLoadingGallery(false);
+        }
+    };
+
+    const fetchExpenses = async () => {
+        setLoadingExpenses(true);
+        const { data } = await getJobExpenses(id);
+        if (data) setExpenses(data);
+        setLoadingExpenses(false);
+    };
+
+    const addExpenseRow = () => {
+        setExpenseModal({ isOpen: true, data: null });
+    };
+
+    const updateExpenseRow = (index, field, value) => {
+        const updated = [...expenses];
+        updated[index][field] = value;
+
+        // Recalculate totals
+        if (['unit_price', 'quantity', 'gst_rate', 'gst_amount'].includes(field)) {
+            const up = parseFloat(updated[index].unit_price) || 0;
+            const qty = parseFloat(updated[index].quantity) || 0;
+            const sub = up * qty;
+            updated[index].total_before_tax = sub;
+            
+            // If field isn't gst_amount, auto-calculate amount based on rate
+            if (field !== 'gst_amount') {
+                const rate = parseFloat(updated[index].gst_rate) || 0;
+                updated[index].gst_amount = sub * (rate / 100);
+            }
+            
+            updated[index].grand_total = sub + (parseFloat(updated[index].gst_amount) || 0);
+        }
+
+        setExpenses(updated);
+    };
+
+    const handleSaveExpense = async (index) => {
+        const row = expenses[index];
+        if (!row.supplier_id) {
+            alert('Please select a supplier');
+            return;
+        }
+        const { data, error } = await saveJobExpense(row);
+        if (error) {
+            alert('Error saving expense: ' + error.message);
+        } else {
+            const updated = [...expenses];
+            updated[index] = data;
+            setExpenses(updated);
+        }
+    };
+
+    const handleDeleteExpense = async (index) => {
+        const row = expenses[index];
+        if (!window.confirm('Delete this expense record?')) return;
+        
+        if (!row.id.startsWith('temp_')) {
+            const { error } = await deleteJobExpense(row.id);
+            if (error) {
+                alert('Error deleting: ' + error.message);
+                return;
+            }
+        }
+        
+        const updated = expenses.filter((_, i) => i !== index);
+        setExpenses(updated);
+    };
+
+    const handleBillUpload = async (index, file) => {
+        if (!file) return;
+        
+        const updated = [...expenses];
+        updated[index].uploading = true;
+        setExpenses(updated);
+
+        try {
+            const token = getStoredToken();
+            const folderId = await ensureJobFolder(); // Get or create root
+            const financeFolder = await getOrCreateFolder(token, folderId, '5. Expenses & Payments');
+            
+            const result = await uploadFileToDrive(token, file, { folderId: financeFolder });
+            
+            // Save link to DB
+            const fileUrl = `https://drive.google.com/file/d/${result.id}/view`;
+            const { data, error } = await saveJobExpense({ ...expenses[index], bill_url: fileUrl });
+            
+            if (error) throw error;
+            
+            const final = [...expenses];
+            final[index] = { ...data, uploading: false };
+            setExpenses(final);
+        } catch (err) {
+            console.error('Upload failed:', err);
+            alert('Upload failed: ' + err.message);
+            const reset = [...expenses];
+            reset[index].uploading = false;
+            setExpenses(reset);
+        }
+    };
 
     const handleExplorerNavigate = (folder) => {
         setExplorerPath(prev => [...prev, { id: folder.id, name: folder.name }]);
@@ -362,11 +509,17 @@ export default function WorkflowEditor() {
             const year = new Date(docData.issue_date).getFullYear().toString();
             const rootId = await provisionFullProjectStructure(token, settings?.gdrive_celron_root_id, year, docData.assigned_job_no);
             
-            // Respective sub-folders logic
-            let subfolderName = '7. Other_Documents';
+            // Respective sub-folders logic based on professional classification
+            let subfolderName = '7. Admin & Misc';
             const type = docData.document_type.toUpperCase();
-            if (type === 'DELIVERY ORDER') subfolderName = '7. Other_Documents'; // Could be 'Logistics' if exists
-            if (type === 'TAX INVOICE' || type === 'PROFORMA INVOICE') subfolderName = '7. Other_Documents';
+            
+            if (type === 'QUOTATION' || type === 'ORDER ACKNOWLEDGMENT' || type === 'ENQUIRY') {
+                subfolderName = '1. Enquiries & Quotations';
+            } else if (type === 'DELIVERY ORDER' || type === 'SERVICE REPORT' || type === 'CERTIFICATE' || type === 'PACKING LIST') {
+                subfolderName = '3. Operations & Logistics';
+            } else if (type === 'TAX INVOICE' || type === 'PROFORMA INVOICE' || type === 'STATEMENT OF ACCOUNT') {
+                subfolderName = '4. Finance & Invoices';
+            }
 
             const targetFolderId = await getOrCreateFolder(token, subfolderName, rootId);
             
@@ -553,6 +706,9 @@ export default function WorkflowEditor() {
 
         setFormData(prev => ({
             ...prev,
+            salesperson_name: prev.salesperson_name || profile?.full_name || '',
+            salesperson_phone: prev.salesperson_phone || profile?.phone || '',
+            salesperson_email: prev.salesperson_email || profile?.professional_email || '',
             document_no: newNo,
             job_id: linkedJobId || '',
             partner_id: initialPartnerId || prev.partner_id,
@@ -1059,6 +1215,32 @@ export default function WorkflowEditor() {
                                 <label><FileText size={14} /> Subject / Project Name</label>
                                 <input type="text" className="form-input" name="subject" value={formData.subject} onChange={handleHeaderChange} placeholder="What is this for?" />
                             </div>
+                            <div className="form-item">
+                                <label><User size={14} /> Salesperson (Assigned)</label>
+                                <select 
+                                    className="form-select" 
+                                    name="salesperson_name" 
+                                    value={formData.salesperson_name} 
+                                    onChange={(e) => {
+                                        const selected = staff.find(s => s.full_name === e.target.value);
+                                        if (selected) {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                salesperson_name: selected.full_name,
+                                                salesperson_phone: selected.phone || '',
+                                                salesperson_email: selected.professional_email || selected.email || ''
+                                            }));
+                                        } else {
+                                            handleHeaderChange(e);
+                                        }
+                                    }}
+                                >
+                                    <option value="">-- Choose Salesperson --</option>
+                                    {staff.map(s => (
+                                        <option key={s.id} value={s.full_name}>{s.full_name} ({s.designation || 'Staff'})</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
 
                         <div className="col-right">
@@ -1184,10 +1366,164 @@ export default function WorkflowEditor() {
                         <div style={{ display: 'flex', gap: '4px' }}>
                             <button className={`tab ${activeTab === 'workflow' ? 'active' : ''}`} onClick={() => setActiveTab('workflow')}>Workflow Suite</button>
                             <button className={`tab ${activeTab === 'po' ? 'active' : ''}`} onClick={() => setActiveTab('po')}>PO Details</button>
+                            <button className={`tab ${activeTab === 'costing' ? 'active' : ''}`} onClick={() => setActiveTab('costing')}>Project Costing</button>
+                            <button className={`tab ${activeTab === 'gallery' ? 'active' : ''}`} onClick={() => setActiveTab('gallery')}>Job Gallery</button>
                             <button className={`tab ${activeTab === 'explorer' ? 'active' : ''}`} onClick={() => setActiveTab('explorer')}>Explorer</button>
                         </div>
                     )}
                 </div>
+
+                {activeTab === 'gallery' && (
+                    <div className="glass-panel job-gallery">
+                        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Ship size={20} className="text-accent" />
+                                <h3 style={{ margin: 0 }}>Job Photos & Media</h3>
+                            </div>
+                            <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
+                                <Upload size={16} /> Upload Photo
+                                <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => {
+                                    Array.from(e.target.files).forEach(handleGalleryUpload);
+                                }} />
+                            </label>
+                        </div>
+
+                        {loadingGallery ? (
+                            <div style={{ padding: '80px', textAlign: 'center', color: 'var(--text-secondary)' }}>
+                                <Loader2 size={40} className="animate-spin" style={{ margin: '0 auto 16px' }} />
+                                <p>Loading gallery from Google Drive...</p>
+                            </div>
+                        ) : galleryFiles.length === 0 ? (
+                            <div style={{ padding: '80px', textAlign: 'center', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #cbd5e1' }}>
+                                <Ship size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
+                                <p style={{ color: '#64748b', fontSize: '1.1rem' }}>No photos uploaded yet for this job.</p>
+                                <p style={{ color: '#94a3b8', fontSize: '0.85rem', marginTop: '4px' }}>Capture and upload job progress photos directly here.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' }}>
+                                {galleryFiles.map(file => (
+                                    <div key={file.id} className="gallery-item" style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', background: '#fff', border: '1px solid #e2e8f0', aspectRatio: '4/3', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', transition: 'transform 0.2s' }}>
+                                        <img 
+                                            src={file.thumbnailLink?.replace('=s220', '=s600')} 
+                                            alt={file.name} 
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                                        />
+                                        <div className="gallery-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                                            <a href={file.webViewLink} target="_blank" rel="noreferrer" style={{ color: '#fff', padding: '8px', background: 'rgba(255,255,255,0.2)', borderRadius: '50%' }}><ExternalLink size={20} /></a>
+                                        </div>
+                                        <style>{`.gallery-item:hover .gallery-overlay { opacity: 1; } .gallery-item:hover { transform: translateY(-4px); }`}</style>
+                                        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '8px', background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', color: '#fff', fontSize: '0.7rem', fontWeight: 600 }}>
+                                            {file.name}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'costing' && (
+                    <div className="glass-panel project-costing">
+                        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Calculator size={20} className="text-accent" />
+                                <h3 style={{ margin: 0 }}>Project Costing & Profit Summary</h3>
+                            </div>
+                            <button className="btn btn-primary" onClick={addExpenseRow}>
+                                <Plus size={16} /> Add Expense
+                            </button>
+                        </div>
+
+                        {/* Summary Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '20px', marginBottom: '32px' }}>
+                            <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Total Revenue</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>
+                                    {formData.currency} {formData.total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </div>
+                            </div>
+                            <div style={{ background: '#fff1f2', padding: '20px', borderRadius: '16px', border: '1px solid #fecdd3' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#be123c', textTransform: 'uppercase', marginBottom: '8px' }}>Total Expenses</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#9f1239' }}>
+                                    {formData.currency} {expenses.reduce((acc, curr) => acc + (parseFloat(curr.grand_total) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </div>
+                            </div>
+                            {(() => {
+                                const totalRevenue = parseFloat(formData.total_amount) || 0;
+                                const totalExpenses = expenses.reduce((acc, curr) => acc + (parseFloat(curr.grand_total) || 0), 0);
+                                const profit = totalRevenue - totalExpenses;
+                                const margin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+                                return (
+                                    <>
+                                        <div style={{ background: profit >= 0 ? '#f0fdf4' : '#fff1f2', padding: '20px', borderRadius: '16px', border: `1px solid ${profit >= 0 ? '#bbf7d0' : '#fecdd3'}` }}>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: profit >= 0 ? '#15803d' : '#be123c', textTransform: 'uppercase', marginBottom: '8px' }}>Gross Profit</div>
+                                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: profit >= 0 ? '#166534' : '#9f1239' }}>
+                                                {formData.currency} {profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </div>
+                                        </div>
+                                        <div style={{ background: profit >= 0 ? '#ecfdf5' : '#fff7ed', padding: '20px', borderRadius: '16px', border: `1px solid ${profit >= 0 ? '#d1fae5' : '#ffedd5'}` }}>
+                                            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: profit >= 0 ? '#047857' : '#c2410c', textTransform: 'uppercase', marginBottom: '8px' }}>Profit Margin</div>
+                                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: profit >= 0 ? '#065f46' : '#9a3412' }}>
+                                                {margin.toFixed(1)}%
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+                        </div>
+
+                        {/* Expense Table */}
+                        <div className="table-container" style={{ overflowX: 'auto' }}>
+                            <table className="data-table" style={{ width: '100%' }}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ width: '200px' }}>Supplier</th>
+                                        <th style={{ width: '120px' }}>Inv No</th>
+                                        <th style={{ width: '130px' }}>Date</th>
+                                        <th>Description</th>
+                                        <th style={{ width: '100px', textAlign: 'right' }}>Grand Total</th>
+                                        <th style={{ width: '80px', textAlign: 'center' }}>Bill</th>
+                                        <th style={{ width: '120px', textAlign: 'right' }}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {loadingExpenses ? (
+                                        <tr><td colSpan="7" style={{ textAlign: 'center', padding: '40px' }}>Loading expenses...</td></tr>
+                                    ) : expenses.length === 0 ? (
+                                        <tr><td colSpan="7" style={{ textAlign: 'center', padding: '40px' }}>No expenses recorded yet. Click "Add Expense" to start.</td></tr>
+                                    ) : (
+                                        expenses.map((exp, idx) => (
+                                            <tr key={exp.id}>
+                                                <td style={{ fontWeight: 600 }}>{partners.find(p => p.id === exp.supplier_id)?.name || 'Unknown Supplier'}</td>
+                                                <td>{exp.invoice_no || '-'}</td>
+                                                <td>{exp.invoice_date ? new Date(exp.invoice_date).toLocaleDateString() : '-'}</td>
+                                                <td>{exp.description}</td>
+                                                <td style={{ textAlign: 'right', fontWeight: 800, color: 'var(--text-primary)' }}>
+                                                    {formData.currency} {(parseFloat(exp.grand_total) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                </td>
+                                                <td style={{ textAlign: 'center' }}>
+                                                    {exp.bill_url ? (
+                                                        <a href={exp.bill_url} target="_blank" rel="noreferrer" title="View Bill" style={{ color: '#10b981' }}><FileCheck size={18} /></a>
+                                                    ) : <span style={{ color: '#cbd5e1' }}><Paperclip size={18} /></span>}
+                                                </td>
+                                                <td style={{ textAlign: 'right' }}>
+                                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                        <button className="btn-icon" onClick={() => setExpenseModal({ isOpen: true, data: exp })} title="Edit Expense" style={{ color: 'var(--accent)' }}>
+                                                            <FileText size={16} />
+                                                        </button>
+                                                        <button className="btn-icon" onClick={() => handleDeleteExpense(idx)} title="Delete Record" style={{ color: '#ef4444' }}>
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
 
                 {activeTab === 'items' && (
                     <div className="items-editor">
@@ -1548,32 +1884,34 @@ export default function WorkflowEditor() {
                                 </div>
                             </div>
 
-                            <div className="form-item" style={{ gridColumn: '1 / -1' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f1f5f9', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                    <Ship size={18} className="text-accent" />
-                                    <span style={{ fontWeight: 700 }}>Mobile Delivery & POD Verification (Future App Integration)</span>
-                                </label>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '12px' }}>
-                                    <div className="form-item">
-                                        <label>GPS Coordinates (Stored on Sign-off)</label>
-                                        <input type="text" className="form-input" value={formData.gps_coordinates || ''} readOnly placeholder="0.000000, 0.000000" />
-                                    </div>
-                                    <div className="form-item">
-                                        <label>Device ID & Network Timestamp</label>
-                                        <input type="text" className="form-input" value={formData.device_id ? `${formData.device_id} @ ${formData.mobile_signed_at}` : ''} readOnly placeholder="Tracking details..." />
-                                    </div>
-                                    <div style={{ gridColumn: '1 / -1' }}>
-                                        <label>Delivery Proof Photos (2-4 required)</label>
-                                        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                                            {[1, 2, 3, 4].map(idx => (
-                                                <div key={idx} style={{ width: '120px', height: '90px', background: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden' }}>
-                                                    {formData.signature_image_url ? <Package size={24} color="#cbd5e1" /> : <Plus size={24} color="#cbd5e1" />}
-                                                </div>
-                                            ))}
+                            {(formData.document_type === 'Active Job' || formData.document_type === 'Delivery Order') && (
+                                <div className="form-item" style={{ gridColumn: '1 / -1' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f1f5f9', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                        <Ship size={18} className="text-accent" />
+                                        <span style={{ fontWeight: 700 }}>Mobile Delivery & POD Verification (Future App Integration)</span>
+                                    </label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '12px' }}>
+                                        <div className="form-item">
+                                            <label>GPS Coordinates (Stored on Sign-off)</label>
+                                            <input type="text" className="form-input" value={formData.gps_coordinates || ''} readOnly placeholder="0.000000, 0.000000" />
+                                        </div>
+                                        <div className="form-item">
+                                            <label>Device ID & Network Timestamp</label>
+                                            <input type="text" className="form-input" value={formData.device_id ? `${formData.device_id} @ ${formData.mobile_signed_at}` : ''} readOnly placeholder="Tracking details..." />
+                                        </div>
+                                        <div style={{ gridColumn: '1 / -1' }}>
+                                            <label>Delivery Proof Photos (2-4 required)</label>
+                                            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                                                {[1, 2, 3, 4].map(idx => (
+                                                    <div key={idx} style={{ width: '120px', height: '90px', background: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden' }}>
+                                                        {formData.signature_image_url ? <Package size={24} color="#cbd5e1" /> : <Plus size={24} color="#cbd5e1" />}
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
                     </div>
                 )}
@@ -1661,7 +1999,7 @@ export default function WorkflowEditor() {
                                     <div className="info-item">
                                         <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Issued By</label>
                                         <div style={{ fontSize: '1rem', color: '#1e293b' }}>
-                                            {formData.customer_po_by_id || 'N/A'}
+                                            {contacts.find(c => c.id === formData.customer_po_by_id)?.name || formData.customer_po_by_id || 'N/A'}
                                         </div>
                                     </div>
                                 </div>
@@ -1883,13 +2221,13 @@ export default function WorkflowEditor() {
                         <form onSubmit={(e) => {
                             e.preventDefault();
                             const formData = new FormData(e.target);
-                            const poData = {
-                                po_no: formData.get('po_no'),
-                                po_date: formData.get('po_date'),
-                                po_value: formData.get('po_value'),
-                                po_description: formData.get('po_description'),
-                                po_by: formData.get('po_by')
-                            };
+                                const poData = {
+                                    po_no: formData.get('po_no'),
+                                    po_date: formData.get('po_date'),
+                                    po_value: formData.get('po_value'),
+                                    po_description: formData.get('po_description'),
+                                    contact_id: formData.get('contact_id')
+                                };
                             const options = {
                                 includeCertificates: formData.get('includeCertificates') === 'on',
                                 includeServiceReport: formData.get('includeServiceReport') === 'on'
@@ -1911,7 +2249,12 @@ export default function WorkflowEditor() {
                                 </div>
                                 <div className="form-item">
                                     <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>PO Issued By</label>
-                                    <input type="text" className="form-input" name="po_by" placeholder="Name of Person" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }} />
+                                    <select required className="form-input" name="contact_id" defaultValue={formData.contact_id} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}>
+                                        <option value="">-- Select Contact --</option>
+                                        {contacts.filter(c => c.partner_id === formData.partner_id).map(c => (
+                                            <option key={c.id} value={c.id}>{c.name} {c.designation ? `(${c.designation})` : ''}</option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
 
@@ -2423,6 +2766,39 @@ export default function WorkflowEditor() {
                 }
                 `
             }} />
+            {/* Quick Action Floating Hub */}
+            {!isNew && <FloatingControlHub jobId={id} />}
+
+            {expenseModal.isOpen && (
+                <Modal 
+                    isOpen={expenseModal.isOpen} 
+                    onClose={() => setExpenseModal({ isOpen: false, data: null })}
+                    title={expenseModal.data ? 'Edit Project Expense' : 'Add Project Expense'}
+                    icon={Calculator}
+                >
+                    <QuickExpenseAdd 
+                        job_id={id}
+                        partners={partners}
+                        expense={expenseModal.data}
+                        onSuccess={(data) => {
+                            if (expenseModal.data) {
+                                setExpenses(prev => prev.map(e => e.id === data.id ? data : e));
+                            } else {
+                                setExpenses(prev => [...prev, data]);
+                            }
+                            setExpenseModal({ isOpen: false, data: null });
+                        }}
+                        onCancel={() => setExpenseModal({ isOpen: false, data: null })}
+                        onUploadBill={async (file) => {
+                            const token = getStoredToken();
+                            const folderId = await ensureJobFolder();
+                            const financeFolder = await getOrCreateFolder(token, folderId, '5. Expenses & Payments');
+                            const result = await uploadFileToDrive(token, file, { folderId: financeFolder });
+                            return `https://drive.google.com/file/d/${result.id}/view`;
+                        }}
+                    />
+                </Modal>
+            )}
         </div>
     );
 }

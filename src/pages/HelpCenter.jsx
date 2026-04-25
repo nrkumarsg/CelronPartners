@@ -100,30 +100,37 @@ export default function HelpCenter() {
         },
         {
             id: 'lifecycle',
-            title: '2. Document Lifecycle',
+            title: '2. Job Folder Standard (SOP)',
             icon: <Library size={20} />,
             content: (
                 <div className="help-content-section">
-                    <h2>Integrated Document Lifecycle</h2>
-                    <p>Experience "Zero-Upload" document management with automated Google Drive integration.</p>
+                    <h2>Job Folder Standard (SOP)</h2>
+                    <p>To train newcomers: CelronHub uses a mandatory **8-Folder Max** system for all projects. This ensures that documents are never lost and the structure remains clean.</p>
 
-                    <h3>Phase A: Automated Folder Creation</h3>
-                    <p>When you create a <strong>Customer Enquiry</strong>, the system builds this structure in Drive automatically:</p>
-                    <div className="folder-tree" style={{ background: '#f8fafc', padding: '15px', borderRadius: '8px', fontFamily: 'monospace', fontSize: '0.85rem', marginBottom: '20px' }}>
-                        <div>📁 [Year] / [Job No] - [Client] - [Vessel]</div>
-                        <div style={{ marginLeft: '20px' }}>├── 📁 1. Customer_Request_&_Offer</div>
-                        <div style={{ marginLeft: '20px' }}>├── 📁 2. Supplier_Quotes_&_PO (and Bills)</div>
-                        <div style={{ marginLeft: '20px' }}>├── 📁 3. Operation_DO_SR_&_Certificates</div>
-                        <div style={{ marginLeft: '20px' }}>└── 📁 4. Finance_Invoices_&_Payments</div>
+                    <div className="folder-tree-guide" style={{ marginTop: '30px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                        {[
+                            { n: '1. Enquiries & Quotations', d: 'ENQ, QTN, ORA (Customer Requests & Offers)' },
+                            { n: '2. Supplier Bids & POs', d: 'Supplier quotes, technical engagement, and outgoing POs' },
+                            { n: '3. Operations & Logistics', d: 'DO, SR, CERT, PKL (Delivery, Service Reports, Certificates)' },
+                            { n: '4. Finance & Invoices', d: 'INV, PRO, SOA (Tax Invoices, Proformas, Statements)' },
+                            { n: '5. Expenses & Payments', d: 'Expense bills, Bank slips, and general Payment records' },
+                            { n: '6. Job Gallery & Photos', d: 'Photos, site media, and job evidence' },
+                            { n: '7. Correspondence & Admin', d: 'Official emails, admin docs, and misc letters' },
+                            { n: '8. Technical Documents', d: 'Technical drawings, manuals, and data sheets' }
+                        ].map(item => (
+                            <div key={item.n} style={{ display: 'flex', gap: '12px', alignItems: 'center', background: '#f8fafc', padding: '12px 20px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                                <div style={{ color: 'var(--accent)', fontWeight: 800, fontSize: '0.9rem', width: '220px' }}>{item.n}</div>
+                                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>➔ {item.d}</div>
+                            </div>
+                        ))}
                     </div>
 
-                    <h3>Phase B: One-Click Recording & Smart Emailing</h3>
-                    <p>In the <strong>Job Portal</strong> or <strong>Quotation Editor</strong>, use the Send Email buttons. The system now:</p>
-                    <ul>
-                        <li><strong>Itemizes Content</strong>: Automatically builds a clear summary of your quotation items in the email body.</li>
-                        <li><strong>Professional Footer</strong>: Attaches your standard company details (Address, Tel, Email) automatically.</li>
-                        <li><strong>Auto-Attach</strong>: Generates the PDF and attaches it without you needing to download/upload anything.</li>
-                    </ul>
+                    <div className="info-card" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '20px', borderRadius: '12px', marginTop: '30px' }}>
+                        <h4 style={{ color: '#166534', margin: '0 0 8px 0' }}>💡 Training Note</h4>
+                        <p style={{ color: '#14532d', margin: 0, fontSize: '0.9rem' }}>
+                            Newcomers should be taught that the system <strong>automatically</strong> puts generated PDFs into these folders. Manual uploads should follow the same pattern using the "Project Vault" tab in any Job screen.
+                        </p>
+                    </div>
                 </div>
             )
         },

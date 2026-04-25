@@ -2,20 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { 
     Users, Search, UserPlus, Mail, Phone, Shield, 
     MoreHorizontal, Edit2, Trash2, X, Check,
-    Building2, Briefcase, User
+    Building2, Briefcase, User as UserIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getAllProfiles, updateProfile, deleteProfile } from '../lib/userService';
+import { getAllStaff, createStaff, updateStaff, deleteStaff } from '../lib/userService';
 
 const StaffDirectory = () => {
     const { profile: currentUserProfile } = useAuth();
     const [staff, setStaff] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [modalType, setModalType] = useState('add'); // 'add' | 'edit'
     const [editingStaff, setEditingStaff] = useState(null);
     const [formData, setFormData] = useState({
         full_name: '',
+        email: '',
         professional_email: '',
         phone: '',
         designation: '',
@@ -30,43 +32,69 @@ const StaffDirectory = () => {
 
     const fetchStaff = async () => {
         setLoading(true);
-        const { data } = await getAllProfiles();
+        const { data } = await getAllStaff();
         if (data) setStaff(data);
         setLoading(false);
     };
 
+    const handleAddClick = () => {
+        setModalType('add');
+        setEditingStaff(null);
+        setFormData({
+            full_name: '',
+            email: '',
+            professional_email: '',
+            phone: '',
+            designation: '',
+            role: 'user',
+            status: 'active'
+        });
+        setIsModalOpen(true);
+    };
+
     const handleEditClick = (person) => {
+        setModalType('edit');
         setEditingStaff(person);
         setFormData({
             full_name: person.full_name || '',
-            professional_email: person.professional_email || person.email || '',
+            email: person.email || '',
+            professional_email: person.professional_email || '',
             phone: person.phone || '',
             designation: person.designation || '',
             role: person.role || 'user',
             status: person.status || 'active'
         });
-        setIsEditModalOpen(true);
+        setIsModalOpen(true);
     };
 
     const handleSave = async (e) => {
         e.preventDefault();
         setSaveLoading(true);
         
-        const { error } = await updateProfile(editingStaff.id, formData);
-        
-        if (error) {
-            alert("Failed to update staff member: " + error.message);
-        } else {
-            setIsEditModalOpen(false);
+        try {
+            if (modalType === 'edit') {
+                const { error } = await updateStaff(editingStaff.id, formData);
+                if (error) throw error;
+            } else {
+                const payload = { 
+                    ...formData
+                };
+                const { error } = await createStaff(payload);
+                if (error) throw error;
+            }          
+            setIsModalOpen(false);
             fetchStaff();
+        } catch (error) {
+            alert(`Failed to ${modalType} staff member: ` + error.message);
+        } finally {
+            setSaveLoading(false);
         }
-        setSaveLoading(false);
     };
 
     const handleDelete = async (id) => {
         if (!window.confirm("Are you sure you want to remove this staff member from the directory?")) return;
         
-        const { error } = await deleteProfile(id);
+        const { error } = await deleteStaff(id);
         if (error) {
             alert("Failed to delete: " + error.message);
         } else {
@@ -92,8 +120,8 @@ const StaffDirectory = () => {
                         </p>
                     </div>
                     {isAdmin && (
-                        <button className="btn btn-primary" onClick={() => alert("New staff must sign up or be invited via Auth settings.")}>
-                            <UserPlus size={18} /> Invite Staff
+                        <button className="btn btn-primary" onClick={handleAddClick}>
+                            <UserPlus size={18} /> Add Staff Member
                         </button>
                     )}
                 </div>
@@ -144,7 +172,7 @@ const StaffDirectory = () => {
                                                     {person.avatar_url ? (
                                                         <img src={person.avatar_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                     ) : (
-                                                        <User size={20} color="var(--text-secondary)" />
+                                                        <UserIcon size={20} color="var(--text-secondary)" />
                                                     )}
                                                 </div>
                                                 <div>
@@ -213,8 +241,8 @@ const StaffDirectory = () => {
                 </div>
             </div>
 
-            {/* Edit Staff Modal */}
-            {isEditModalOpen && (
+            {/* Staff Modal (Add/Edit) */}
+            {isModalOpen && (
                 <div style={{
                     position: 'fixed', inset: 0, zIndex: 1000,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -222,27 +250,45 @@ const StaffDirectory = () => {
                 }}>
                     <div className="glass-panel" style={{ width: '500px', padding: '32px', position: 'relative', border: '1px solid rgba(255,255,255,0.2)' }}>
                         <button
-                            onClick={() => setIsEditModalOpen(false)}
+                            onClick={() => setIsModalOpen(false)}
                             style={{ position: 'absolute', top: '20px', right: '20px', border: 'none', background: 'transparent', cursor: 'pointer', color: '#64748b' }}
                         >
                             <X size={20} />
                         </button>
 
                         <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <Edit2 size={24} color="var(--accent)" /> Edit Staff Member
+                            {modalType === 'edit' ? <Edit2 size={24} color="var(--accent)" /> : <UserPlus size={24} color="var(--accent)" />}
+                            {modalType === 'edit' ? 'Edit Staff Member' : 'Add New Staff Member'}
                         </h2>
-                        <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>Update professional details and system permissions.</p>
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '32px' }}>
+                            {modalType === 'edit' ? 'Update professional details and system permissions.' : 'Create a new professional profile for your team member.'}
+                        </p>
 
                         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                             <div className="form-group">
                                 <label className="form-label">Full Name</label>
                                 <input
                                     type="text"
+                                    required
                                     className="form-input"
                                     placeholder="e.g. Ramesh Kumar"
                                     value={formData.full_name}
                                     onChange={e => setFormData({ ...formData, full_name: e.target.value })}
                                 />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Login Email (Account)</label>
+                                <input
+                                    type="email"
+                                    required={modalType === 'add'}
+                                    className="form-input"
+                                    placeholder="user@example.com"
+                                    value={formData.email}
+                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                                    disabled={modalType === 'edit'}
+                                />
+                                {modalType === 'add' && <p style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>This should match their signup email.</p>}
                             </div>
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -307,9 +353,9 @@ const StaffDirectory = () => {
                             </div>
 
                             <div style={{ marginTop: '12px', display: 'flex', gap: '12px' }}>
-                                <button type="button" onClick={() => setIsEditModalOpen(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
                                 <button type="submit" className="btn btn-primary" style={{ flex: 2 }} disabled={saveLoading}>
-                                    {saveLoading ? 'Saving...' : 'Update Profile'}
+                                    {saveLoading ? 'Saving...' : modalType === 'edit' ? 'Update Profile' : 'Add Staff Member'}
                                 </button>
                             </div>
                         </form>
