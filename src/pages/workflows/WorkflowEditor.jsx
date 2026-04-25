@@ -9,7 +9,7 @@ import {
     FileCheck, Play, RefreshCw, AlertCircle, Loader2,
     ExternalLink, Folder, File, HardDrive, Upload
 } from 'lucide-react';
-import { listFolderContent, uploadFileToDrive, deleteFile, getOrCreateFolder, provisionFullProjectStructure } from '../../lib/driveService';
+import { listFolderContent, uploadFileToDrive, deleteFile, getOrCreateFolder, provisionFullProjectStructure, provisionPartnerStructure } from '../../lib/driveService';
 import { validateToken, connectGoogleAPI, getStoredToken } from '../../lib/googleAuthService';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -290,6 +290,52 @@ export default function WorkflowEditor() {
         } catch (err) {
             console.error('Error deleting explorer file:', err);
             alert('Failed to delete file.');
+        }
+    };
+
+    const handleOpenPartnerVault = async () => {
+        if (!formData.partner_id) return;
+        
+        const partner = partners.find(p => p.id === formData.partner_id);
+        if (!partner) return;
+
+        if (partner.google_drive_link) {
+            window.open(partner.google_drive_link, '_blank');
+            return;
+        }
+
+        // Provision if missing
+        if (!confirm(`No Vault found for "${partner.name}". Would you like to create one now in Google Drive?`)) return;
+
+        setLoadingExplorer(true);
+        try {
+            const token = getStoredToken();
+            const result = await provisionPartnerStructure(
+                token, 
+                partner.name, 
+                settings?.gdrive_celron_root_id
+            );
+            
+            // Save to database
+            const { error } = await supabase
+                .from('partners')
+                .update({ 
+                    google_drive_link: result.link,
+                    gdrive_folder_id: result.id
+                })
+                .eq('id', partner.id);
+
+            if (error) throw error;
+
+            // Update local state so we don't fetch again
+            setPartners(prev => prev.map(p => p.id === partner.id ? { ...p, google_drive_link: result.link, gdrive_folder_id: result.id } : p));
+            
+            window.open(result.link, '_blank');
+        } catch (err) {
+            console.error('Error provisioning partner vault:', err);
+            alert('Failed to create partner vault: ' + err.message);
+        } finally {
+            setLoadingExplorer(false);
         }
     };
 
@@ -1794,10 +1840,7 @@ export default function WorkflowEditor() {
                             <button 
                                 className="btn btn-secondary" 
                                 style={{ fontSize: '0.8rem', gap: '8px' }}
-                                onClick={() => {
-                                    if (formData.partners?.google_drive_link) window.open(formData.partners.google_drive_link, '_blank');
-                                    else alert('No GDrive link found for this partner.');
-                                }}
+                                onClick={handleOpenPartnerVault}
                             >
                                 <ExternalLink size={14} /> Open Partner Folder
                             </button>
