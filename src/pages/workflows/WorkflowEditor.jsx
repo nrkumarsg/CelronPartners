@@ -331,8 +331,6 @@ export default function WorkflowEditor() {
         }
     };
 
-    const [uploadProgress, setUploadProgress] = useState(0);
-
     const fetchDocument = async () => {
         setLoading(true);
         console.log('Fetching document with ID:', id);
