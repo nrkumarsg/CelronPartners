@@ -162,7 +162,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                 borderBottom: '2px solid #1e3a8a', paddingBottom: '8px', marginBottom: '20px' 
             }}>
                 <div style={{ ...styles.h3, width: '30%' }}>{docNoLabel}: {doc.document_no}</div>
-                <h1 style={{ ...styles.h1, textAlign: 'center', width: '40%', margin: 0 }}>{isJob ? 'JOB ORDER' : doc.document_type?.toUpperCase()}</h1>
+                <h1 style={{ ...styles.h1, textAlign: 'center', width: '40%', margin: 0 }}>{isJob ? 'JOB DETAIL' : doc.document_type?.toUpperCase()}</h1>
                 <div style={{ ...styles.h3, width: '30%', textAlign: 'right' }}>DATE: {todayFormatted}</div>
             </div>
 
