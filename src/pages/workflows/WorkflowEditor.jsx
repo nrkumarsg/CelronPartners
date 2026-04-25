@@ -91,6 +91,49 @@ export default function WorkflowEditor() {
     const [catalogSearch, setCatalogSearch] = useState('');
     const [showCatalogDropdown, setShowCatalogDropdown] = useState(false);
 
+    // Default Dates
+    const defaultIssue = new Date();
+    const defaultExpiry = new Date();
+    defaultExpiry.setDate(defaultExpiry.getDate() + 30);
+
+    // Form Data
+    const [formData, setFormData] = useState({
+        document_type: (type || 'Enquiry').split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+        document_no: '',
+        job_id: '',
+        enquiry_id: '',
+        issue_date: defaultIssue.toISOString().split('T')[0],
+        expiry_date: defaultExpiry.toISOString().split('T')[0],
+        partner_id: '',
+        contact_id: '',
+        vessel_id: '',
+        work_location_id: '',
+        salesperson_name: 'N.R.KUMAR',
+        salesperson_phone: '+6597685891',
+        salesperson_email: 'kumar@celron.net',
+        subject: '',
+        customer_ref: 'WALK IN',
+        currency: 'SGD',
+        status: 'Draft',
+        notes: '',
+        terms_conditions: '',
+        subtotal: 0,
+        tax_amount: 0,
+        total_amount: 0,
+        discount_amount: 0,
+        discount_percent: 0,
+        customer_po_no: '',
+        customer_po_date: '',
+        customer_po_by_id: '',
+        customer_po_attachment_url: '',
+        is_job: false,
+        assigned_job_no: '',
+        original_document_id: '',
+        revision_no: 0,
+        attachment_urls: [],
+        delivery_verification: {}
+    });
+
     useEffect(() => {
         fetchMasterData();
         if (!isNew) {
@@ -288,48 +331,7 @@ export default function WorkflowEditor() {
         }
     };
 
-    // Default Dates
-    const defaultIssue = new Date();
-    const defaultExpiry = new Date();
-    defaultExpiry.setDate(defaultExpiry.getDate() + 30);
-
-    // Form Data
-    const [formData, setFormData] = useState({
-        document_type: (type || 'Enquiry').split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
-        document_no: '',
-        job_id: '',
-        enquiry_id: '',
-        issue_date: defaultIssue.toISOString().split('T')[0],
-        expiry_date: defaultExpiry.toISOString().split('T')[0],
-        partner_id: '',
-        contact_id: '',
-        vessel_id: '',
-        work_location_id: '',
-        salesperson_name: 'N.R.KUMAR',
-        salesperson_phone: '+6597685891',
-        salesperson_email: 'kumar@celron.net',
-        subject: '',
-        customer_ref: 'WALK IN',
-        currency: 'SGD',
-        status: 'Draft',
-        notes: '',
-        terms_conditions: '',
-        subtotal: 0,
-        tax_amount: 0,
-        total_amount: 0,
-        discount_amount: 0,
-        discount_percent: 0,
-        customer_po_no: '',
-        customer_po_date: '',
-        customer_po_by_id: '',
-        customer_po_attachment_url: '',
-        is_job: false,
-        assigned_job_no: '',
-        original_document_id: '',
-        revision_no: 0,
-        attachment_urls: [],
-        delivery_verification: {}
-    });
+    const [uploadProgress, setUploadProgress] = useState(0);
 
     const fetchDocument = async () => {
         setLoading(true);
