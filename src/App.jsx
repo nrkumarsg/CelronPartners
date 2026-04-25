@@ -63,6 +63,7 @@ import Login from './pages/auth/Login';
 import SignUp from './pages/auth/SignUp';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import UserManagement from './pages/UserManagement';
+import StaffDirectory from './pages/StaffDirectory';
 import OAuthCallback from './pages/auth/OAuthCallback';
 import Unauthorized from './pages/auth/Unauthorized';
 
@@ -111,6 +112,12 @@ function App() {
               <Route path="/admin/users" element={
                 <ProtectedRoute>
                   <UserManagement />
+                </ProtectedRoute>
+              } />
+
+              <Route path="/admin/staff" element={
+                <ProtectedRoute>
+                  <StaffDirectory />
                 </ProtectedRoute>
               } />
 

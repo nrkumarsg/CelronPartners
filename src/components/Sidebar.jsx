@@ -481,6 +481,10 @@ export default function Sidebar() {
                             <ShieldCheck size={20} color="#60a5fa" />
                             <span className="nav-text" style={{ color: '#93c5fd' }}>User Control</span>
                         </NavLink>
+                        <NavLink to="/admin/staff" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Staff Directory">
+                            <Users size={20} color="#fbbf24" />
+                            <span className="nav-text">Staff Directory</span>
+                        </NavLink>
                         <NavLink to="/admin/apks" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="APK Manager">
                             <Smartphone size={20} color="#10b981" />
                             <span className="nav-text">APK Manager</span>

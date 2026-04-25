@@ -33,9 +33,15 @@ export const getAllProfiles = async () => {
 
 export const updateProfile = async (userId, updates) => {
     try {
+        const payload = { ...updates };
+        // Remove fields that shouldn't be updated directly via profile
+        delete payload.id;
+        delete payload.created_at;
+        delete payload.updated_at;
+
         const { data, error } = await supabase
             .from('profiles')
-            .update(updates)
+            .update(payload)
             .eq('id', userId)
             .select()
             .single();
@@ -45,6 +51,38 @@ export const updateProfile = async (userId, updates) => {
     } catch (error) {
         console.error('Error updating profile:', error);
         return { data: null, error };
+    }
+};
+
+export const createProfileManually = async (profileData) => {
+    try {
+        const { data, error } = await supabase
+            .from('profiles')
+            .insert([profileData])
+            .select()
+            .single();
+
+        if (error) throw error;
+        return { data, error: null };
+    } catch (error) {
+        console.error('Error creating profile:', error);
+        return { data: null, error };
+    }
+};
+
+export const deleteProfile = async (userId) => {
+    try {
+        // Note: This usually requires elevated permissions or deleting the Auth user first
+        const { error } = await supabase
+            .from('profiles')
+            .delete()
+            .eq('id', userId);
+
+        if (error) throw error;
+        return { error: null };
+    } catch (error) {
+        console.error('Error deleting profile:', error);
+        return { error };
     }
 };
 
