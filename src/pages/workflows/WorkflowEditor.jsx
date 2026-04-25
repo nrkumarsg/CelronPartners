@@ -1407,38 +1407,42 @@ export default function WorkflowEditor() {
                         </div>
                         
                         {/* Terms & Conditions */}
-                        <div className="glass-panel" style={{ marginTop: '24px', border: '1px solid #e2e8f0' }}>
-                            <div className="form-item">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                                    <div style={{ width: '32px', height: '32px', background: '#eff6ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <FileText size={16} color="#2563eb" />
+                        <div className="glass-panel" style={{ marginTop: '24px', padding: '16px', border: '1px solid #cbd5e1', borderRadius: '16px', background: '#f8fafc' }}>
+                            <div className="form-item" style={{ margin: 0 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                    <div style={{ width: '36px', height: '36px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                        <FileText size={18} color="#2563eb" />
                                     </div>
-                                    <span style={{ fontWeight: 700, fontSize: '1rem', color: '#1e3a8a' }}>Terms & Conditions</span>
+                                    <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e3a8a', letterSpacing: '-0.01em' }}>Terms & Conditions</span>
                                 </label>
-                                <RichTextEditor
-                                    value={formData.terms_conditions}
-                                    onChange={(val) => handleEditorChange('terms_conditions', val)}
-                                    placeholder="Payment terms, delivery details..."
-                                    height="150px"
-                                />
+                                <div style={{ background: '#fff', borderRadius: '12px', padding: '8px', border: '1px solid #e2e8f0' }}>
+                                    <RichTextEditor
+                                        value={formData.terms_conditions}
+                                        onChange={(val) => handleEditorChange('terms_conditions', val)}
+                                        placeholder="Payment terms, delivery details..."
+                                        height="150px"
+                                    />
+                                </div>
                             </div>
                         </div>
 
                         {/* Notes & Comments */}
-                        <div className="glass-panel" style={{ marginTop: '24px', border: '1px solid #e2e8f0' }}>
-                            <div className="form-item">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                                    <div style={{ width: '32px', height: '32px', background: '#eff6ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        <FileText size={16} color="#2563eb" />
+                        <div className="glass-panel" style={{ marginTop: '24px', padding: '16px', border: '1px solid #cbd5e1', borderRadius: '16px', background: '#f8fafc' }}>
+                            <div className="form-item" style={{ margin: 0 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                    <div style={{ width: '36px', height: '36px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+                                        <FileText size={18} color="#2563eb" />
                                     </div>
-                                    <span style={{ fontWeight: 700, fontSize: '1rem', color: '#1e3a8a' }}>Notes & Comments</span>
+                                    <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e3a8a', letterSpacing: '-0.01em' }}>Notes & Comments</span>
                                 </label>
-                                <RichTextEditor
-                                    value={formData.notes}
-                                    onChange={(val) => handleEditorChange('notes', val)}
-                                    placeholder="Add additional notes, technical details, or comments for this document (Included in PDF)..."
-                                    height="200px"
-                                />
+                                <div style={{ background: '#fff', borderRadius: '12px', padding: '8px', border: '1px solid #e2e8f0' }}>
+                                    <RichTextEditor
+                                        value={formData.notes}
+                                        onChange={(val) => handleEditorChange('notes', val)}
+                                        placeholder="Add additional notes, technical details, or comments for this document (Included in PDF)..."
+                                        height="200px"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
