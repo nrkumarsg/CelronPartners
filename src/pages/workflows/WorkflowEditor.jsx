@@ -1406,12 +1406,14 @@ export default function WorkflowEditor() {
                             )}
                         </div>
                         
-                        {/* Terms & Conditions moved here */}
-                        <div className="glass-panel" style={{ marginTop: '24px' }}>
+                        {/* Terms & Conditions */}
+                        <div className="glass-panel" style={{ marginTop: '24px', border: '1px solid #e2e8f0' }}>
                             <div className="form-item">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                                    <FileText size={16} className="text-accent" />
-                                    <span style={{ fontWeight: 600, fontSize: '1rem' }}>Terms & Conditions</span>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                                    <div style={{ width: '32px', height: '32px', background: '#eff6ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <FileText size={16} color="#2563eb" />
+                                    </div>
+                                    <span style={{ fontWeight: 700, fontSize: '1rem', color: '#1e3a8a' }}>Terms & Conditions</span>
                                 </label>
                                 <RichTextEditor
                                     value={formData.terms_conditions}
@@ -1422,12 +1424,14 @@ export default function WorkflowEditor() {
                             </div>
                         </div>
 
-                        {/* Notes & Comments moved here */}
-                        <div className="glass-panel" style={{ marginTop: '24px' }}>
+                        {/* Notes & Comments */}
+                        <div className="glass-panel" style={{ marginTop: '24px', border: '1px solid #e2e8f0' }}>
                             <div className="form-item">
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                                    <FileText size={16} className="text-accent" />
-                                    <span style={{ fontWeight: 600, fontSize: '1rem' }}>Notes & Comments</span>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                                    <div style={{ width: '32px', height: '32px', background: '#eff6ff', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                        <FileText size={16} color="#2563eb" />
+                                    </div>
+                                    <span style={{ fontWeight: 700, fontSize: '1rem', color: '#1e3a8a' }}>Notes & Comments</span>
                                 </label>
                                 <RichTextEditor
                                     value={formData.notes}

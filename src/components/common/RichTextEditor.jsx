@@ -76,17 +76,30 @@ export default function RichTextEditor({ value, onChange, placeholder, height = 
             <style dangerouslySetInnerHTML={{
                 __html: `
                 .rich-text-editor-container .ql-container {
-                    border-bottom-left-radius: 8px;
-                    border-bottom-right-radius: 8px;
-                    background: #fff;
+                    border-bottom-left-radius: 12px;
+                    border-bottom-right-radius: 12px;
+                    background: #ffffff;
+                    border: 1px solid #e2e8f0 !important;
+                    border-top: none !important;
+                    font-size: 0.95rem;
                 }
                 .rich-text-editor-container .ql-toolbar {
-                    border-top-left-radius: 8px;
-                    border-top-right-radius: 8px;
+                    border-top-left-radius: 12px;
+                    border-top-right-radius: 12px;
                     background: #f8fafc;
+                    border: 1px solid #e2e8f0 !important;
+                    padding: 8px 12px !important;
                 }
                 .rich-text-editor-container {
-                    margin-bottom: 50px; /* Space for the editor content */
+                    margin-bottom: 60px; /* Space for the editor content */
+                    filter: drop-shadow(0 1px 2px rgba(0,0,0,0.05));
+                }
+                .rich-text-editor-container .ql-editor {
+                    min-height: 100px;
+                }
+                .rich-text-editor-container .ql-editor.ql-blank::before {
+                    color: #94a3b8;
+                    font-style: normal;
                 }
             `}} />
         </div>
