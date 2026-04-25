@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { getPartners, savePartner, getContactsByPartner, saveContact } from '../lib/store';
+import { getPartners, savePartner, getContactsByPartner, saveContact, saveVessel, saveWorkLocation } from '../lib/store';
 import { useVesselsStore } from '../lib/vesselsStore';
 import { useWorkLocationsStore } from '../lib/workLocationsStore';
 import { connectGoogleAPI } from '../lib/googleAuthService';
@@ -14,9 +14,9 @@ import 'react-image-crop/dist/ReactCrop.css';
 import Tesseract from 'tesseract.js';
 import { COUNTRIES } from '../lib/constants';
 import { isTokenValid, validateToken } from '../lib/googleAuthService';
-import { getCatalogItems, createCatalogItem } from '../lib/catalogService';
+import { getCatalogItems, createCatalogItem, updateCatalogItem } from '../lib/catalogService';
 import GDriveConnectionModal from './common/GDriveConnectionModal';
-import { Search, Plus, Trash, Database } from 'lucide-react';
+import { Search, Plus, Trash, Database, Edit } from 'lucide-react';
 
 const ENQUIRY_SOURCES = [
     'Email',
@@ -48,7 +48,7 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
         contact_id: editingEnquiry?.contact_id || '',
         customer_ref: editingEnquiry?.customer_ref || '',
         enquiry_date: editingEnquiry?.enquiry_date || new Date().toISOString().split('T')[0],
-        due_date: editingEnquiry?.due_date || '',
+        due_date: editingEnquiry?.due_date || new Date(new Date().getTime() + 86400000).toISOString().split('T')[0],
         source_type: editingEnquiry?.source_type || 'Others',
         description: editingEnquiry?.description || '',
         catalog_items: editingEnquiry?.catalog_items || []
@@ -81,6 +81,9 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
     const [isSavingNewItem, setIsSavingNewItem] = useState(false);
     const [editingItemIdx, setEditingItemIdx] = useState(null);
     const [existingFileExists, setExistingFileExists] = useState(true);
+    const [showNewVesselModal, setShowNewVesselModal] = useState(false);
+    const [showNewLocationModal, setShowNewLocationModal] = useState(false);
+    const [editingCatalogItem, setEditingCatalogItem] = useState(null);
 
     useEffect(() => {
         loadCustomers();
@@ -155,13 +158,13 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
         }
 
         if (name === 'vessel_id' && value === 'new_vessel') {
-            window.open('/vessels/new', '_blank');
+            setShowNewVesselModal(true);
             setFormData(prev => ({ ...prev, vessel_id: '' }));
             return;
         }
 
         if (name === 'work_location_id' && value === 'new_location') {
-            window.open('/work-locations/new', '_blank');
+            setShowNewLocationModal(true);
             setFormData(prev => ({ ...prev, work_location_id: '' }));
             return;
         }
@@ -353,6 +356,46 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
     const [isAuthError, setIsAuthError] = useState(false);
     const [isGDriveModalOpen, setIsGDriveModalOpen] = useState(false);
 
+    const handleSaveVessel = async (vesselName) => {
+        if (!vesselName) return;
+        const res = await addVessel({ vessel_name: vesselName, company_id: profile.company_id });
+        if (res.success) {
+            setFormData(prev => ({ ...prev, vessel_id: res.data.id }));
+            setShowNewVesselModal(false);
+        } else {
+            alert("Failed to save vessel: " + res.error);
+        }
+    };
+
+    const handleSaveWorkLocation = async (locationName) => {
+        if (!locationName) return;
+        const res = await addWorkLocation({ location_name: locationName, company_id: profile.company_id });
+        if (res.success) {
+            setFormData(prev => ({ ...prev, work_location_id: res.data.id }));
+            setShowNewLocationModal(false);
+        } else {
+            alert("Failed to save location: " + res.error);
+        }
+    };
+
+    const handleSaveCatalogItem = async (e) => {
+        e.preventDefault();
+        try {
+            let res;
+            if (editingCatalogItem.id) {
+                res = await updateCatalogItem(editingCatalogItem.id, editingCatalogItem);
+            } else {
+                res = await createCatalogItem({ ...editingCatalogItem, company_id: profile.company_id });
+            }
+            if (res.error) throw res.error;
+            
+            fetchCatalog();
+            setEditingCatalogItem(null);
+        } catch (err) {
+            alert("Failed to save catalog item: " + (err.message || err));
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -469,8 +512,8 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
         <div style={inline ? { display: 'block', width: '100%', marginBottom: '24px' } : {
             position: 'fixed', inset: 0, zIndex: 1000,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            backgroundColor: 'rgba(15, 23, 42, 0.7)', backdropFilter: 'blur(8px)',
-            padding: '2vh 2vw'
+            backgroundColor: 'rgba(15, 23, 42, 0.75)', backdropFilter: 'blur(12px)',
+            padding: '40px 20px'
         }}>
             <div style={inline ? {
                 display: 'flex', flexDirection: 'column', width: '100%', minHeight: '600px',
@@ -478,18 +521,34 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                 overflow: 'hidden', position: 'relative'
             } : {
                 display: 'flex', flexDirection: 'column', 
-                width: '95vw', maxWidth: '1400px',
-                height: '95vh', maxHeight: '900px',
-                backgroundColor: '#ffffff', borderRadius: '20px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                overflow: 'hidden', animation: 'fadeIn 0.3s ease-out', position: 'relative',
-                border: '1px solid rgba(255,255,255,0.1)'
+                width: '92vw', maxWidth: '1400px',
+                height: 'calc(100vh - 80px)', maxHeight: '850px',
+                backgroundColor: '#ffffff', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)',
+                overflow: 'hidden', animation: 'fadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1)', position: 'relative',
+                border: '1px solid rgba(0,0,0,0.1)'
             }}>
 
                 {/* Header */}
                 {!inline && (
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '24px 32px', borderBottom: '1px solid var(--border-color)' }}>
-                        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>New Customer Enquiry</h2>
-                        <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '8px', borderRadius: '50%', display: 'flex' }}>
+                    <div style={{ 
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', 
+                        padding: '28px 32px', borderBottom: '1px solid var(--border-color)',
+                        background: 'linear-gradient(to bottom, #ffffff, #f8fafc)'
+                    }}>
+                        <div>
+                            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>New Customer Enquiry</h2>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#64748b' }}>Create a new enquiry log with optional document processing.</p>
+                        </div>
+                        <button 
+                            onClick={onClose} 
+                            style={{ 
+                                background: '#f1f5f9', border: 'none', cursor: 'pointer', color: '#64748b', 
+                                padding: '10px', borderRadius: '12px', display: 'flex', transition: 'all 0.2s',
+                                hover: { background: '#e2e8f0', color: '#0f172a' }
+                            }}
+                            onMouseOver={(e) => { e.currentTarget.style.background = '#e2e8f0'; e.currentTarget.style.color = '#0f172a'; }}
+                            onMouseOut={(e) => { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#64748b'; }}
+                        >
                             <X size={20} />
                         </button>
                     </div>
@@ -522,8 +581,8 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                                 </div>
                             )}
 
-                            <div className="glass-panel" style={{ padding: '24px', background: '#ffffff' }}>
-                                <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                            <div className="glass-panel" style={{ padding: '24px', background: '#ffffff', overflow: 'visible' }}>
+                                <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px', padding: '10px 16px', background: '#f8fafc', borderRadius: '8px', borderLeft: '4px solid #6366f1' }}>
                                     1. Customer Information
                                 </h3>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
@@ -568,40 +627,58 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                                 </div>
                             </div>
 
-                            <div className="glass-panel" style={{ padding: '24px', background: '#ffffff' }}>
-                                <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
+                            <div className="glass-panel" style={{ padding: '24px', background: '#ffffff', overflow: 'visible' }}>
+                                <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px', padding: '10px 16px', background: '#f8fafc', borderRadius: '8px', borderLeft: '4px solid #10b981' }}>
                                     2. Enquiry Details
                                 </h3>
                                 <div className="grid-2" style={{ marginBottom: '20px' }}>
-                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <div className="form-group" style={{ marginBottom: 0, position: 'relative' }}>
                                         <label className="form-label">Vessel</label>
                                         <select
                                             name="vessel_id"
                                             value={formData.vessel_id || ''}
-                                            onChange={handleChange}
+                                            onChange={(e) => {
+                                                if (e.target.value === 'ADD_NEW') {
+                                                    setShowNewVesselModal(true);
+                                                } else {
+                                                    handleChange(e);
+                                                }
+                                            }}
                                             className="form-select"
+                                            style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 36px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#10b981', fontWeight: 600 }}
                                         >
-                                            <option value="">Select a Vessel (optional)...</option>
-                                            <option value="new_vessel" style={{ fontWeight: 'bold', color: 'var(--accent)' }}>+ New Vessel ↗</option>
+                                            <option value="">No Vessel</option>
                                             {vessels.map(v => (
                                                 <option key={v.id} value={v.id}>{v.vessel_name}</option>
                                             ))}
+                                            <option value="ADD_NEW" style={{ fontWeight: 700, color: '#10b981' }}>+ Add New Vessel</option>
                                         </select>
+                                        <Ship size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#10b981' }} />
+                                        <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
                                     </div>
-                                    <div className="form-group" style={{ marginBottom: 0 }}>
+                                    <div className="form-group" style={{ marginBottom: 0, position: 'relative' }}>
                                         <label className="form-label">Work Location</label>
                                         <select
                                             name="work_location_id"
                                             value={formData.work_location_id || ''}
-                                            onChange={handleChange}
+                                            onChange={(e) => {
+                                                if (e.target.value === 'ADD_NEW') {
+                                                    setShowNewLocationModal(true);
+                                                } else {
+                                                    handleChange(e);
+                                                }
+                                            }}
                                             className="form-select"
+                                            style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 32px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b' }}
                                         >
-                                            <option value="">Select a Location (optional)...</option>
-                                            <option value="new_location" style={{ fontWeight: 'bold', color: 'var(--accent)' }}>+ New Location ↗</option>
+                                            <option value="">General / Local</option>
                                             {workLocations.map(l => (
                                                 <option key={l.id} value={l.id}>{l.location_name}</option>
                                             ))}
+                                            <option value="ADD_NEW" style={{ fontWeight: 700, color: '#64748b' }}>+ Add New Location</option>
                                         </select>
+                                        <Database size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                                        <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
                                     </div>
                                 </div>
                                 <div className="form-group" style={{ marginBottom: '20px' }}>
@@ -654,7 +731,7 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                                 </div>
                             </div>
 
-                            <div className="glass-panel" style={{ padding: '24px', background: '#ffffff' }}>
+                            <div className="glass-panel" style={{ padding: '24px', background: '#ffffff', overflow: 'visible' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9' }}>
                                     <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
                                         3. Required Items (Optional)
@@ -700,22 +777,37 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                                             ) : (
                                                 <>
                                                     {catalog.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(c => (
-                                                        <button 
+                                                        <div 
                                                             key={c.id}
-                                                            type="button"
-                                                            onClick={() => handleAddItem(c)}
-                                                            style={{ width: '100%', padding: '12px 16px', textAlign: 'left', border: 'none', borderBottom: '1px solid #f1f5f9', background: 'none', cursor: 'pointer', transition: 'background 0.2s' }}
+                                                            style={{ width: '100%', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', transition: 'background 0.2s' }}
                                                             onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
                                                             onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                                         >
-                                                            <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.95rem', marginBottom: '2px' }}>{c.name}</div>
-                                                            <div style={{ fontSize: '0.75rem', color: '#94a3b8', lineHeight: '1.4' }}>{c.specification || 'No additional specifications provided.'}</div>
-                                                        </button>
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => handleAddItem(c)}
+                                                                style={{ flex: 1, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+                                                            >
+                                                                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.95rem', marginBottom: '2px' }}>{c.name}</div>
+                                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', lineHeight: '1.4' }}>{c.specification || 'No additional specifications provided.'}</div>
+                                                            </button>
+                                                            <button 
+                                                                type="button"
+                                                                onClick={(e) => { e.stopPropagation(); setEditingCatalogItem(c); }}
+                                                                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                                                            >
+                                                                <Edit size={14} />
+                                                            </button>
+                                                        </div>
                                                     ))}
                                                     <div style={{ padding: '12px', borderTop: '2px solid #f1f5f9', backgroundColor: '#fff', position: 'sticky', bottom: 0, zIndex: 1 }}>
-                                                        <a href="/catalog" target="_blank" style={{ color: '#6366f1', fontSize: '0.85rem', fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                            <ExternalLink size={14} /> View All Catalog (Manage CRUD)
-                                                        </a>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => setEditingCatalogItem({ name: searchQuery, specification: '', type: 'Supply' })}
+                                                            style={{ width: '100%', color: '#6366f1', border: 'none', background: 'none', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                                        >
+                                                            <Plus size={14} /> Add New Catalog Item
+                                                        </button>
                                                     </div>
                                                 </>
                                             )}
@@ -777,8 +869,8 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                             </div>
 
                             <div className="glass-panel" style={{ padding: '24px', background: '#ffffff', display: 'flex', flexDirection: 'column', flex: 1, minHeight: '350px' }}>
-                                <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px', paddingBottom: '12px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>4. Description / Notes</span>
+                                <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '20px', padding: '10px 16px', background: '#f8fafc', borderRadius: '8px', borderLeft: '4px solid #8b5cf6' }}>
+                                    4. Description / Notes
                                 </h3>
                                 <div className="quill-wrapper" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                                     <ReactQuill
@@ -963,7 +1055,11 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                 </div>
 
                 {/* Footer */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '20px 32px', backgroundColor: '#f8fafc', borderTop: '1px solid var(--border-color)' }}>
+                <div style={{ 
+                    display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '24px 32px', 
+                    backgroundColor: '#ffffff', borderTop: '2px solid #f1f5f9',
+                    boxShadow: '0 -10px 20px -5px rgba(0,0,0,0.05)'
+                }}>
                     {!inline && (
                         <button type="button" onClick={onClose} className="btn btn-secondary">
                             Cancel
@@ -1002,7 +1098,99 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                 .quill-wrapper .ql-editor {
                     flex: 1;
                 }
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(20px) scale(0.98); }
+                    to { opacity: 1; transform: translateY(0) scale(1); }
+                }
             `}</style>
+            {/* Modals for Inline creation */}
+            {showNewVesselModal && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', width: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+                        <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Add New Vessel</h3>
+                        <input 
+                            autoFocus
+                            type="text" 
+                            className="form-input" 
+                            placeholder="Vessel Name" 
+                            style={{ width: '100%', marginBottom: '16px', padding: '10px' }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveVessel(e.target.value); }}
+                            id="newVesselNameForm"
+                        />
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button type="button" onClick={() => setShowNewVesselModal(false)} className="btn btn-outline">Cancel</button>
+                            <button type="button" onClick={() => handleSaveVessel(document.getElementById('newVesselNameForm').value)} className="btn btn-primary">Save Vessel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showNewLocationModal && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ background: '#fff', padding: '24px', borderRadius: '16px', width: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+                        <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Add New Location</h3>
+                        <input 
+                            autoFocus
+                            type="text" 
+                            className="form-input" 
+                            placeholder="Location Name" 
+                            style={{ width: '100%', marginBottom: '16px', padding: '10px' }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') handleSaveWorkLocation(e.target.value); }}
+                            id="newLocationNameForm"
+                        />
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                            <button type="button" onClick={() => setShowNewLocationModal(false)} className="btn btn-outline">Cancel</button>
+                            <button type="button" onClick={() => handleSaveWorkLocation(document.getElementById('newLocationNameForm').value)} className="btn btn-primary">Save Location</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {editingCatalogItem && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <form onSubmit={handleSaveCatalogItem} style={{ background: '#fff', padding: '24px', borderRadius: '16px', width: '500px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+                        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>{editingCatalogItem.id ? 'Edit Catalog Item' : 'New Catalog Item'}</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div className="form-group">
+                                <label className="form-label">Item Name</label>
+                                <input 
+                                    autoFocus
+                                    required
+                                    type="text" 
+                                    value={editingCatalogItem.name || ''} 
+                                    onChange={e => setEditingCatalogItem({...editingCatalogItem, name: e.target.value})}
+                                    className="form-input" 
+                                    style={{ width: '100%', padding: '10px' }}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Specification</label>
+                                <textarea 
+                                    value={editingCatalogItem.specification || ''} 
+                                    onChange={e => setEditingCatalogItem({...editingCatalogItem, specification: e.target.value})}
+                                    className="form-input" 
+                                    style={{ width: '100%', padding: '10px', minHeight: '80px' }}
+                                />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label">Type</label>
+                                <select 
+                                    className="form-select"
+                                    value={editingCatalogItem.type || 'Supply'}
+                                    onChange={e => setEditingCatalogItem({...editingCatalogItem, type: e.target.value})}
+                                >
+                                    <option value="Supply">Supply</option>
+                                    <option value="Service">Service</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '24px' }}>
+                            <button type="button" onClick={() => setEditingCatalogItem(null)} className="btn btn-outline">Cancel</button>
+                            <button type="submit" className="btn btn-primary">Save Item</button>
+                        </div>
+                    </form>
+                </div>
+            )}
         </div>
     );
 }

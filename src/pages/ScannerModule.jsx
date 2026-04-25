@@ -18,6 +18,7 @@ export default function ScannerModule() {
     const [moverOpen, setMoverOpen] = useState(false);
     const [showDiagnostics, setShowDiagnostics] = useState(false);
     const [settings, setSettings] = useState(null);
+    const [activeTab, setActiveTab] = useState('manage'); // 'manage' or 'setup'
 
     const fetchScans = async () => {
         setLoading(true);
@@ -127,35 +128,57 @@ export default function ScannerModule() {
 
     return (
         <div style={{ padding: '24px', maxWidth: '100%', margin: '0', background: '#f8fafc', minHeight: '100vh' }}>
-            <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                    <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0', letterSpacing: '-0.02em' }}>
+            <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
+                <div style={{ flex: 1 }}>
+                    <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#1e293b', margin: '0 0 4px 0', letterSpacing: '-0.02em' }}>
                         Celron Scanner
                     </h1>
-                    <p style={{ margin: 0, color: '#64748b', fontSize: '1rem' }}>Mobile App Integration & Scanned Documents</p>
+                    <p style={{ margin: 0, color: '#64748b', fontSize: '0.9rem' }}>
+                        {activeTab === 'manage' ? 'Manage & organize your cloud scans' : 'Get the mobile app for your phone'}
+                    </p>
                 </div>
 
-                <div style={{ display: 'flex', gap: '12px' }}>
+                {/* Tab Navigation - Top Right as requested */}
+                <div style={{ display: 'flex', gap: '6px', background: '#fff', padding: '4px', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                    <button 
+                        onClick={() => setActiveTab('manage')}
+                        style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'manage' ? '#6366f1' : 'transparent', color: activeTab === 'manage' ? '#fff' : '#64748b', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                        <List size={16} /> Manage Inbox
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('setup')}
+                        style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: activeTab === 'setup' ? '#6366f1' : 'transparent', color: activeTab === 'setup' ? '#fff' : '#64748b', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                        <Smartphone size={16} /> App Setup
+                    </button>
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px' }}>
                     <button
                         onClick={() => setShowDiagnostics(!showDiagnostics)}
-                        style={{ background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px', cursor: 'pointer' }}
+                        style={{ background: '#fff', color: '#64748b', border: '1px solid #e2e8f0', padding: '8px', borderRadius: '10px', cursor: 'pointer' }}
                         title="Diagnostics"
                     >
                         <Shield size={18} />
                     </button>
-                    <button
-                        onClick={handleOpenDrive}
-                        style={{ background: '#fff', color: '#475569', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-                    >
-                        <Globe size={18} color="#4285F4" /> Open Scans Folder
-                    </button>
-                    <button
-                        onClick={fetchScans}
-                        className="btn btn-secondary"
-                        style={{ padding: '10px 20px', borderRadius: '10px' }}
-                    >
-                        Sync Drive
-                    </button>
+                    {activeTab === 'manage' && (
+                        <>
+                            <button
+                                onClick={handleOpenDrive}
+                                style={{ background: '#fff', color: '#475569', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}
+                            >
+                                <Globe size={16} color="#4285F4" /> Drive
+                            </button>
+                            <button
+                                onClick={fetchScans}
+                                className="btn btn-secondary"
+                                style={{ padding: '8px 16px', borderRadius: '10px', fontSize: '0.85rem' }}
+                            >
+                                <RefreshCw size={16} />
+                            </button>
+                        </>
+                    )}
                 </div>
             </header>
 
@@ -182,54 +205,60 @@ export default function ScannerModule() {
                 </div>
             )}
 
-            {/* Instruction Banner for Mobile App */}
-            <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)', borderRadius: '16px', padding: '32px', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '24px', color: '#fff', boxShadow: '0 10px 25px -5px rgba(59, 130, 246, 0.5)', position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: '300px', height: '300px', background: 'rgba(255,255,255,0.1)', borderRadius: '50%', filter: 'blur(60px)' }}></div>
-                <div style={{ background: 'rgba(255,255,255,0.2)', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.3)', zIndex: 1 }}>
-                    <Smartphone size={48} color="#fff" />
-                </div>
-                <div style={{ flex: 1, zIndex: 1 }}>
-                    <h2 style={{ fontSize: '1.5rem', margin: '0 0 8px 0', fontWeight: 800, letterSpacing: '-0.01em' }}>Get the Celron Scanner App</h2>
-                    <p style={{ margin: '0 0 16px 0', opacity: 0.9, fontSize: '0.95rem', maxWidth: '600px', lineHeight: 1.6 }}>
-                        Download the official Android APK to your phone to start scanning documents directly. Features include multi-page scanning, auto-crop, JPG/PDF output, and automatic upload to Google Drive.
-                    </p>
-                    <button
-                        onClick={handleDownloadApk}
-                        style={{ background: '#fff', color: '#4f46e5', border: 'none', padding: '12px 24px', borderRadius: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1rem', transition: 'all 0.2s', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
-                        onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
-                        onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
-                    >
-                        <Download size={18} /> Download APK to Phone
-                    </button>
-                </div>
-            </div>
 
-            {/* How it Works Section */}
-            <div style={{ marginBottom: '40px' }}>
-                <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <RefreshCw size={20} color="#6366f1" /> How the Sync Flow Works
-                </h2>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
-                    {[
-                        { step: '01', title: 'Scan on Phone', desc: 'Use the Celron Mobile App to capture crystal-clear document scans.', icon: <Smartphone size={24} color="#6366f1" /> },
-                        { step: '02', title: 'Auto-Save to Cloud', desc: 'Scans are instantly uploaded to your secure Celron_Scans Drive folder.', icon: <Globe size={24} color="#10b981" /> },
-                        { step: '03', title: 'Link to Hub', desc: 'Attach these scans directly to jobs, expenses, or partners in one click.', icon: <FileText size={24} color="#f59e0b" /> }
-                    ].map((item, idx) => (
-                        <div key={idx} className="glass-panel" style={{ padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#fff' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                                <div style={{ width: '48px', height: '48px', background: '#f1f5f9', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    {item.icon}
-                                </div>
-                                <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#e2e8f0' }}>{item.step}</span>
-                            </div>
-                            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>{item.title}</h3>
-                            <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.5, margin: 0 }}>{item.desc}</p>
+
+            {activeTab === 'setup' ? (
+                <>
+                    {/* Instruction Banner for Mobile App */}
+                    <div style={{ background: 'linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%)', borderRadius: '16px', padding: '32px', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '24px', color: '#fff', boxShadow: '0 10px 25px -5px rgba(59, 130, 246, 0.5)', position: 'relative', overflow: 'hidden' }}>
+                        <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: '300px', height: '300px', background: 'rgba(255,255,255,0.1)', borderRadius: '50%', filter: 'blur(60px)' }}></div>
+                        <div style={{ background: 'rgba(255,255,255,0.2)', padding: '20px', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.3)', zIndex: 1 }}>
+                            <Smartphone size={48} color="#fff" />
                         </div>
-                    ))}
-                </div>
-            </div>
+                        <div style={{ flex: 1, zIndex: 1 }}>
+                            <h2 style={{ fontSize: '1.5rem', margin: '0 0 8px 0', fontWeight: 800, letterSpacing: '-0.01em' }}>Get the Celron Scanner App</h2>
+                            <p style={{ margin: '0 0 16px 0', opacity: 0.9, fontSize: '0.95rem', maxWidth: '600px', lineHeight: 1.6 }}>
+                                Download the official Android APK to your phone to start scanning documents directly. Features include multi-page scanning, auto-crop, JPG/PDF output, and automatic upload to Google Drive.
+                            </p>
+                            <button
+                                onClick={handleDownloadApk}
+                                style={{ background: '#fff', color: '#4f46e5', border: 'none', padding: '12px 24px', borderRadius: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1rem', transition: 'all 0.2s', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+                                onMouseOver={(e) => e.target.style.transform = 'translateY(-2px)'}
+                                onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
+                            >
+                                <Download size={18} /> Download APK to Phone
+                            </button>
+                        </div>
+                    </div>
 
-            {!driveConnected ? (
+                    {/* How it Works Section */}
+                    <div style={{ marginBottom: '40px' }}>
+                        <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <RefreshCw size={20} color="#6366f1" /> How the Sync Flow Works
+                        </h2>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px' }}>
+                            {[
+                                { step: '01', title: 'Scan on Phone', desc: 'Use the Celron Mobile App to capture crystal-clear document scans.', icon: <Smartphone size={24} color="#6366f1" /> },
+                                { step: '02', title: 'Auto-Save to Cloud', desc: 'Scans are instantly uploaded to your secure Celron_Scans Drive folder.', icon: <Globe size={24} color="#10b981" /> },
+                                { step: '03', title: 'Link to Hub', desc: 'Attach these scans directly to jobs, expenses, or partners in one click.', icon: <FileText size={24} color="#f59e0b" /> }
+                            ].map((item, idx) => (
+                                <div key={idx} className="glass-panel" style={{ padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', background: '#fff' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                                        <div style={{ width: '48px', height: '48px', background: '#f1f5f9', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            {item.icon}
+                                        </div>
+                                        <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#e2e8f0' }}>{item.step}</span>
+                                    </div>
+                                    <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>{item.title}</h3>
+                                    <p style={{ color: '#64748b', fontSize: '0.9rem', lineHeight: 1.5, margin: 0 }}>{item.desc}</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </>
+            ) : (
+                <>
+                    {!driveConnected ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                     <div style={{ width: '64px', height: '64px', background: '#fef3c7', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                         <Globe size={32} color="#d97706" />
@@ -329,6 +358,8 @@ export default function ScannerModule() {
                     )}
                 </>
             )}
+            </>
+        )}
 
             <DriveFileMover 
                 isOpen={moverOpen}

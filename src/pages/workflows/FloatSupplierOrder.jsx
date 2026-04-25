@@ -109,7 +109,7 @@ export default function FloatSupplierOrder() {
             {/* Content Table/List */}
             <div style={{ background: '#fff', borderRadius: '24px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                 <div style={{ padding: '24px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>Recent Quotations</h3>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>Recent Quote2Customers</h3>
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <button className="btn btn-outline" style={{ fontSize: '0.8rem', padding: '6px 12px' }}><Filter size={14} /> Filter</button>
                     </div>

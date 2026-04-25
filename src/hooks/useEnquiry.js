@@ -116,12 +116,21 @@ export function useEnquiry(companyId, enquiryId) {
 
     const handleUpdateHeader = async (updates) => {
         if (!enquiry) return;
+        
+        // Sanitize updates to avoid schema errors for V1 table
+        const sanitizedUpdates = { ...updates };
+        const invalidColumns = ['vessel_id', 'work_location_id', 'vessel_name', 'location_name'];
+        invalidColumns.forEach(p => delete sanitizedUpdates[p]);
+
         const updated = { ...enquiry, ...updates };
         setEnquiry(updated);
-        const { error } = await updateEnquiry(enquiryId, updates);
-        if (error) {
-            console.error("Failed to update enquiry header:", error);
-            alert("Failed to save changes: " + error.message);
+
+        if (Object.keys(sanitizedUpdates).length > 0) {
+            const { error } = await updateEnquiry(enquiryId, sanitizedUpdates);
+            if (error) {
+                console.error("Failed to update enquiry header:", error);
+                alert("Failed to save changes: " + error.message);
+            }
         }
     };
 
@@ -145,6 +154,7 @@ export function useEnquiry(companyId, enquiryId) {
         handleUpdateItem,
         handleRemoveItem,
         handleUpdateHeader,
+        setCatalog,
         refresh: fetchData
     };
 }

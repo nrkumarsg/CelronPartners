@@ -40,7 +40,8 @@ export default function PartnerForm() {
         business_card_url: '',
         business_card_back_url: '',
         gdrive_folder_id: '',
-        google_drive_link: ''
+        google_drive_link: '',
+        is_shared: false
     });
 
     const [typeInput, setTypeInput] = useState('');
@@ -246,12 +247,30 @@ export default function PartnerForm() {
                                 <Building2 color="#6366f1" size={32} />
                             </div>
                             <div style={{ flex: 1 }}>
-                                <label className="form-label" style={{ fontSize: '1rem', fontWeight: 600, color: '#1e293b', marginBottom: '8px', display: 'block' }}>Company Name *</label>
-                                <CompanyAutocomplete
-                                    value={formData.name || ''}
-                                    onChange={(val) => setFormData(prev => ({ ...prev, name: val }))}
-                                    onSelect={handleCompanySelect}
-                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label className="form-label" style={{ fontSize: '1rem', fontWeight: 600, color: '#1e293b', marginBottom: '8px', display: 'block' }}>Company Name *</label>
+                                        <CompanyAutocomplete
+                                            value={formData.name || ''}
+                                            onChange={(val) => setFormData(prev => ({ ...prev, name: val }))}
+                                            onSelect={handleCompanySelect}
+                                        />
+                                    </div>
+                                    {profile?.role === 'superadmin' && (
+                                        <div style={{ marginLeft: '24px', textAlign: 'right' }}>
+                                            <label className="form-label" style={{ fontSize: '0.85rem', color: '#6366f1', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', justifyContent: 'flex-end' }}>
+                                                <Globe size={16} /> GLOBAL RECORD
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={formData.is_shared}
+                                                    onChange={e => setFormData(prev => ({ ...prev, is_shared: e.target.checked }))}
+                                                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                                                />
+                                            </label>
+                                            <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '4px' }}>Shared with all companies</p>
+                                        </div>
+                                    )}
+                                </div>
                                 <p style={{ marginTop: '8px', fontSize: '0.85rem', color: '#64748b' }}>Search globally or enter a custom name.</p>
                             </div>
                         </div>

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Loader2, Calendar, User, DollarSign, Tag, Info, Upload, ExternalLink } from 'lucide-react';
 import { updateJob } from '../../lib/workflowService';
-import { getContactsByPartner } from '../../lib/store';
+import { getPartners, getContactsByPartner } from '../../lib/store';
+import { useVesselsStore } from '../../lib/vesselsStore';
 import { uploadFileToDrive, checkFileExists } from '../../lib/driveService';
 import { validateToken } from '../../lib/googleAuthService';
 import GDriveConnectionModal from '../common/GDriveConnectionModal';
@@ -17,6 +18,8 @@ const PAYMENT_STATUSES = [
 
 export default function EditJobModal({ job, onClose, onSave }) {
     const [loading, setLoading] = useState(false);
+    const [partners, setPartners] = useState([]);
+    const { vessels, fetchVessels } = useVesselsStore();
     const [contacts, setContacts] = useState([]);
     const [poFile, setPoFile] = useState(null);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -24,6 +27,8 @@ export default function EditJobModal({ job, onClose, onSave }) {
     const [formData, setFormData] = useState({
         status: job.status || 'Active',
         type: job.type || 'Supply',
+        customer_id: job.customer_id || job.enquiries?.customer_id || '',
+        vessel_id: job.vessel_id || job.enquiries?.vessel_id || '',
         po_ref: job.po_ref || '',
         po_date: job.po_date || '',
         po_amount: job.po_amount || '',
@@ -33,13 +38,29 @@ export default function EditJobModal({ job, onClose, onSave }) {
     });
 
     useEffect(() => {
-        if (job?.enquiries?.customer_id) {
-            fetchContacts();
-        }
+        loadInitialData();
         if (job?.po_attachment_url) {
             checkPoExistence();
         }
     }, [job]);
+
+    const loadInitialData = async () => {
+        try {
+            const pData = await getPartners();
+            setPartners(pData.filter(p => p.types?.includes('Customer')));
+            fetchVessels();
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    useEffect(() => {
+        if (formData.customer_id) {
+            fetchContacts(formData.customer_id);
+        } else {
+            setContacts([]);
+        }
+    }, [formData.customer_id]);
 
     const checkPoExistence = async () => {
         if (job.po_attachment_url.includes('drive.google.com')) {
@@ -54,9 +75,9 @@ export default function EditJobModal({ job, onClose, onSave }) {
         }
     };
 
-    const fetchContacts = async () => {
+    const fetchContacts = async (partnerId) => {
         try {
-            const data = await getContactsByPartner(job.enquiries.customer_id);
+            const data = await getContactsByPartner(partnerId);
             if (data) setContacts(data);
         } catch (err) {
             console.error('Error fetching contacts:', err);
@@ -127,6 +148,30 @@ export default function EditJobModal({ job, onClose, onSave }) {
                 </div>
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+                    {/* Customer & Vessel Link Section */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                        <div className="form-group">
+                            <label className="form-label">Customer / Partner</label>
+                            <select name="customer_id" className="form-select" value={formData.customer_id} onChange={handleChange}>
+                                <option value="">Select Customer...</option>
+                                {partners.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label">Vessel</label>
+                            <select name="vessel_id" className="form-select" value={formData.vessel_id} onChange={handleChange}>
+                                <option value="">Select Vessel...</option>
+                                {vessels.map(v => (
+                                    <option key={v.id} value={v.id}>{v.vessel_name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style={{ borderBottom: '1px solid #f1f5f9' }} />
 
                     {/* General Info Section */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>

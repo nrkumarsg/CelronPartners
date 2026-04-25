@@ -75,14 +75,37 @@ export default function WorkflowPrintPreview() {
 
     const handleDownload = () => {
         const element = document.getElementById('print-paper-content');
+        
+        // Build descriptive filename: Type_No - Customer - Project/Vessel
+        const customerName = doc.partners?.name || 'Customer';
+        const projectOrVessel = doc.vessels?.name || doc.subject || 'Project';
+        const rawFilename = `${doc.document_type || 'Document'}_${doc.document_no || 'Draft'} - ${customerName} - ${projectOrVessel}`;
+        
+        // Sanitize filename to remove invalid characters
+        const safeFilename = rawFilename.replace(/[/\\?%*:|"<>]/g, '-').trim();
+
         const opt = {
-            margin: 10,
-            filename: `${doc.document_type || 'Document'}_${doc.document_no || 'Draft'}.pdf`,
+            margin: 0,
+            filename: `${safeFilename}.pdf`,
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, logging: false },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
-        html2pdf().set(opt).from(element).save();
+        
+        // Add page numbers to each page
+        html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf) => {
+            const totalPages = pdf.internal.getNumberOfPages();
+            for (let i = 1; i <= totalPages; i++) {
+                pdf.setPage(i);
+                pdf.setFontSize(8);
+                pdf.setTextColor(150); // Gray color
+                pdf.text(
+                    `Page ${i} of ${totalPages}`, 
+                    pdf.internal.pageSize.getWidth() - 25, 
+                    pdf.internal.pageSize.getHeight() - 10
+                );
+            }
+        }).save();
     };
 
     if (loading) return <div className="text-center py-20">Loading Document Preview...</div>;
@@ -123,6 +146,7 @@ export default function WorkflowPrintPreview() {
                     signatureBase64={signatureBase64}
                     paynowBase64={paynowBase64}
                 />
+                <div className="page-footer"></div>
             </div>
 
             <style dangerouslySetInnerHTML={{
@@ -143,6 +167,22 @@ export default function WorkflowPrintPreview() {
                         box-sizing: border-box !important;
                     }
                     @page { margin: 10mm; size: A4 portrait; }
+                    .page-footer {
+                        display: none;
+                    }
+                    @media print {
+                        .page-footer {
+                            display: block;
+                            position: fixed;
+                            bottom: 10mm;
+                            right: 10mm;
+                            font-size: 8pt;
+                            color: #94a3b8;
+                        }
+                        .page-footer::after {
+                            content: "Page " counter(page);
+                        }
+                    }
                 }
                 `
             }} />

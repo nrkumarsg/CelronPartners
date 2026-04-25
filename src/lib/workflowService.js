@@ -177,7 +177,7 @@ export const updateEnquiry = async (id, updateData) => {
 export const getJobs = async (companyId) => {
     const { data, error } = await supabase
         .from('jobs')
-        .select(`*, enquiries:customer_enquiries(enquiry_no, source_type, customer:partners!customer_id(name), gdrive_folder_id), job_expenses(amount)`)
+        .select(`*, partners!customer_id(name), vessels!vessel_id(vessel_name), enquiries:customer_enquiries(enquiry_no, source_type, customer:partners!customer_id(name), gdrive_folder_id), job_expenses(amount)`)
         .eq('company_id', companyId)
         .order('created_at', { ascending: false });
     return { data, error };
@@ -186,7 +186,7 @@ export const getJobs = async (companyId) => {
 export const getJobById = async (companyId, jobId) => {
     const { data, error } = await supabase
         .from('jobs')
-        .select(`*, enquiries:customer_enquiries(enquiry_no, source_type, catalog_items, customer_id, customer:partners!customer_id(name, address, email1), gdrive_folder_id), job_expenses(*)`)
+        .select(`*, partners!customer_id(name, email1, address, phone1), vessels!vessel_id(vessel_name), enquiries:customer_enquiries(enquiry_no, source_type, customer_id, customer:partners!customer_id(name, address, email1), gdrive_folder_id), job_expenses(*)`)
         .eq('company_id', companyId)
         .eq('id', jobId)
         .single();

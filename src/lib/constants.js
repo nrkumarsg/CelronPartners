@@ -26,3 +26,24 @@ export const PARTNER_CATEGORIES = [
     'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment',
     'Industrial Supplies', 'Customer', 'Supplier', 'Freelancer', 'Service Company'
 ];
+
+export const ALL_MODULES = [
+    { id: 'partners', label: 'Partners' },
+    { id: 'contacts', label: 'Contacts' },
+    { id: 'vessels', label: 'Vessels' },
+    { id: 'work-locations', label: 'Work Locations' },
+    { id: 'catalog', label: 'Catalog' },
+    { id: 'reports', label: 'Reports' },
+    { id: 'settings', label: 'Settings' },
+    { id: 'workflows', label: 'Workflows' },
+    { id: 'universal-finder', label: 'Search' },
+    { id: 'storage', label: 'Storage' },
+    { id: 'vault', label: 'Corporate Vault' },
+    { id: 'manuals', label: 'Manuals' },
+    { id: 'forms', label: 'Forms' },
+    { id: 'todo', label: 'To-Do' },
+    { id: 'notes', label: 'Notes' },
+    { id: 'calendar', label: 'Calendar' },
+    { id: 'scanner', label: 'Scanner' },
+    { id: 'commercial-wall', label: 'Commercial Wall' }
+];

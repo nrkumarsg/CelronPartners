@@ -32,6 +32,7 @@ export default function EnquiryList() {
     const [statusFilter, setStatusFilter] = useState('All');
     const [editingEnquiry, setEditingEnquiry] = useState(null);
     const [editingJob, setEditingJob] = useState(null);
+    const [newJobCount, setNewJobCount] = useState(0);
 
     useEffect(() => {
         const tab = queryParams.get('tab') || 'enquiries';
@@ -57,9 +58,14 @@ export default function EnquiryList() {
                 if (data) setJobs(data);
             } else if (activeTab === 'rfqs') {
                 const { getWorkflowDocuments } = await import('../../lib/workflowV2Service');
-                const { data } = await getWorkflowDocuments(profile.company_id, 'Enquiry');
-                if (data) setRfqs(data);
+                const { data: rfqData } = await getWorkflowDocuments(profile.company_id, 'Enquiry');
+                if (rfqData) setRfqs(rfqData);
             }
+
+            // Sync New Job Counts
+            const { getWorkflowCounts } = await import('../../lib/workflowV2Service');
+            const { jobCount } = await getWorkflowCounts(profile.company_id);
+            setNewJobCount(jobCount);
         } catch (error) {
             console.error('Error fetching list data:', error);
         } finally {
@@ -114,9 +120,14 @@ export default function EnquiryList() {
             if (error) throw error;
             fetchData();
         } catch (error) {
-            console.error('Error deleting job:', error);
-            alert('Failed to delete job');
+            console.error('Error creating job:', error);
+            alert('Failed to create job');
         }
+    };
+
+    const convertRFQToOrder = (rfq) => {
+        if (!window.confirm(`Convert RFQ ${rfq.document_no} to a Purchase Order?`)) return;
+        navigate(`/workflows/editor/purchase-order/new?source_id=${rfq.id}`);
     };
 
     const convertToJob = async (enquiry) => {
@@ -141,6 +152,8 @@ export default function EnquiryList() {
             const { error } = await createJob({
                 job_no,
                 enquiry_id: enquiry.id,
+                customer_id: enquiry.customer_id,
+                vessel_id: enquiry.vessel_id,
                 type: enquiry.type || 'Supply',
                 company_id: profile.company_id,
                 status: 'Active'
@@ -220,7 +233,7 @@ export default function EnquiryList() {
                     >
                         <ArrowLeft size={16} /> Back
                     </button>
-                    <h1 className="page-title">Enquiry & RFQ Hub</h1>
+                    <h1 className="page-title">Enquiries & RFQ Hub</h1>
                     <p style={{ color: 'var(--text-secondary)', marginTop: '8px' }}>
                         Manage customer enquiries and follow-up jobs/orders in one system.
                     </p>
@@ -237,9 +250,9 @@ export default function EnquiryList() {
                         <button
                             className="btn btn-primary"
                             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                            onClick={() => setShowEnquiryForm(true)}
+                            onClick={() => window.open('/workflows/editor/certificate/new', '_blank')}
                         >
-                            <Plus size={18} /> New Enquiry
+                            <Plus size={18} /> New Certificate
                         </button>
                     </div>
                 </div>
@@ -262,7 +275,7 @@ export default function EnquiryList() {
                     </div>
                     <div>
                         <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', fontWeight: 500 }}>Active Jobs</div>
-                        <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{jobs.filter(j => j.status === 'Active').length}</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 700, color: 'var(--text-primary)' }}>{newJobCount}</div>
                     </div>
                 </div>
                 <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -393,24 +406,25 @@ export default function EnquiryList() {
                     <table style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
                         <thead style={{ background: 'var(--bg-secondary)' }}>
                             <tr>
-                                <th style={{ padding: '16px 24px' }}>
-                                    {activeTab === 'enquiries' ? 'Enquiry Ref' : 
+                                <th style={{ padding: '12px 16px', fontSize: '0.75rem' }}>
+                                    {activeTab === 'enquiries' ? 'Enquiry Number' : 
                                      activeTab === 'rfqs' ? 'RFQ Number' :
                                      'Job Number'}
                                 </th>
-                                <th style={{ padding: '16px 24px' }}>
+                                <th style={{ padding: '12px 16px', fontSize: '0.75rem' }}>
                                     {activeTab === 'rfqs' ? 'Supplier (RFQ Recipient)' : 'Customer / Contact'}
                                 </th>
-                                {activeTab === 'enquiries' && <th style={{ padding: '16px 24px' }}>Customer Ref</th>}
-                                {activeTab === 'rfqs' && <th style={{ padding: '16px 24px' }}>RFQ Subject</th>}
-                                {(activeTab === 'enquiries' || activeTab === 'rfqs') && <th style={{ padding: '16px 24px' }}>Due Date</th>}
-                                {activeTab === 'jobs' && <th style={{ padding: '16px 24px', textAlign: 'right' }}>Revenue</th>}
-                                {activeTab === 'jobs' && <th style={{ padding: '16px 24px', textAlign: 'right' }}>Cost</th>}
-                                {activeTab === 'jobs' && <th style={{ padding: '16px 24px', textAlign: 'right' }}>Profit</th>}
-                                {activeTab === 'jobs' && <th style={{ padding: '16px 24px', textAlign: 'center' }}>Payment</th>}
-                                <th style={{ padding: '16px 24px' }}>Date Sent</th>
-                                <th style={{ padding: '16px 24px' }}>Status</th>
-                                <th style={{ padding: '16px 24px', textAlign: 'right' }}>Actions</th>
+                                {activeTab === 'jobs' && <th style={{ padding: '12px 16px', fontSize: '0.75rem' }}>Vessel</th>}
+                                {activeTab === 'enquiries' && <th style={{ padding: '12px 16px', fontSize: '0.75rem' }}>Customer Ref</th>}
+                                {activeTab === 'rfqs' && <th style={{ padding: '12px 16px', fontSize: '0.75rem' }}>RFQ Subject</th>}
+                                {(activeTab === 'enquiries' || activeTab === 'rfqs') && <th style={{ padding: '12px 16px', fontSize: '0.75rem' }}>Due Date</th>}
+                                {activeTab === 'jobs' && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem' }}>Revenue</th>}
+                                {activeTab === 'jobs' && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem' }}>Cost</th>}
+                                {activeTab === 'jobs' && <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem' }}>Profit</th>}
+                                {activeTab === 'jobs' && <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem' }}>Payment</th>}
+                                <th style={{ padding: '12px 16px', fontSize: '0.75rem' }}>Date Sent</th>
+                                <th style={{ padding: '12px 16px', fontSize: '0.75rem' }}>Status</th>
+                                <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem' }}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -440,14 +454,14 @@ export default function EnquiryList() {
 
                                     return (
                                         <tr key={item.id} className="table-row">
-                                            <td style={{ padding: '16px 24px' }}>
+                                            <td style={{ padding: '12px 16px' }}>
                                                 <div
                                                     onClick={() => {
                                                         if (activeTab === 'enquiries') navigate(`/workflows/enquiry/${item.id}`);
                                                         else if (activeTab === 'jobs') navigate(`/workflows/job/${item.id}`);
                                                         else navigate(`/workflows/editor/Enquiry/${item.id}`);
                                                     }}
-                                                    style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '0.95rem', cursor: 'pointer', textDecoration: 'underline' }}
+                                                    style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline' }}
                                                 >
                                                     {activeTab === 'enquiries' ? item.enquiry_no : 
                                                      activeTab === 'rfqs' ? item.document_no :
@@ -459,30 +473,37 @@ export default function EnquiryList() {
                                                     </div>
                                                 )}
                                             </td>
-                                            <td style={{ padding: '16px 24px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                                    <Building2 size={14} color="var(--text-secondary)" />
+                                            <td style={{ padding: '12px 16px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.8rem' }}>
+                                                    <Building2 size={12} color="var(--text-secondary)" />
                                                     {activeTab === 'rfqs' ? (item.partners?.name || 'Supplier Not Set') : (partner?.name || 'Walk-in')}
                                                 </div>
                                                 {contact && (
-                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <User size={12} /> {contact.name}
+                                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                        <User size={10} /> {contact.name}
                                                     </div>
                                                 )}
                                             </td>
+                                            {activeTab === 'jobs' && (
+                                                <td style={{ padding: '12px 16px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', color: '#10b981', fontWeight: 600 }}>
+                                                        <Clock size={12} /> {item.vessels?.vessel_name || '-'}
+                                                    </div>
+                                                </td>
+                                            )}
                                             {activeTab === 'enquiries' && (
-                                                <td style={{ padding: '16px 24px' }}>
-                                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{item.customer_ref || '-'}</div>
+                                                <td style={{ padding: '12px 16px' }}>
+                                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item.customer_ref || '-'}</div>
                                                 </td>
                                             )}
                                             {activeTab === 'rfqs' && (
-                                                <td style={{ padding: '16px 24px' }}>
-                                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>{item.subject || '-'}</div>
+                                                <td style={{ padding: '12px 16px' }}>
+                                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item.subject || '-'}</div>
                                                 </td>
                                             )}
                                             {(activeTab === 'enquiries' || activeTab === 'rfqs') && (
-                                                <td style={{ padding: '16px 24px' }}>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem', color: '#6366f1', fontWeight: 600 }}>
+                                                <td style={{ padding: '12px 16px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#6366f1', fontWeight: 600 }}>
                                                         {formatDate(activeTab === 'enquiries' ? item.due_date : item.expiry_date)}
                                                     </div>
                                                 </td>
@@ -493,19 +514,19 @@ export default function EnquiryList() {
                                                 const profit = revenue - cost;
                                                 return (
                                                     <>
-                                                        <td style={{ padding: '16px 24px', textAlign: 'right', fontWeight: 600 }}>
+                                                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600, fontSize: '0.8rem' }}>
                                                             {revenue > 0 ? `$${revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '-'}
                                                         </td>
-                                                        <td style={{ padding: '16px 24px', textAlign: 'right', color: cost > 0 ? '#ef4444' : 'inherit' }}>
+                                                        <td style={{ padding: '12px 16px', textAlign: 'right', color: cost > 0 ? '#ef4444' : 'inherit', fontSize: '0.8rem' }}>
                                                             {cost > 0 ? `$${cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '-'}
                                                         </td>
-                                                        <td style={{ padding: '16px 24px', textAlign: 'right', fontWeight: 700, color: profit > 0 ? '#10b981' : (profit < 0 ? '#ef4444' : 'inherit') }}>
+                                                        <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700, color: profit > 0 ? '#10b981' : (profit < 0 ? '#ef4444' : 'inherit'), fontSize: '0.8rem' }}>
                                                             {(revenue > 0 || cost > 0) ? `$${profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '-'}
                                                         </td>
-                                                        <td style={{ padding: '16px 24px', textAlign: 'center' }}>
+                                                        <td style={{ padding: '12px 16px', textAlign: 'center' }}>
                                                             {item.payment_status ? (
                                                                 <span style={{
-                                                                    padding: '4px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 600,
+                                                                    padding: '2px 6px', borderRadius: '10px', fontSize: '0.65rem', fontWeight: 600,
                                                                     background: item.payment_status === 'Paid' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
                                                                     color: item.payment_status === 'Paid' ? '#10b981' : '#f59e0b',
                                                                     whiteSpace: 'nowrap'
@@ -517,17 +538,17 @@ export default function EnquiryList() {
                                                     </>
                                                 );
                                             })()}
-                                            <td style={{ padding: '16px 24px', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                                            <td style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '0.75rem' }}>
                                                 {formatDate(item.created_at)}
                                             </td>
-                                            <td style={{ padding: '16px 24px' }}>
+                                            <td style={{ padding: '12px 16px' }}>
                                                 <span style={{
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
                                                     gap: '6px',
-                                                    padding: '4px 12px',
+                                                    padding: '2px 10px',
                                                     borderRadius: '20px',
-                                                    fontSize: '0.75rem',
+                                                    fontSize: '0.7rem',
                                                     fontWeight: 600,
                                                     background: st.bg,
                                                     color: st.color
@@ -536,21 +557,8 @@ export default function EnquiryList() {
                                                     {item.status}
                                                 </span>
                                             </td>
-                                            <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                                            <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                                    {(activeTab === 'enquiries' || activeTab === 'rfqs') && (
-                                                        <button
-                                                            onClick={() => {
-                                                                if (activeTab === 'enquiries') setEditingEnquiry(item);
-                                                                else navigate(`/workflows/editor/Enquiry/${item.id}`);
-                                                            }}
-                                                            className="btn btn-sm btn-secondary"
-                                                            style={{ padding: '6px', minWidth: 'auto' }}
-                                                            title="Edit"
-                                                        >
-                                                            <Edit size={14} />
-                                                        </button>
-                                                    )}
                                                     <button
                                                         onClick={() => {
                                                             if (activeTab === 'enquiries') navigate(`/workflows/enquiry/${item.id}`);
@@ -580,14 +588,32 @@ export default function EnquiryList() {
                                                         </button>
                                                     )}
                                                     {activeTab === 'rfqs' && (
-                                                        <button
-                                                            onClick={() => navigate(`/workflows/print/${item.id}`)}
-                                                            className="btn btn-sm btn-outline"
-                                                            style={{ padding: '6px', minWidth: 'auto' }}
-                                                            title="Print Preview"
-                                                        >
-                                                            <Printer size={14} />
-                                                        </button>
+                                                        <div style={{ display: 'flex', gap: '4px' }}>
+                                                            <button
+                                                                onClick={() => navigate(`/workflows/print/${item.id}`)}
+                                                                className="btn btn-sm btn-outline"
+                                                                style={{ padding: '6px', minWidth: 'auto' }}
+                                                                title="Print Preview"
+                                                            >
+                                                                <Printer size={14} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => convertRFQToOrder(item)}
+                                                                className="btn btn-sm btn-outline"
+                                                                style={{ 
+                                                                    padding: '4px 8px',
+                                                                    display: 'flex', 
+                                                                    alignItems: 'center', 
+                                                                    gap: '6px',
+                                                                    color: '#059669',
+                                                                    borderColor: 'rgba(5, 150, 105, 0.2)',
+                                                                    fontSize: '0.7rem',
+                                                                    height: '32px'
+                                                                }}
+                                                            >
+                                                                <ArrowRightLeft size={14} /> Convert to Order
+                                                            </button>
+                                                        </div>
                                                     )}
                                                     {activeTab === 'jobs' && (
                                                         <button

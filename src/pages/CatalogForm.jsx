@@ -186,15 +186,37 @@ const CatalogForm = () => {
         setFormData(prev => ({ ...prev, details: content }));
     };
 
-    const generateAutoBarcode = () => {
-        const timestamp = Date.now().toString().slice(-6);
-        const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-        return `CEL-${timestamp}-${random}`;
+    const generateAutoBarcode = async () => {
+        try {
+            // Find the highest numeric barcode
+            const { data } = await supabase
+                .from('catalog_items')
+                .select('barcode')
+                .not('barcode', 'is', null)
+                .order('barcode', { ascending: false });
+
+            // Find the highest value that is actually a number
+            let maxNum = 100000;
+            if (data && data.length > 0) {
+                for (const item of data) {
+                    const num = parseInt(item.barcode, 10);
+                    if (!isNaN(num) && item.barcode.match(/^\d+$/)) {
+                        maxNum = Math.max(maxNum, num);
+                        break; // Since we ordered descending, the first one we find should be the max
+                    }
+                }
+            }
+            return (maxNum + 1).toString();
+        } catch (err) {
+            console.error('Error auto-generating barcode:', err);
+            return (100000 + Math.floor(Math.random() * 1000)).toString();
+        }
     };
 
-    const handleBarcodeFocus = () => {
+    const handleBarcodeFocus = async () => {
         if (isNewItem && !formData.barcode) {
-            setFormData(prev => ({ ...prev, barcode: generateAutoBarcode() }));
+            const newBarcode = await generateAutoBarcode();
+            setFormData(prev => ({ ...prev, barcode: newBarcode }));
         }
     };
 
@@ -210,7 +232,7 @@ const CatalogForm = () => {
 
         // Auto-generate barcode if empty for new item
         if (isNewItem && !dataToSave.barcode) {
-            dataToSave.barcode = generateAutoBarcode();
+            dataToSave.barcode = await generateAutoBarcode();
         }
 
         if (isNewItem && profile?.company_id) {

@@ -31,8 +31,8 @@ const supabaseAnonKey = (
 );
 
 
-// Detect if localStorage is actually working (prevents crash on Tracking Prevention)
 const isLocalStorageAvailable = () => {
+    if (typeof window === 'undefined') return false;
     try {
         const key = '__ls_test__';
         window.localStorage.setItem(key, key);
@@ -51,15 +51,16 @@ class MemoryStorage {
     removeItem(key) { delete this.items[key]; }
 }
 
+const storage = isLocalStorageAvailable() ? window.localStorage : new MemoryStorage();
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
         autoRefreshToken: true,
         persistSession: isLocalStorageAvailable(),
-        detectSessionInUrl: true,
-        storage: isLocalStorageAvailable() ? window.localStorage : new MemoryStorage(),
+        detectSessionInUrl: typeof window !== 'undefined',
+        storage: storage,
         lockManager: {
             acquire: async () => {
-                // Return a dummy lock object immediately to bypass browser lock contention
                 return { release: () => {} };
             }
         },

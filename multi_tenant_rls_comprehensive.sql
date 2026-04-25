@@ -26,18 +26,20 @@ ALTER TABLE public.company_users ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can view companies they belong to" ON public.companies
 FOR SELECT TO authenticated
 USING (
-    id IN (
-        SELECT company_id FROM public.company_users WHERE user_id = auth.uid()
-    )
+    (id IN (SELECT company_id FROM public.company_users WHERE user_id = auth.uid()))
+    OR 
+    (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'superadmin'))
 );
 
 CREATE POLICY "Users can view their own company memberships" ON public.company_users
 FOR SELECT TO authenticated
-USING (user_id = auth.uid());
+USING (
+    (user_id = auth.uid())
+    OR
+    (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'superadmin'))
+);
 
 -- Comprehensive RLS for ALL Entity Tables
--- We assume every table has a 'company_id' column.
-
 DO $$ 
 DECLARE 
     t TEXT;
@@ -53,22 +55,22 @@ BEGIN
         -- Ensure RLS is enabled
         EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
         
-        -- Drop if exists (standardizing naming)
+        -- Drop if exists
         EXECUTE format('DROP POLICY IF EXISTS "Multi-tenant Access" ON public.%I', t);
         
-        -- Create strict company-based policy
+        -- Create strict company-based policy with superadmin bypass
         EXECUTE format('
             CREATE POLICY "Multi-tenant Access" ON public.%I
             FOR ALL TO authenticated
             USING (
-                company_id IN (
-                    SELECT company_id FROM public.company_users WHERE user_id = auth.uid()
-                )
+                (company_id IN (SELECT company_id FROM public.company_users WHERE user_id = auth.uid()))
+                OR
+                (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = "superadmin"))
             )
             WITH CHECK (
-                company_id IN (
-                    SELECT company_id FROM public.company_users WHERE user_id = auth.uid()
-                )
+                (company_id IN (SELECT company_id FROM public.company_users WHERE user_id = auth.uid()))
+                OR
+                (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = "superadmin"))
             )
         ', t);
     END LOOP;

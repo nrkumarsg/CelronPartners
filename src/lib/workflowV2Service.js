@@ -43,34 +43,61 @@ export const generateDocNumber = async (companyId, type, isRevision = false, ori
         case 'Payment Received': prefix = 'PAY'; break;
         case 'Statement of Account': prefix = 'SOA'; break;
         case 'Job': prefix = 'CEL'; break; // v3 Requirement
+        case 'Order Acknowledgment': prefix = 'ORA'; break;
     }
 
     const fullPrefix = `${prefix}-${yy}${mm}-`;
 
-    const { data, error } = await supabase
+    // Fetch the latest number, excluding revisions to avoid parsing errors like -R1
+    let query = supabase
         .from('workflow_documents')
         .select('document_no')
         .eq('company_id', companyId)
-        .eq('document_type', type === 'Job' ? 'Tax Invoice' : type) // Jobs share invoice/workflow space but have CEL prefix
         .ilike('document_no', `${fullPrefix}%`)
-        .order('created_at', { ascending: false })
+        .not('document_no', 'ilike', '%-R%') // Exclude revisions
+        .order('document_no', { ascending: false })
         .limit(1);
 
-    if (error) {
-        console.error('Error fetching latest doc no:', error);
-        return `${fullPrefix}0001`;
+    if (type !== 'Job') {
+        query = query.eq('document_type', type);
     }
+
+    const { data, error } = await query;
+
+    let nextNum = 1;
+    if (type === 'Job') nextNum = 6051;
 
     if (data && data.length > 0) {
         const lastNo = data[0].document_no;
         const parts = lastNo.split('-');
         const lastIncremental = parseInt(parts[parts.length - 1], 10);
         if (!isNaN(lastIncremental)) {
-            return `${fullPrefix}${padZero(lastIncremental + 1, 4)}`;
+            nextNum = lastIncremental + 1;
         }
     }
 
-    return `${fullPrefix}0001`;
+    // Safety Loop: Ensure the generated number is truly unique
+    let finalNo = `${fullPrefix}${padZero(nextNum, 4)}`;
+    let isUnique = false;
+    let attempts = 0;
+
+    while (!isUnique && attempts < 10) {
+        const { data: existing } = await supabase
+            .from('workflow_documents')
+            .select('id')
+            .eq('document_no', finalNo)
+            .maybeSingle();
+        
+        if (!existing) {
+            isUnique = true;
+        } else {
+            nextNum++;
+            finalNo = `${fullPrefix}${padZero(nextNum, 4)}`;
+            attempts++;
+        }
+    }
+
+    return finalNo;
 };
 
 /**
@@ -89,6 +116,24 @@ export const getWorkflowDocuments = async (companyId, type = null) => {
 
     const { data, error } = await query;
     return { data, error };
+};
+
+/**
+ * Get Workflow Counts for Dashboards/Sidebar
+ */
+export const getWorkflowCounts = async (companyId) => {
+    const { data, error } = await supabase
+        .from('workflow_documents')
+        .select('document_type, status')
+        .eq('company_id', companyId);
+
+    if (error) return { enquiryCount: 0, jobCount: 0, quotationCount: 0 };
+
+    const enquiryCount = data.filter(d => d.document_type === 'Enquiry').length;
+    const jobCount = data.filter(d => d.document_type === 'Job').length;
+    const quotationCount = data.filter(d => d.document_type === 'Quotation').length;
+
+    return { enquiryCount, jobCount, quotationCount, all: data };
 };
 
 /**
@@ -121,7 +166,7 @@ export const getWorkflowDocumentsByEnquiry = async (enquiryId) => {
 export const getWorkflowDocumentById = async (id) => {
     const { data: document, error: docError } = await supabase
         .from('workflow_documents')
-        .select(`*, partners(*), vessels(*), work_locations(*)`)
+        .select(`*, partners(*), vessels(*), contacts!contact_id(*), work_locations(*)`)
         .eq('id', id);
 
     if (docError) {
@@ -139,7 +184,36 @@ export const getWorkflowDocumentById = async (id) => {
         .eq('document_id', id)
         .order('sort_order', { ascending: true });
 
-    return { data: { ...document[0], items: items || [] }, error: itemsError };
+    // Deduplicate items to fix legacy database repeats
+    const rawItems = items || [];
+    const uniqueItems = [];
+    const seen = new Set();
+    
+    rawItems.forEach(item => {
+        const desc = (item.description || '').trim();
+        const details = (item.details || '').trim();
+        const qty = parseFloat(item.quantity) || 0;
+        const price = parseFloat(item.unit_price) || 0;
+        const isSec = !!item.is_section;
+        const isNote = !!item.is_note;
+
+        const key = `${desc}|${details}|${qty}|${price}|${isSec}|${isNote}`;
+        
+        if (!seen.has(key)) {
+            uniqueItems.push(item);
+            seen.add(key);
+        }
+    });
+
+    const doc = document[0];
+    
+    // Unnest salesperson details from delivery_verification if they exist
+    if (doc.delivery_verification) {
+        if (doc.delivery_verification.salesperson_phone) doc.salesperson_phone = doc.delivery_verification.salesperson_phone;
+        if (doc.delivery_verification.salesperson_email) doc.salesperson_email = doc.delivery_verification.salesperson_email;
+    }
+
+    return { data: { ...doc, items: uniqueItems }, error: itemsError };
 };
 
 /**
@@ -168,10 +242,34 @@ export const saveWorkflowDocument = async (docData, lineItems) => {
         if (headerData[key] !== undefined) sanitizedHeader[key] = headerData[key];
     });
 
+    // Nest salesperson details into delivery_verification if they exist at top level
+    if (headerData.salesperson_phone || headerData.salesperson_email) {
+        sanitizedHeader.delivery_verification = {
+            ...(sanitizedHeader.delivery_verification || {}),
+            salesperson_phone: headerData.salesperson_phone,
+            salesperson_email: headerData.salesperson_email
+        };
+    }
+
     // Clean UUID fields (ensure null if empty/invalid)
-    const uuidFields = ['partner_id', 'contact_id', 'vessel_id', 'work_location_id'];
+    const uuidFields = [
+        'company_id', 'partner_id', 'contact_id', 'vessel_id', 'work_location_id',
+        'customer_po_by_id', 'original_document_id', 'enquiry_id', 'job_id'
+    ];
     uuidFields.forEach(f => {
-        if (!sanitizedHeader[f]) sanitizedHeader[f] = null;
+        if (sanitizedHeader[f] === '') sanitizedHeader[f] = null;
+        else if (!sanitizedHeader[f]) sanitizedHeader[f] = null;
+    });
+
+    // Handle ID separately: if it's empty or null for a new record, delete it so DB can generate it
+    if (!sanitizedHeader.id || sanitizedHeader.id === '') {
+        delete sanitizedHeader.id;
+    }
+
+    // Clean Date fields (ensure null if empty)
+    const dateFields = ['issue_date', 'expiry_date', 'customer_po_date'];
+    dateFields.forEach(f => {
+        if (sanitizedHeader[f] === '') sanitizedHeader[f] = null;
     });
 
     // Ensure numeric fields are actually numbers
@@ -210,40 +308,76 @@ export const saveWorkflowDocument = async (docData, lineItems) => {
             await supabase.from('workflow_line_items').delete().eq('document_id', savedDoc.id);
         }
 
-        const validItemKeys = [
-            'document_id', 'item_id', 'description', 'details',
-            'quantity', 'uom', 'unit_price', 'tax_rate', 'amount',
-            'sort_order', 'is_section', 'is_note',
-            'tax_enabled' // Now enabled
-        ];
+        // Deduplicate items before saving
+        const uniqueItems = [];
+        const seen = new Set();
+        
+        // Filter out completely empty items that aren't sections/notes
+        const itemsToProcess = lineItems.filter(it => (it.description && it.description.trim()) || it.is_section || it.is_note);
 
-        const itemsToInsert = lineItems.map((item, index) => {
-            const sanitizedItem = {
-                document_id: savedDoc.id,
-                sort_order: index
-            };
-            validItemKeys.forEach(key => {
-                if (item[key] !== undefined) sanitizedItem[key] = item[key];
-            });
+        itemsToProcess.forEach(item => {
+            const desc = (item.description || '').trim();
+            const details = (item.details || '').trim();
+            const qty = parseFloat(item.quantity) || 0;
+            const price = parseFloat(item.unit_price) || 0;
+            const isSec = !!item.is_section;
+            const isNote = !!item.is_note;
 
-            // Clean item UUID and numbers
-            if (!sanitizedItem.item_id) sanitizedItem.item_id = null;
-            sanitizedItem.quantity = parseFloat(sanitizedItem.quantity) || 0;
-            sanitizedItem.unit_price = parseFloat(sanitizedItem.unit_price) || 0;
-            sanitizedItem.amount = parseFloat(sanitizedItem.amount) || 0;
-            sanitizedItem.tax_rate = parseFloat(sanitizedItem.tax_rate) || 0;
-
-            return sanitizedItem;
+            const key = `${desc}|${details}|${qty}|${price}|${isSec}|${isNote}`;
+            
+            if (!seen.has(key)) {
+                uniqueItems.push({
+                    document_id: savedDoc.id,
+                    item_id: item.item_id || null,
+                    description: desc,
+                    details: details,
+                    quantity: qty,
+                    unit_price: price,
+                    uom: item.uom || 'UNIT(S)',
+                    amount: qty * price,
+                    sort_order: uniqueItems.length,
+                    tax_rate: parseFloat(item.tax_rate ?? 9) || 0,
+                    tax_enabled: item.tax_enabled !== false,
+                    is_section: isSec,
+                    is_note: isNote
+                });
+                seen.add(key);
+            }
         });
 
-        const { error: insertError } = await supabase
-            .from('workflow_line_items')
-            .insert(itemsToInsert);
-
-        if (insertError) throw insertError;
+        if (uniqueItems.length > 0) {
+            const { error: itemError } = await supabase
+                .from('workflow_line_items')
+                .insert(uniqueItems);
+            if (itemError) throw itemError;
+        }
     }
 
     return { data: savedDoc, error: null };
+};
+
+/**
+ * Upload Job Attachment to Supabase Storage
+ */
+export const uploadJobAttachment = async (file, companyId) => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${companyId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const filePath = `jobs/${fileName}`;
+
+    const { data, error } = await supabase.storage
+        .from('workflow-attachments')
+        .upload(filePath, file);
+
+    if (error) {
+        console.error("Upload error:", error);
+        throw error;
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+        .from('workflow-attachments')
+        .getPublicUrl(filePath);
+
+    return publicUrl;
 };
 
 export const deleteWorkflowDocument = async (id) => {
@@ -254,9 +388,9 @@ export const deleteWorkflowDocument = async (id) => {
 /**
  * Helper: Map V1 Enquiry to V2 Document Header
  */
-const mapEnquiryToV2Header = (enq, nextNo) => ({
+const mapEnquiryToV2Header = (enq, nextNo, targetType = 'Quotation') => ({
     company_id: enq.company_id,
-    document_type: 'Quotation',
+    document_type: targetType,
     document_no: nextNo,
     partner_id: enq.customer_id,
     contact_id: enq.contact_id,
@@ -289,7 +423,7 @@ const mapCatalogItemToLineItem = (item, docId, index) => ({
 /**
  * Convert V1 Enquiry -> V2 Document (Quotation)
  */
-export const convertEnquiryToV2Document = async (enquiryId) => {
+export const convertEnquiryToV2Document = async (enquiryId, targetType = 'Quotation') => {
     // 1. Fetch the V1 Enquiry
     const { data: enq, error: enqError } = await supabase
         .from('customer_enquiries')
@@ -298,11 +432,11 @@ export const convertEnquiryToV2Document = async (enquiryId) => {
         .single();
     if (enqError) throw enqError;
 
-    // 2. Generate Next Number for QTN
-    const nextNo = await generateDocNumber(enq.company_id, 'Quotation');
+    // 2. Generate Next Number for Target Type
+    const nextNo = await generateDocNumber(enq.company_id, targetType);
 
     // 3. Prepare Header
-    const docData = mapEnquiryToV2Header(enq, nextNo);
+    const docData = mapEnquiryToV2Header(enq, nextNo, targetType);
 
     // 4. Save Header
     const { data: savedDoc, error: saveError } = await supabase
@@ -414,33 +548,201 @@ export const createDocumentRevision = async (docId) => {
         document_no: revNo,
         original_document_id: original.original_document_id || original.id,
         revision_no: (original.revision_no || 0) + 1,
-        status: 'Draft' // Reset status for new revision
+        status: 'Draft',
+        is_job: false,
+        assigned_job_no: null,
+        customer_po_no: null,
+        customer_po_date: null,
+        customer_po_by_id: null,
+        customer_po_attachment_url: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
     };
 
     return await saveWorkflowDocument(newDocData, items);
 };
 
 /**
+ * Duplicate a Document (Creates a brand new copy with a new number)
+ */
+export const duplicateWorkflowDocument = async (docId) => {
+    const { data: original, error: fetchErr } = await getWorkflowDocumentById(docId);
+    if (fetchErr) throw fetchErr;
+
+    const { items, id, created_at, updated_at, original_document_id, revision_no, document_no, ...cleanHeader } = original;
+
+    // Generate new Document Number
+    const newNo = await generateDocNumber(original.company_id, original.document_type);
+
+    const newDocData = {
+        ...cleanHeader,
+        document_no: newNo,
+        status: 'Draft', // Reset status for the duplicated document
+        is_job: false,
+        assigned_job_no: null,
+        customer_po_no: null,
+        customer_po_date: null,
+        customer_po_by_id: null,
+        customer_po_attachment_url: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+    };
+
+    // Clean up items for the new document (remove old IDs)
+    const cleanItems = items.map(item => {
+        const { id, document_id, created_at, ...cleanItem } = item;
+        return cleanItem;
+    });
+
+    return await saveWorkflowDocument(newDocData, cleanItems);
+};
+
+/**
  * Convert Quotation to Active Job (v3)
  */
-export const convertQuotationToJob = async (quotationId, poData) => {
+/**
+ * Convert Quotation to Active Job (v3)
+ * Automatically creates: ORA, DO, PRO, INV, PKL, and optionally CERT/SR
+ */
+export const convertQuotationToJob = async (quotationId, poData, options = {}) => {
+    // 1. Fetch source quotation with items
     const { data: qtn, error: qtnErr } = await getWorkflowDocumentById(quotationId);
     if (qtnErr) throw qtnErr;
+    if (qtn.is_job) throw new Error("This quotation has already been converted to a job.");
 
-    const jobNo = await generateDocNumber(qtn.company_id, 'Job');
+    // 2. Find Next Available Suite Number (Ensure all prefixes are free)
+    let baseJobNo = await generateDocNumber(qtn.company_id, 'Job');
+    let seqPart = baseJobNo.split('-').slice(1).join('-'); // YYMM-XXXX
+    
+    const prefixes = ['CEL', 'ORA', 'DO', 'PRO', 'INV', 'PKL', 'CERT', 'SR'];
+    let attempts = 0;
+    while (attempts < 20) {
+        const targetNos = prefixes.map(p => `${p}-${seqPart}`);
+        const { data: existing } = await supabase
+            .from('workflow_documents')
+            .select('document_no')
+            .in('document_no', targetNos);
+            
+        if (!existing || existing.length === 0) break;
+        
+        // If any taken, increment the number part
+        const parts = seqPart.split('-');
+        const yyMM = parts[0];
+        const num = parseInt(parts[1]);
+        seqPart = `${yyMM}-${padZero(num + 1, 4)}`;
+        attempts++;
+    }
+    
+    const jobNo = `CEL-${seqPart}`;
 
-    const updateData = {
+    // 3. Update Original Quotation
+    const qtnUpdate = {
         ...qtn,
         is_job: true,
         assigned_job_no: jobNo,
-        status: 'Confirmed', // Or 'Job Active'
+        status: 'Confirmed',
         customer_po_no: poData.po_no,
         customer_po_date: poData.po_date,
-        customer_po_by_id: poData.contact_id,
-        customer_po_attachment_url: poData.attachment_url
+        customer_po_by_id: poData.contact_id || qtn.contact_id,
+        customer_po_attachment_url: poData.attachment_url,
+        delivery_verification: {
+            ...(qtn.delivery_verification || {}),
+            po_description: poData.po_description,
+            po_value: poData.po_value
+        }
     };
+    await saveWorkflowDocument(qtnUpdate, qtn.items);
 
-    return await saveWorkflowDocument(updateData, qtn.items);
+    // 4. Batch Generate Associated Documents
+    const docTypes = [
+        { type: 'Job', prefix: 'CEL' }, // Master Job Record
+        { type: 'Order Acknowledgment', prefix: 'ORA' }, 
+        { type: 'Delivery Order', prefix: 'DO' },
+        { type: 'Proforma Invoice', prefix: 'PRO' },
+        { type: 'Tax Invoice', prefix: 'INV' },
+        { type: 'Packing List', prefix: 'PKL' }
+    ];
+
+    if (options.includeCertificates) docTypes.push({ type: 'Certificate', prefix: 'CERT' });
+    if (options.includeServiceReport) docTypes.push({ type: 'Service Report', prefix: 'SR' });
+
+    for (const doc of docTypes) {
+        const packageDetailsTemplate = `
+            <p><strong>Package Details</strong></p>
+            <ul>
+                <li>Size of the Package : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mm (L) x &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mm (B) x &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mm (H)</li>
+                <li>Weight of the Package : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Kgs</li>
+                <li>Origin of spares : Singapore</li>
+                <li>Total No. of Packages: </li>
+                <li>Package Type (Carton / Wooden Crate / Pallet / Drum): </li>
+                <li>Package Qty: </li>
+                <li>Description of Contents: </li>
+            </ul>
+        `;
+
+        const newDocData = {
+            ...qtn,
+            id: undefined, // Force insert
+            document_type: doc.type,
+            document_no: `${doc.prefix}-${seqPart}`,
+            assigned_job_no: jobNo,
+            is_job: true,
+            status: 'Draft',
+            issue_date: new Date().toISOString().split('T')[0],
+            customer_po_no: poData.po_no,
+            customer_po_date: poData.po_date,
+            customer_po_by_id: poData.contact_id || qtn.contact_id,
+            notes: (doc.type === 'Delivery Order' || doc.type === 'Packing List') ? packageDetailsTemplate : qtn.notes,
+            delivery_verification: qtnUpdate.delivery_verification
+        };
+        
+        await saveWorkflowDocument(newDocData, qtn.items);
+    }
+
+    return { jobNo };
+};
+
+/**
+ * Revert a Job back to a Quotation
+ * Clears job status and unlinks associated documents
+ */
+export const revertJobToQuotation = async (jobNo) => {
+    // 1. Find all documents associated with this job number
+    const { data: docs, error: fetchErr } = await supabase
+        .from('workflow_documents')
+        .select('id, document_type, document_no')
+        .eq('assigned_job_no', jobNo);
+    
+    if (fetchErr) throw fetchErr;
+
+    // 2. Identify the original Quotation and the derived documents
+    const quotation = docs.find(d => (d.document_no || '').startsWith('QTN'));
+    const derivedIds = docs.filter(d => !(d.document_no || '').startsWith('QTN')).map(d => d.id);
+
+    // 3. Reset the Quotation
+    if (quotation) {
+        await supabase
+            .from('workflow_documents')
+            .update({
+                is_job: false,
+                assigned_job_no: null,
+                status: 'Draft',
+                customer_po_no: null,
+                customer_po_date: null,
+                customer_po_by_id: null
+            })
+            .eq('id', quotation.id);
+    }
+
+    // 4. Delete derived documents (ORA, DO, INV, etc.)
+    if (derivedIds.length > 0) {
+        // First delete their items
+        await supabase.from('workflow_line_items').delete().in('document_id', derivedIds);
+        // Then delete the documents
+        await supabase.from('workflow_documents').delete().in('id', derivedIds);
+    }
+
+    return { success: true };
 };
 
 /**

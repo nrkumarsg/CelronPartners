@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Users, DollarSign, Activity, FileSpreadsheet, Ship, MapPin, Brain, MessageSquare } from 'lucide-react';
+import { Search, Users, DollarSign, Activity, FileSpreadsheet, Ship, MapPin, Brain, MessageSquare, FileText, Briefcase, ShoppingCart, Truck, Receipt, Award, CheckCircle, List, ClipboardCheck, Package, Layers, RefreshCw, FileDigit, Clock } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { getPartners, getContacts } from '../lib/store';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,6 +8,7 @@ import StageReminders from '../components/dashboard/StageReminders';
 import TodoReminder from '../components/dashboard/TodoReminder';
 
 export default function Dashboard() {
+    const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const { profile } = useAuth();
     const [stats, setStats] = useState({
@@ -43,13 +45,24 @@ export default function Dashboard() {
                 const { count: vesselsCount } = await supabase.from('vessels').select('*', { count: 'exact', head: true });
                 const { count: locationsCount } = await supabase.from('work_locations').select('*', { count: 'exact', head: true });
 
+                const { getWorkflowCounts } = await import('../lib/workflowV2Service');
+                const { all: allDocs } = await getWorkflowCounts(profile.company_id);
+
                 setStats({
                     totalPartners: p.length,
                     customers,
                     suppliers,
                     totalContacts: c.length,
                     totalVessels: vesselsCount || 0,
-                    totalLocations: locationsCount || 0
+                    totalLocations: locationsCount || 0,
+                    workflow: {
+                        offers: allDocs.filter(d => d.document_type === 'Quotation').length,
+                        orders: allDocs.filter(d => d.document_type === 'Job').length,
+                        awaitOrders: allDocs.filter(d => d.document_type === 'Quotation' && d.status === 'Sent').length,
+                        awaitOffers: allDocs.filter(d => d.document_type === 'Enquiry' && d.status === 'Confirmed').length,
+                        awaitDO: allDocs.filter(d => d.document_type === 'Job' && d.status === 'Confirmed').length,
+                        awaitInvoice: allDocs.filter(d => d.document_type === 'Job' && d.status === 'Active').length
+                    }
                 });
             } catch (err) {
                 console.error("Dashboard load error:", err);
@@ -128,6 +141,126 @@ export default function Dashboard() {
                         <MapPin size={20} color="#f97316" />
                     </div>
                     <div className="stat-value">{loading ? '...' : stats.totalLocations}</div>
+                </div>
+            </div>
+
+            {/* Workflow Monitoring Group */}
+            <div style={{ marginBottom: '32px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                    <Activity size={22} color="var(--accent)" />
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#1e293b' }}>Workflow Monitoring</h3>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '20px' }}>
+                    <div className="stat-card" style={{ borderLeft: '4px solid #6366f1' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            <span>Offers</span>
+                            <FileText size={18} color="#6366f1" />
+                        </div>
+                        <div className="stat-value" style={{ fontSize: '1.5rem' }}>{loading ? '...' : stats.workflow?.offers}</div>
+                    </div>
+
+                    <div className="stat-card" style={{ borderLeft: '4px solid #10b981' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            <span>Orders</span>
+                            <Briefcase size={18} color="#10b981" />
+                        </div>
+                        <div className="stat-value" style={{ fontSize: '1.5rem' }}>{loading ? '...' : stats.workflow?.orders}</div>
+                    </div>
+
+                    <div className="stat-card" style={{ borderLeft: '4px solid #f59e0b' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            <span>Await Orders</span>
+                            <Clock size={18} color="#f59e0b" />
+                        </div>
+                        <div className="stat-value" style={{ fontSize: '1.5rem' }}>{loading ? '...' : stats.workflow?.awaitOrders}</div>
+                    </div>
+
+                    <div className="stat-card" style={{ borderLeft: '4px solid #3b82f6' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            <span>Await Offers</span>
+                            <RefreshCw size={18} color="#3b82f6" />
+                        </div>
+                        <div className="stat-value" style={{ fontSize: '1.5rem' }}>{loading ? '...' : stats.workflow?.awaitOffers}</div>
+                    </div>
+
+                    <div className="stat-card" style={{ borderLeft: '4px solid #f97316' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            <span>Await DO</span>
+                            <Truck size={18} color="#f97316" />
+                        </div>
+                        <div className="stat-value" style={{ fontSize: '1.5rem' }}>{loading ? '...' : stats.workflow?.awaitDO}</div>
+                    </div>
+
+                    <div className="stat-card" style={{ borderLeft: '4px solid #ef4444' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                            <span>Await Invoice</span>
+                            <Receipt size={18} color="#ef4444" />
+                        </div>
+                        <div className="stat-value" style={{ fontSize: '1.5rem' }}>{loading ? '...' : stats.workflow?.awaitInvoice}</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Workflow Navigation Hub */}
+            <div className="glass-panel" style={{ marginBottom: '32px', padding: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                    <Layers size={20} color="var(--accent)" />
+                    <h3 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Workflow Hub</h3>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                    {[
+                        { label: 'All Documents', icon: Layers, path: '/workflows', color: '#64748b' },
+                        { label: 'Jobs', icon: Briefcase, path: '/workflows?type=Jobs', color: '#0f172a' },
+                        { label: 'Enquiry from customer', icon: FileText, path: '/workflows?type=Enquiry', color: '#3b82f6' },
+                        { label: 'Enquiry to Supplier', icon: RefreshCw, path: '/workflows?type=Supplier Enquiry', color: '#10b981' },
+                        { label: 'Quotation', icon: FileText, path: '/workflows?type=Quotation', color: '#6366f1' },
+                        { label: 'Order Acknowledgment', icon: ClipboardCheck, path: '/workflows?type=Order Acknowledgment', color: '#f59e0b' },
+                        { label: 'Purchase Order', icon: ShoppingCart, path: '/workflows?type=Purchase Order', color: '#ec4899' },
+                        { label: 'Delivery Order', icon: Truck, path: '/workflows?type=Delivery Order', color: '#8b5cf6' },
+                        { label: 'Service Report', icon: Activity, path: '/workflows?type=Service Report', color: '#06b6d4' },
+                        { label: 'Proforma Invoice', icon: FileDigit, path: '/workflows?type=Proforma Invoice', color: '#f43f5e' },
+                        { label: 'Packing List', icon: Package, path: '/workflows?type=Packing List', color: '#14b8a6' },
+                        { label: 'Tax Invoice', icon: Receipt, path: '/workflows?type=Tax Invoice', color: '#1e3a8a' },
+                        { label: 'Certificate', icon: Award, path: '/workflows?type=Certificate', color: '#d946ef' },
+                        { label: 'Payment Received', icon: CheckCircle, path: '/workflows?type=Payment Received', color: '#22c55e' },
+                        { label: 'Statement of Account', icon: List, path: '/workflows?type=SOA', color: '#475569' }
+                    ].map((item, idx) => (
+                        <button
+                            key={idx}
+                            onClick={() => navigate(item.path)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                padding: '10px 16px',
+                                background: '#ffffff',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '100px',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                color: '#475569',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                            }}
+                            onMouseOver={e => {
+                                e.currentTarget.style.background = '#f8fafc';
+                                e.currentTarget.style.borderColor = item.color;
+                                e.currentTarget.style.color = item.color;
+                                e.currentTarget.style.transform = 'translateY(-1px)';
+                            }}
+                            onMouseOut={e => {
+                                e.currentTarget.style.background = '#ffffff';
+                                e.currentTarget.style.borderColor = '#e2e8f0';
+                                e.currentTarget.style.color = '#475569';
+                                e.currentTarget.style.transform = 'translateY(0)';
+                            }}
+                        >
+                            <item.icon size={16} />
+                            {item.label}
+                        </button>
+                    ))}
                 </div>
             </div>
 

@@ -15,7 +15,7 @@ export const getMyCompanies = async (userId) => {
         .select(`
             id,
             role,
-            company:companies(id, name, slug, logo_url)
+            company:companies(id, name, slug, logo_url, enabled_modules)
         `)
         .eq('user_id', userId);
 

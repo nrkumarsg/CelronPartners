@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
     getJobById, getJobExpenses, createJobExpense, deleteJobExpense, updateJobExpense,
@@ -14,12 +14,20 @@ import { validateToken, connectGoogleAPI } from '../../lib/googleAuthService';
 import EditJobModal from '../../components/workflows/EditJobModal';
 import CommunicationWall from '../../components/common/CommunicationWall';
 import DriveScannerLinker from '../../components/workflows/DriveScannerLinker';
-import { ArrowLeft, ArrowRight, ExternalLink, Ship, Package, DollarSign, Clock, CheckCircle2, AlertCircle, FileText, Download, Edit, Trash2, Printer, Plus, Search, Archive, Upload, ListChecks, FileDigit } from 'lucide-react';
+import JobVault from '../../components/workflows/JobVault';
+import { 
+    ArrowLeft, ArrowRight, ExternalLink, Ship, Package, DollarSign, Clock, CheckCircle2, 
+    AlertCircle, FileText, Download, Edit, Trash2, Printer, Plus, Search, Archive, 
+    Upload, ListChecks, FileDigit, Truck, CreditCard, BadgeDollarSign, Quote, Loader2,
+    Calendar, User, CreditCard as CardIcon, Briefcase, ChevronRight, Activity, 
+    HardDrive, FolderOpen, Image as ImageIcon, CheckSquare
+} from 'lucide-react';
 import SafeDriveLink from '../../components/common/SafeDriveLink';
 import UploadOverlay from '../../components/common/UploadOverlay';
 
 export default function JobDetails() {
     const { id } = useParams();
+    const navigate = useNavigate();
     const { profile } = useAuth();
 
     const [job, setJob] = useState(null);
@@ -31,13 +39,14 @@ export default function JobDetails() {
     const [isArchiving, setIsArchiving] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadLink, setUploadLink] = useState(null);
-    const [fileExistence, setFileExistence] = useState({}); // { [expenseId/docId]: boolean }
+    const [isUpdatingDesc, setIsUpdatingDesc] = useState(false);
+    const [tempDesc, setTempDesc] = useState('');
 
     // Form States
     const [showExpenseForm, setShowExpenseForm] = useState(false);
     const [newExpense, setNewExpense] = useState({ supplier_name: '', description: '', amount: '', status: 'Unpaid' });
 
-    const fetchData = async () => {
+    const fetchData = useCallback(async () => {
         setLoading(true);
         try {
             const [jobRes, expRes, v2DocsRes, quoteRes] = await Promise.all([
@@ -47,11 +56,11 @@ export default function JobDetails() {
                 getSupplierQuotes(id)
             ]);
 
-            if (jobRes.data) setJob(jobRes.data);
-            if (expRes.data) {
-                setExpenses(expRes.data);
-                verifyExpenseAttachments(expRes.data);
+            if (jobRes.data) {
+                setJob(jobRes.data);
+                setTempDesc(jobRes.data.description || '');
             }
+            if (expRes.data) setExpenses(expRes.data);
             if (v2DocsRes.data) setV2Docs(v2DocsRes.data);
             if (quoteRes?.data) setQuotes(quoteRes.data);
         } catch (error) {
@@ -59,32 +68,26 @@ export default function JobDetails() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [id, profile]);
 
     useEffect(() => {
         if (profile && id) {
             fetchData();
         }
-    }, [id, profile]);
+    }, [fetchData, id, profile]);
 
-
-    const verifyExpenseAttachments = async (expensesList) => {
-        const accessToken = localStorage.getItem('google_access_token');
-        if (!accessToken) return;
-
-        const existenceMap = {};
-        for (const exp of expensesList) {
-            if (exp.attachment_url && exp.attachment_url.includes('drive.google.com')) {
-                // Extract file ID from URL
-                const match = exp.attachment_url.match(/\/d\/([^/]+)/);
-                const fileId = match ? match[1] : null;
-                if (fileId) {
-                    const exists = await checkFileExists(accessToken, fileId);
-                    existenceMap[exp.id] = exists;
-                }
-            }
+    const handleUpdateDescription = async () => {
+        setIsUpdatingDesc(true);
+        try {
+            const { error } = await updateJob(id, { description: tempDesc });
+            if (error) throw error;
+            setJob(prev => ({ ...prev, description: tempDesc }));
+            alert("Job details updated!");
+        } catch (err) {
+            alert("Failed to update description: " + err.message);
+        } finally {
+            setIsUpdatingDesc(false);
         }
-        setFileExistence(prev => ({ ...prev, ...existenceMap }));
     };
 
     const handleAddExpense = async (e) => {
@@ -94,50 +97,14 @@ export default function JobDetails() {
                 ...newExpense,
                 job_id: id,
                 company_id: profile.company_id,
-                amount: parseFloat(newExpense.amount) || 0,
-                // If they linked a Google Drive scan, set it directly right away
-                attachment_url: newExpense.driveLink || null
+                amount: parseFloat(newExpense.amount) || 0
             };
-            
-            // Cleanup UI-only fields before sending to API
-            delete payload.driveLink;
-            delete payload.billFile;
-
-            // 1. Save the expense record
             const { data, error } = await createJobExpense(payload);
             if (error) throw error;
-
-            // 2. Handle optional file upload if they selected a raw file instead of linking a scan
-            if (newExpense.billFile && !newExpense.driveLink) {
-                const accessToken = localStorage.getItem('google_access_token');
-                const projectFolderId = job.enquiries?.gdrive_folder_id || job.gdrive_folder_id;
-
-                if (accessToken && projectFolderId) {
-                    const { createFolderStructure, uploadFileToDrive } = await import('../../lib/driveService');
-                    const subFolderId = await createFolderStructure(accessToken, '2. Supplier_Quotes_&_PO', projectFolderId);
-
-                    const uploadRes = await uploadFileToDrive(accessToken, newExpense.billFile, {
-                        folderId: subFolderId,
-                        title: `BILL_${data.supplier_name}_${newExpense.billFile.name}`,
-                        company_id: profile.company_id,
-                        onProgress: (p) => setUploadProgress(p)
-                    });
-
-                    if (uploadRes.webViewLink) {
-                        setUploadLink(uploadRes.webViewLink);
-                        await updateJobExpense(data.id, { attachment_url: uploadRes.webViewLink });
-                        data.attachment_url = uploadRes.webViewLink;
-                    }
-                }
-            }
-
             setExpenses([...expenses, data]);
             setShowExpenseForm(false);
-            setNewExpense({ supplier_name: '', description: '', amount: '', status: 'Unpaid', billFile: null, driveLink: null });
+            setNewExpense({ supplier_name: '', description: '', amount: '', status: 'Unpaid' });
         } catch (err) { alert('Failed to add job cost: ' + err.message); }
-        finally { 
-            // setUploadProgress(0); // Handled by onClose
-        }
     };
 
     const handleDeleteExpense = async (expenseId) => {
@@ -146,19 +113,7 @@ export default function JobDetails() {
             const { error } = await deleteJobExpense(expenseId);
             if (error) throw error;
             setExpenses(expenses.filter(e => e.id !== expenseId));
-        } catch (err) {
-            alert('Failed to delete expense');
-        }
-    };
-
-    const handleUpdatePaymentStatus = async (status) => {
-        try {
-            const { error } = await updateJob(id, { payment_status: status });
-            if (error) throw error;
-            setJob({ ...job, payment_status: status });
-        } catch (err) {
-            alert('Failed to update status');
-        }
+        } catch (err) { alert('Failed to delete expense'); }
     };
 
     const handleArchive = async () => {
@@ -167,557 +122,439 @@ export default function JobDetails() {
             alert("No Google Drive folder found for this job.");
             return;
         }
-
-        const isPaid = job.payment_status === 'Paid';
-        const confirmMsg = isPaid
-            ? "Archive this job to the Corporate Vault?"
-            : "Job is not fully paid. Archive anyway?";
-
-        if (!window.confirm(confirmMsg)) return;
-
+        if (!window.confirm("Archive this job to the Corporate Vault?")) return;
         setIsArchiving(true);
         try {
             const accessToken = localStorage.getItem('google_access_token');
-            const isValid = await validateToken(accessToken);
-            if (!accessToken || !isValid) {
-                connectGoogleAPI('job_archive');
-                return;
-            }
-
             const vaultRootId = await initializeVault(accessToken, profile.company_id);
             await moveFolder(accessToken, folderId, vaultRootId);
-
-            // Mark job and original enquiry as archived in DB
             await updateJob(id, { status: 'Archived' });
-            if (job.enquiry_id) {
-                await updateEnquiry(job.enquiry_id, { status: 'Archived' });
-            }
-
+            if (job.enquiry_id) await updateEnquiry(job.enquiry_id, { status: 'Archived' });
             alert("Successfully moved to Corporate Vault!");
             fetchData();
-        } catch (err) {
-            console.error("Archive error:", err);
-            alert(`Failed to archive: ${err.message}`);
-        } finally {
-            setIsArchiving(false);
-        }
+        } catch (err) { alert(`Failed to archive: ${err.message}`); }
+        finally { setIsArchiving(false); }
     };
 
-    const handleRecordDocument = async (type) => {
-        try {
-            // 1. Generate the PDF and get the blob
-            const blob = await generateDocumentPDF(job, type);
-            if (!blob) return;
+    const handleUploadToFolder = async (folderName, type = 'file') => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            try {
+                const accessToken = localStorage.getItem('google_access_token');
+                const projectFolderId = job.enquiries?.gdrive_folder_id || job.gdrive_folder_id;
+                if (!projectFolderId) throw new Error("No project folder linked.");
 
-            // 2. Check for Drive access and folder
-            const accessToken = localStorage.getItem('google_access_token');
-            const isValid = await validateToken(accessToken);
-            if (!accessToken || !isValid) {
-                connectGoogleAPI('job_document');
-                return;
-            }
-            const projectFolderId = job.enquiries?.gdrive_folder_id || job.gdrive_folder_id;
-
-            if (projectFolderId) {
-
-                // Map document type to sub-folder
-                let subFolderName = '';
-                if (type === 'Invoice') subFolderName = '4. Finance_Invoices_&_Payments';
-                else if (type === 'Delivery Order' || type === 'Service Report') subFolderName = '3. Operations_DO_SR_&_Certificates';
-                else if (type === 'Purchase Order') subFolderName = '2. Supplier_Quotes_&_PO';
-                else subFolderName = '1. Customer_Request_&_Offer';
-
-                const subFolderId = await createFolderStructure(accessToken, subFolderName, projectFolderId);
-                const fileName = `${type.replace(/\s+/g, '_')}_${job.job_no}.pdf`;
-
-                const uploadRes = await uploadFileToDrive(accessToken, new File([blob], fileName, { type: 'application/pdf' }), {
+                const subFolderId = await createFolderStructure(accessToken, folderName, projectFolderId);
+                const uploadRes = await uploadFileToDrive(accessToken, file, {
                     folderId: subFolderId,
-                    title: fileName,
+                    title: file.name,
                     company_id: profile.company_id,
                     onProgress: (p) => setUploadProgress(p)
                 });
-                setUploadLink(uploadRes.webViewLink);
-
-                // Record in workflow_documents for the board
-                try {
-                    const docNo = await generateDocNumber(profile.company_id, type);
-                    await recordExternalDocument({
-                        company_id: profile.company_id,
-                        job_id: id,
-                        enquiry_id: job.enquiry_id,
-                        document_type: type,
-                        document_no: docNo,
-                        subject: `${type} for ${job.job_no}`,
-                        issue_date: new Date().toISOString().split('T')[0],
-                        status: 'Completed',
-                        notes: uploadRes.webViewLink,
-                        partner_id: job.enquiries?.customer_id || job.customer_id,
-                        vessel_id: job.enquiries?.vessel_id || job.vessel_id,
-                        work_location_id: job.enquiries?.work_location_id || job.work_location_id
-                    });
-                } catch (recErr) {
-                    console.error("Failed to record document:", recErr);
+                if (uploadRes.webViewLink) {
+                    alert(`${file.name} uploaded to ${folderName}`);
+                    fetchData();
                 }
-
-                alert(`${type} generated and saved to Google Drive!`);
-            } else {
-                alert(`${type} generated and downloaded.`);
-            }
-        } catch (err) {
-            console.error(`Failed to record ${type}:`, err);
-            alert(`Error auto-saving ${type} to Drive. It was downloaded locally.`);
-        } finally {
-            // setUploadProgress(0); // Handled by onClose
-        }
+            } catch (err) { alert("Upload failed: " + err.message); }
+        };
+        input.click();
     };
 
-    if (loading) return <div className="loading-state">Loading job portal...</div>;
-    if (!job) return <div className="page-container"><h2>Job Not Found</h2></div>;
+    if (loading) return (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', flexDirection: 'column', gap: '20px' }}>
+            <Loader2 size={48} className="animate-spin" color="var(--primary)" />
+            <p style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>Loading Job Portal...</p>
+        </div>
+    );
+
+    if (!job) return (
+        <div className="page-container" style={{ textAlign: 'center', padding: '100px' }}>
+            <AlertCircle size={64} color="#ef4444" style={{ marginBottom: '24px' }} />
+            <h2 style={{ fontSize: '2rem', fontWeight: 800 }}>Job Not Found</h2>
+            <p style={{ color: 'var(--text-secondary)' }}>This job record could not be retrieved from the database.</p>
+            <Link to="/workflows" className="btn btn-primary" style={{ marginTop: '24px' }}>Back to Dashboard</Link>
+        </div>
+    );
 
     const totalRevenue = job.po_amount || 0;
     const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
     const profit = totalRevenue - totalExpenses;
 
+    // Activity Finder
+    const getDocByAction = (type) => v2Docs.find(d => d.document_type === type);
+
     return (
         <div className="page-container" style={{ padding: '24px', maxWidth: '1600px', margin: '0 auto' }}>
-            {/* Header */}
-            <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                    <Link to="/workflows" className="btn btn-outline btn-sm" style={{ marginBottom: '16px', display: 'inline-flex', gap: '8px' }}>
-                        <ArrowLeft size={16} /> Back to Dashboard
-                    </Link>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                        <div style={{ background: 'var(--primary)', color: 'white', padding: '12px', borderRadius: '12px' }}>
-                            <Package size={24} />
+            {/* Header Area */}
+            <div style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                    <button onClick={() => navigate(-1)} className="btn btn-icon btn-outline" style={{ borderRadius: '50%' }}>
+                        <ArrowLeft size={20} />
+                    </button>
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+                            <h1 style={{ fontSize: '2rem', fontWeight: 900, margin: 0, color: '#1e293b' }}>{job.job_no}</h1>
+                            <span className={`badge ${job.status?.toLowerCase()}`} style={{ fontSize: '0.85rem', padding: '6px 14px' }}>{job.status}</span>
                         </div>
-                        <div>
-                            <h1 style={{ fontSize: '1.75rem', fontWeight: 800, margin: 0 }}>{job.job_no}</h1>
-                            <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>Job Portal • {job.type} • Created {new Date(job.created_at).toLocaleDateString()}</p>
-                        </div>
+                        <p style={{ margin: 0, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Briefcase size={16} /> Linked to Enquiry: <strong>{job.enquiries?.enquiry_no || 'Manual'}</strong>
+                        </p>
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                    <button
-                        onClick={handleArchive}
-                        className={`btn ${job.status === 'Archived' ? 'btn-outline' : 'btn-secondary'}`}
-                        disabled={isArchiving || job.status === 'Archived'}
-                        style={{ gap: '8px', opacity: job.status === 'Archived' ? 0.7 : 1 }}
-                    >
+                    <button onClick={() => setShowEdit(true)} className="btn btn-outline" style={{ gap: '10px' }}><Edit size={18} /> Edit Job</button>
+                    <button onClick={handleArchive} disabled={isArchiving} className="btn btn-secondary" style={{ gap: '10px' }}>
                         {isArchiving ? <Loader2 size={18} className="animate-spin" /> : <Archive size={18} />}
-                        {job.status === 'Archived' ? 'Job Archived' : 'Archive Job'}
+                        Archive to Vault
                     </button>
-                    <button onClick={() => setShowEdit(true)} className="btn btn-outline" style={{ gap: '8px' }}><Edit size={18} /> Edit Job</button>
-                    <button onClick={() => window.print()} className="btn btn-primary" style={{ gap: '8px' }}><Download size={18} /> Print Record</button>
-                </div>
-            </header>
-
-            {/* Grid Layout */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '32px', alignItems: 'start' }}>
-
-                {/* Main Content Area */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-
-                    {/* Phase 1: Enquiry & Quotes */}
-                    <div className="glass-panel" style={{ padding: '24px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.1rem' }}>
-                                <FileText size={20} color="var(--primary)" /> 1. Enquiry & Quotations
-                            </h3>
-                            <Link to={`/workflows/enquiry/${job.enquiry_id}`} className="btn btn-sm btn-outline">Go to Enquiry</Link>
-                        </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
-                            <div style={{ background: 'var(--surface)', padding: '16px', borderRadius: '12px' }}>
-                                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px' }}>Source Enquiry</label>
-                                <div style={{ fontWeight: 600 }}>{job.enquiries?.enquiry_no || 'Manual Entry'}</div>
-                            </div>
-                            <div style={{ background: 'var(--surface)', padding: '16px', borderRadius: '12px' }}>
-                                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px' }}>Customer</label>
-                                <div style={{ fontWeight: 600 }}>{job.enquiries?.customer?.name || 'N/A'}</div>
-                            </div>
-                            <div style={{ background: 'var(--surface)', padding: '16px', borderRadius: '12px' }}>
-                                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '4px' }}>Supplier Quotes</label>
-                                <div style={{ fontWeight: 600 }}>{quotes.length} Floating</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Phase 2: Orders Block */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                        {/* Customer Order */}
-                        <div className="glass-panel" style={{ padding: '24px' }}>
-                            <h3 style={{ margin: '0 0 20px 0', fontSize: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <CreditCard size={18} color="#10b981" /> Order from Customer
-                            </h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ color: 'var(--text-secondary)' }}>PO Ref:</span>
-                                    <span style={{ fontWeight: 600 }}>{job.po_ref || '-'}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ color: 'var(--text-secondary)' }}>PO Amount:</span>
-                                    <span style={{ fontWeight: 700, color: 'var(--primary)' }}>${totalRevenue.toLocaleString()}</span>
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                    <span style={{ color: 'var(--text-secondary)' }}>Status:</span>
-                                    <span className={`badge ${job.payment_status?.toLowerCase() || 'unpaid'}`}>{job.payment_status || 'Unpaid'}</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Job Costing Section */}
-                        <div className="glass-panel" style={{ padding: '24px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.1rem' }}>
-                                    <BadgeDollarSign size={20} color="#059669" /> 3. Job Costing & Supplier Bills
-                                </h3>
-                                <button onClick={() => setShowExpenseForm(true)} className="btn btn-sm btn-primary" style={{ gap: '8px' }}>
-                                    <Plus size={16} /> Add Job Cost
-                                </button>
-                            </div>
-                            <div style={{ background: 'var(--surface)', borderRadius: '12px', overflow: 'hidden' }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                    <thead style={{ background: '#f8fafc', borderBottom: '1px solid var(--border-color)' }}>
-                                        <tr>
-                                            <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Supplier</th>
-                                            <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Description</th>
-                                            <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Amount</th>
-                                            <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Bill</th>
-                                            <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Action</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {expenses.map(exp => (
-                                            <tr key={exp.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                                <td style={{ padding: '12px 16px', fontWeight: 600 }}>{exp.supplier_name}</td>
-                                                <td style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{exp.description}</td>
-                                                <td style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 700 }}>${exp.amount?.toLocaleString()}</td>
-                                                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                                                    {exp.attachment_url ? (
-                                                        <SafeDriveLink 
-                                                            url={exp.attachment_url} 
-                                                            label="View Bill"
-                                                            className="btn btn-sm btn-outline"
-                                                            style={{ padding: '4px 8px', fontSize: '0.7rem' }}
-                                                        />
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => {
-                                                                const input = document.createElement('input');
-                                                                input.type = 'file';
-                                                                input.onchange = async (e) => {
-                                                                    const file = e.target.files[0];
-                                                                    if (!file) return;
-                                                                    try {
-                                                                        const accessToken = localStorage.getItem('google_access_token');
-                                                                        const isValid = await validateToken(accessToken);
-                                                                        if (!accessToken || !isValid) {
-                                                                            connectGoogleAPI('job_expense_upload');
-                                                                            return;
-                                                                        }
-                                                                        const projectFolderId = job.enquiries?.gdrive_folder_id || job.gdrive_folder_id;
-                                                                        if (projectFolderId) {
-                                                                            const subFolderId = await createFolderStructure(accessToken, '2. Supplier_Quotes_&_PO', projectFolderId);
-                                                                            const uploadRes = await uploadFileToDrive(accessToken, file, {
-                                                                                folderId: subFolderId,
-                                                                                title: `BILL_${exp.supplier_name}_${file.name}`,
-                                                                                company_id: profile.company_id,
-                                                                                onProgress: (p) => setUploadProgress(p)
-                                                                            });
-                                                                            if (uploadRes.webViewLink) {
-                                                                                setUploadLink(uploadRes.webViewLink);
-                                                                                await updateJobExpense(exp.id, { attachment_url: uploadRes.webViewLink });
-                                                                                alert("Supplier Bill uploaded and filed to Drive!");
-                                                                                fetchData();
-                                                                            }
-                                                                        }
-                                                                    } catch (err) { alert("Upload failed: " + err.message); }
-                                                                    finally { 
-                                                                        // setUploadProgress(0); // Handled by onClose
-                                                                    }
-                                                                };
-                                                                input.click();
-                                                            }}
-                                                            className="btn btn-sm btn-outline"
-                                                            style={{ padding: '4px 8px', fontSize: '0.7rem' }}
-                                                            title="Upload Supplier Bill to GDrive"
-                                                        >
-                                                            <Upload size={12} /> Upload Bill
-                                                        </button>
-                                                    )}
-                                                </td>
-                                                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                                                    <button onClick={() => handleDeleteExpense(exp.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={16} /></button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {expenses.length === 0 && <tr><td colSpan="5" style={{ textAlign: 'center', padding: '20px', color: 'var(--text-secondary)' }}>No supplier costs recorded.</td></tr>}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* WFDocu Documents Block */}
-                    <div className="glass-panel" style={{ padding: '24px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <FileText size={20} color="#3b82f6" /> Linked Documents (Enquiry to Suppliers)
-                            </h3>
-                            <Link to={`/workflows?job_id=${id}`} className="btn btn-sm btn-primary">
-                                Create via Enquiry to Suppliers
-                            </Link>
-                        </div>
-                        {v2Docs.length > 0 ? (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-                                {v2Docs.map(doc => (
-                                    <div key={doc.id} style={{ border: '1px solid var(--border-color)', padding: '16px', borderRadius: '12px', background: 'var(--surface)' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                                            <span style={{ fontWeight: 700 }}>{doc.document_no}</span>
-                                            <span className="badge">{doc.document_type}</span>
-                                        </div>
-                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                                            {doc.partners?.name || 'No Customer'} {doc.amount ? `- $${doc.amount.toLocaleString()}` : ''}
-                                        </div>
-                                        <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
-                                            <Link to={`/workflows/edit/${doc.id}`} className="btn btn-sm btn-outline" style={{ flex: 1, padding: '4px' }}>Edit</Link>
-                                            <Link to={`/workflows/print/${doc.id}`} className="btn btn-sm btn-outline" style={{ flex: 1, padding: '4px' }}>Print</Link>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div style={{ textAlign: 'center', padding: '40px', background: 'var(--surface)', borderRadius: '12px', color: 'var(--text-secondary)' }}>
-                                <FileText size={32} style={{ marginBottom: '12px', opacity: 0.5, margin: '0 auto' }} />
-                                <p>No documents generated yet.</p>
-                                <p style={{ fontSize: '0.85rem' }}>Use 'Enquiry to Suppliers' to create Quotations, Invoices, Delivery Orders, etc.</p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Calibration & Service Section (Conditional) */}
-                    {job.type === 'Service' && (
-                        <div style={{ padding: '24px', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '24px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <div style={{ padding: '8px', background: '#fdf2f8', color: '#db2777', borderRadius: '10px' }}>
-                                        <ListChecks size={20} />
-                                    </div>
-                                    <div>
-                                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>Calibration & Certificates</h3>
-                                        <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>Manage operational certificates and calibration status</p>
-                                    </div>
-                                </div>
-                                <button
-                                    className="btn btn-sm btn-outline"
-                                    style={{ gap: '8px' }}
-                                    onClick={() => {
-                                        // Trigger upload to sub-folder 3
-                                        const input = document.createElement('input');
-                                        input.type = 'file';
-                                        input.onchange = async (e) => {
-                                            const file = e.target.files[0];
-                                            if (!file) return;
-
-                                            try {
-                                                const accessToken = localStorage.getItem('google_access_token');
-                                                const isValid = await validateToken(accessToken);
-                                                if (!accessToken || !isValid) {
-                                                    connectGoogleAPI('job_cert_upload');
-                                                    return;
-                                                }
-                                                const projectFolderId = job.enquiries?.gdrive_folder_id || job.gdrive_folder_id;
-                                                if (projectFolderId) {
-                                                    const subFolderId = await createFolderStructure(accessToken, '3. Operations_DO_SR_&_Certificates', projectFolderId);
-                                                    const uploadRes = await uploadFileToDrive(accessToken, file, {
-                                                        folderId: subFolderId,
-                                                        title: `CERT_${job.job_no}_${file.name}`,
-                                                        company_id: profile.company_id,
-                                                        onProgress: (p) => setUploadProgress(p)
-                                                    });
-                                                    setUploadLink(uploadRes.webViewLink);
-
-                                                    // Record Certificate in workflow
-                                                    try {
-                                                        const docNo = await generateDocNumber(profile.company_id, 'Certificate');
-                                                        await recordExternalDocument({
-                                                            company_id: profile.company_id,
-                                                            job_id: id,
-                                                            enquiry_id: job.enquiry_id,
-                                                            document_type: 'Certificate',
-                                                            document_no: docNo,
-                                                            subject: `Certificate: ${file.name}`,
-                                                            issue_date: new Date().toISOString().split('T')[0],
-                                                            status: 'Completed',
-                                                            notes: uploadRes.webViewLink,
-                                                            partner_id: job.enquiries?.customer_id || job.customer_id,
-                                                            vessel_id: job.enquiries?.vessel_id || job.vessel_id,
-                                                            work_location_id: job.enquiries?.work_location_id || job.work_location_id
-                                                        });
-                                                    } catch (recErr) { console.error(recErr); }
-                                                    alert("Certificate uploaded successfully to Drive!");
-                                                }
-                                            } catch (err) {
-                                                alert("Upload failed: " + err.message);
-                                            } finally {
-                                                // setUploadProgress(0); // Handled by onClose
-                                            }
-                                        };
-                                        input.click();
-                                    }}
-                                >
-                                    <Plus size={16} /> Upload Certificate
-                                </button>
-                            </div>
-                            <div style={{ padding: '16px', background: '#f8fafc', borderRadius: '8px', border: '1px dashed #cbd5e1', textAlign: 'center', color: '#64748b', fontSize: '0.9rem' }}>
-                                Operational certificates and service reports are automatically saved to the <strong>3. Operations...</strong> folder in Google Drive.
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Profit & Finance Footer */}
-                    <div style={{ background: 'var(--surface-dark)', color: 'white', padding: '24px', borderRadius: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', gap: '40px' }}>
-                            <div>
-                                <label style={{ fontSize: '0.8rem', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Order Value</label>
-                                <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>${totalRevenue.toLocaleString()}</div>
-                            </div>
-                            <div>
-                                <label style={{ fontSize: '0.8rem', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Job Costing</label>
-                                <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>${totalExpenses.toLocaleString()}</div>
-                            </div>
-                        </div>
-                        <div style={{ textAlign: 'right' }}>
-                            <label style={{ fontSize: '0.8rem', opacity: 0.7, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Job Profit</label>
-                            <div style={{ fontSize: '2rem', fontWeight: 900, color: profit >= 0 ? '#4ade80' : '#f87171', marginBottom: '16px' }}>
-                                ${profit.toLocaleString()}
-                            </div>
-                            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-                                <button
-                                    onClick={() => handleRecordDocument('Purchase Order')}
-                                    className="btn btn-sm btn-outline"
-                                    style={{ gap: '8px' }}
-                                >
-                                    <Quote size={14} /> Gen PO
-                                </button>
-                                <button
-                                    onClick={() => handleRecordDocument(job.type === 'Service' ? 'Service Report' : 'Delivery Order')}
-                                    className="btn btn-sm btn-outline"
-                                    style={{ gap: '8px' }}
-                                >
-                                    <Truck size={14} /> {job.type === 'Service' ? 'Gen SR' : 'Gen DO'}
-                                </button>
-                                <button
-                                    onClick={() => handleRecordDocument('Invoice')}
-                                    className="btn btn-sm"
-                                    style={{ background: '#4f46e5', color: '#fff', border: 'none', gap: '8px' }}
-                                >
-                                    <Download size={14} /> Gen Invoice
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                </div>
-
-                {/* Right Sidebar: Utility & Documents */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                    <div className="glass-panel" style={{ padding: '0', background: 'transparent', border: 'none', boxShadow: 'none' }}>
-                        <CommunicationWall 
-                            referenceType="Job" 
-                            referenceId={id} 
-                            folderId={job.enquiries?.gdrive_folder_id || job.gdrive_folder_id}
-                            title="Job Diary & Cloud Vault"
-                        />
-                    </div>
-
-                    <div className="glass-panel" style={{ padding: '20px' }}>
-                        <h4 style={{ margin: '0 0 16px 0', fontSize: '0.9rem', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Payment Tracking</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            <div style={{ background: 'var(--surface)', padding: '16px', borderRadius: '12px' }}>
-                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '8px' }}>Customer Payment Status</div>
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                    {['Unpaid', 'Partial', 'Paid'].map(status => (
-                                        <button
-                                            key={status}
-                                            onClick={() => handleUpdatePaymentStatus(status)}
-                                            style={{
-                                                padding: '6px 16px',
-                                                borderRadius: '20px',
-                                                fontSize: '0.8rem',
-                                                fontWeight: 600,
-                                                border: '1px solid',
-                                                borderColor: job.payment_status === status ? 'transparent' : 'var(--border-color)',
-                                                background: job.payment_status === status ?
-                                                    (status === 'Paid' ? '#10b981' : (status === 'Partial' ? '#f59e0b' : '#ef4444')) : 'transparent',
-                                                color: job.payment_status === status ? '#fff' : 'var(--text-secondary)',
-                                                cursor: 'pointer',
-                                                transition: 'all 0.2s'
-                                            }}
-                                        >
-                                            {status}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div style={{ background: '#fdf2f2', border: '1px solid #fee2e2', padding: '20px', borderRadius: '16px' }}>
-                        <h4 style={{ margin: 0, fontSize: '0.8rem', color: '#991b1b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <AlertCircle size={14} /> Critical Action
-                        </h4>
-                        <button onClick={() => window.confirm('Delete job?') && deleteJob(id)} className="btn btn-sm btn-danger" style={{ width: '100%', marginTop: '12px' }}>Delete Job Record</button>
-                    </div>
+                    <button onClick={() => window.print()} className="btn btn-primary" style={{ gap: '10px' }}><Download size={18} /> Export Record</button>
                 </div>
             </div>
 
-            {/* Modals */}
-            {showEdit && <EditJobModal job={job} onClose={() => setShowEdit(false)} onSave={() => fetchData()} />}
-
-            {showExpenseForm && (
-                <div className="modal-overlay">
-                    <div className="modal-content" style={{ maxWidth: '400px' }}>
-                        <h3>Add Job Cost</h3>
-                        <form onSubmit={handleAddExpense} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            <div className="form-group">
-                                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Supplier Name</label>
-                                <input placeholder="e.g. Maersk, Vendor A" value={newExpense.supplier_name} onChange={e => setNewExpense({ ...newExpense, supplier_name: e.target.value })} required className="form-input" />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: '32px' }}>
+                {/* Main Content */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    
+                    {/* Stage 1: Job Identity & Details */}
+                    <div className="glass-panel" style={{ padding: '32px', position: 'relative', overflow: 'hidden' }}>
+                        <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: 'var(--primary)' }}></div>
+                        <h3 style={{ margin: '0 0 24px 0', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.25rem', fontWeight: 800 }}>
+                            <User size={24} color="var(--primary)" /> 1. Job Identity & Client Detail
+                        </h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
+                            {/* Read-only Customer Info */}
+                            <div style={{ background: '#f8fafc', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '12px' }}>Customer Contact</label>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#1e293b' }}>{job.partners?.name || 'Walk-in Customer'}</div>
+                                    <div style={{ fontSize: '0.9rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <FileText size={14} /> {job.partners?.address || 'No address provided'}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '20px' }}>
+                                        <div style={{ fontSize: '0.9rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <Calendar size={14} /> {job.partners?.email1 || 'No email'}
+                                        </div>
+                                        <div style={{ fontSize: '0.9rem', color: '#475569', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <DollarSign size={14} /> {job.partners?.phone1 || 'No phone'}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="form-group">
-                                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Description</label>
-                                <input placeholder="Service fee, Hardware parts, etc" value={newExpense.description} onChange={e => setNewExpense({ ...newExpense, description: e.target.value })} className="form-input" />
+                            {/* Multi-line Job Description */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Scope of Work / Job Details</label>
+                                <textarea
+                                    className="input"
+                                    style={{ flex: 1, minHeight: '120px', resize: 'vertical', fontSize: '0.95rem', lineHeight: '1.6', padding: '12px' }}
+                                    placeholder="Enter detailed scope of work here..."
+                                    value={tempDesc}
+                                    onChange={(e) => setTempDesc(e.target.value)}
+                                />
+                                <button 
+                                    onClick={handleUpdateDescription} 
+                                    disabled={isUpdatingDesc || tempDesc === job.description}
+                                    className="btn btn-sm btn-outline"
+                                    style={{ alignSelf: 'flex-end', gap: '8px' }}
+                                >
+                                    {isUpdatingDesc ? <Loader2 size={14} className="animate-spin" /> : <CheckSquare size={14} />}
+                                    Save Description
+                                </button>
                             </div>
-                            <div className="form-group">
-                                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Order Value / Cost Amount</label>
-                                <input type="number" step="0.01" placeholder="0.00" value={newExpense.amount} onChange={e => setNewExpense({ ...newExpense, amount: e.target.value })} required className="form-input" />
-                            </div>
-                            <DriveScannerLinker 
-                                label="Supplier Bill Attachment (Optional)"
-                                selectedLink={newExpense.driveLink}
-                                onClear={() => setNewExpense({...newExpense, driveLink: null, billFile: null})}
-                                onLinkSelected={(link, name, rawFile) => {
-                                    setNewExpense({...newExpense, driveLink: link, billFile: rawFile || null});
-                                }}
-                            />
-                            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
-                                <button type="button" onClick={() => setShowExpenseForm(false)} className="btn btn-secondary" style={{ flex: 1 }}>Cancel</button>
-                                <button type="submit" className="btn btn-primary" style={{ flex: 1 }}>Save Cost</button>
-                            </div>
-                        </form>
+                        </div>
                     </div>
+
+                    {/* Stage 2 & 3: Activity Gallery */}
+                    <div className="glass-panel" style={{ padding: '32px' }}>
+                        <h3 style={{ margin: '0 0 24px 0', display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.25rem', fontWeight: 800 }}>
+                            <Activity size={24} color="#f59e0b" /> 2. Process Activity Gallery
+                        </h3>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+                            {/* Enquiry Tile */}
+                            <Link to={`/workflows/enquiry/${job.enquiry_id}`} className="activity-tile">
+                                <div className="icon-wrap" style={{ background: '#eff6ff', color: '#3b82f6' }}><FileText size={20} /></div>
+                                <div className="tile-content">
+                                    <span className="label">Enquiry</span>
+                                    <span className="value">{job.enquiries?.enquiry_no}</span>
+                                    <span className="status-badge success">Received</span>
+                                </div>
+                                <ChevronRight size={16} className="arrow" />
+                            </Link>
+                            
+                            {/* Quotation Tile */}
+                            {getDocByAction('Quotation') ? (
+                                <Link to={`/workflows/edit/${getDocByAction('Quotation').id}`} className="activity-tile">
+                                    <div className="icon-wrap" style={{ background: '#fef3c7', color: '#d97706' }}><Quote size={20} /></div>
+                                    <div className="tile-content">
+                                        <span className="label">Quotation</span>
+                                        <span className="value">{getDocByAction('Quotation').document_no}</span>
+                                        <span className="status-badge warning">Sent</span>
+                                    </div>
+                                    <ChevronRight size={16} className="arrow" />
+                                </Link>
+                            ) : (
+                                <div className="activity-tile disabled">
+                                    <div className="icon-wrap"><Quote size={20} /></div>
+                                    <div className="tile-content">
+                                        <span className="label">Quotation</span>
+                                        <span className="value">Not Generated</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Operations Tile (DO/SR) */}
+                            {getDocByAction('Delivery Order') || getDocByAction('Service Report') ? (
+                                <Link to={`/workflows?job_id=${id}`} className="activity-tile">
+                                    <div className="icon-wrap" style={{ background: '#ecfdf5', color: '#10b981' }}><Truck size={20} /></div>
+                                    <div className="tile-content">
+                                        <span className="label">Operations</span>
+                                        <span className="value">{getDocByAction('Delivery Order')?.document_no || getDocByAction('Service Report')?.document_no}</span>
+                                        <span className="status-badge success">Delivered</span>
+                                    </div>
+                                    <ChevronRight size={16} className="arrow" />
+                                </Link>
+                            ) : (
+                                <div className="activity-tile disabled">
+                                    <div className="icon-wrap"><Truck size={20} /></div>
+                                    <div className="tile-content">
+                                        <span className="label">Operations</span>
+                                        <span className="value">Pending</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Invoicing Tile */}
+                            {getDocByAction('Invoice') ? (
+                                <Link to={`/workflows/edit/${getDocByAction('Invoice').id}`} className="activity-tile">
+                                    <div className="icon-wrap" style={{ background: '#fef2f2', color: '#ef4444' }}><DollarSign size={20} /></div>
+                                    <div className="tile-content">
+                                        <span className="label">Invoice</span>
+                                        <span className="value">{getDocByAction('Invoice').document_no}</span>
+                                        <span className="status-badge danger">Invoiced</span>
+                                    </div>
+                                    <ChevronRight size={16} className="arrow" />
+                                </Link>
+                            ) : (
+                                <div className="activity-tile disabled">
+                                    <div className="icon-wrap"><DollarSign size={20} /></div>
+                                    <div className="tile-content">
+                                        <span className="label">Financials</span>
+                                        <span className="value">Not Invoiced</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Stage 4: Costing Subtable */}
+                    <div className="glass-panel" style={{ padding: '32px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '12px', fontSize: '1.25rem', fontWeight: 800 }}>
+                                <BadgeDollarSign size={24} color="#10b981" /> 3. Expenses & Supplier Bills
+                            </h3>
+                            <button onClick={() => setShowExpenseForm(true)} className="btn btn-sm btn-primary" style={{ gap: '8px' }}>
+                                <Plus size={16} /> Add Supplier Bill
+                            </button>
+                        </div>
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+                                <thead>
+                                    <tr style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        <th style={{ padding: '12px', textAlign: 'left' }}>Supplier</th>
+                                        <th style={{ padding: '12px', textAlign: 'left' }}>Content</th>
+                                        <th style={{ padding: '12px', textAlign: 'right' }}>Amount</th>
+                                        <th style={{ padding: '12px', textAlign: 'center' }}>Evidence</th>
+                                        <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {expenses.map(exp => (
+                                        <tr key={exp.id} className="table-row-hover" style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px' }}>
+                                            <td style={{ padding: '16px 12px', fontWeight: 700, color: '#1e293b' }}>{exp.supplier_name}</td>
+                                            <td style={{ padding: '16px 12px', color: '#64748b', fontSize: '0.9rem' }}>{exp.description}</td>
+                                            <td style={{ padding: '16px 12px', textAlign: 'right', fontWeight: 800, color: 'var(--primary)', fontSize: '1rem' }}>${exp.amount?.toLocaleString()}</td>
+                                            <td style={{ padding: '16px 12px', textAlign: 'center' }}>
+                                                {exp.attachment_url ? (
+                                                    <SafeDriveLink url={exp.attachment_url} label="View Bill" className="btn btn-xs btn-outline" />
+                                                ) : (
+                                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8 italic' }}>No File</span>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '16px 12px', textAlign: 'right' }}>
+                                                <button onClick={() => handleDeleteExpense(exp.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={18} /></button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {expenses.length === 0 && (
+                                        <tr>
+                                            <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                                                <DollarSign size={32} style={{ opacity: 0.2, marginBottom: '8px' }} />
+                                                <p>No supplier invoices recorded for this job.</p>
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Stage 4: Project Vault (Interactive) */}
+                    <JobVault job={job} googleToken={localStorage.getItem('google_access_token')} />
+
                 </div>
-            )}
-            {/* Standardized Upload Overlay */}
-            <UploadOverlay 
-                isVisible={uploadProgress > 0 || !!uploadLink} 
-                progress={uploadProgress} 
-                title="Uploading to Drive..."
-                locationLink={uploadLink}
-                onClose={() => {
-                    setUploadProgress(0);
-                    setUploadLink(null);
-                }}
-            />
+
+                {/* Sidebar */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+                    
+                    {/* Customer Purchase Order Block */}
+                    <div className="glass-panel" style={{ padding: '24px', background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)', color: 'white' }}>
+                        <h4 style={{ margin: '0 0 20px 0', fontSize: '0.9rem', color: '#94a3b8', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <CardIcon size={16} /> Customer Order Details
+                        </h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+                                <span style={{ fontSize: '0.85rem', opacity: 0.7 }}>PO Reference:</span>
+                                <span style={{ fontSize: '1.25rem', fontWeight: 800 }}>{job.po_ref || 'PENDING'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.7rem', opacity: 0.6, marginBottom: '4px' }}>PO Date</label>
+                                    <div style={{ fontWeight: 600 }}>{job.po_date || 'N/A'}</div>
+                                </div>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '0.7rem', opacity: 0.6, marginBottom: '4px' }}>Ordered By</label>
+                                    <div style={{ fontWeight: 600 }}>{job.po_by || 'N/A'}</div>
+                                </div>
+                            </div>
+                            <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: 0 }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: '1rem', opacity: 0.9 }}>Order Value:</span>
+                                <span style={{ fontSize: '1.75rem', fontWeight: 900, color: '#4ade80' }}>${totalRevenue.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+
+
+                    {/* Financial Summary Card */}
+                    <div className="glass-panel" style={{ padding: '24px', background: '#f8fafc' }}>
+                        <h4 style={{ margin: '0 0 16px 0', fontSize: '1rem', fontWeight: 800 }}>Financial Performance</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: '#64748b' }}>Revenue (PO)</span>
+                                <span style={{ fontWeight: 600 }}>${totalRevenue.toLocaleString()}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                <span style={{ color: '#64748b' }}>Project Costs</span>
+                                <span style={{ fontWeight: 600, color: '#ef4444' }}>-${totalExpenses.toLocaleString()}</span>
+                            </div>
+                            <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0' }} />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontWeight: 800, fontSize: '1.1rem' }}>Project Profit</span>
+                                <span style={{ fontWeight: 900, fontSize: '1.5rem', color: profit >= 0 ? '#10b981' : '#ef4444' }}>
+                                    ${profit.toLocaleString()}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            {/* Modals & Overlays */}
+            {showEdit && <EditJobModal job={job} onClose={() => setShowEdit(false)} onSave={() => { setShowEdit(false); fetchData(); }} />}
+            {uploadProgress > 0 && <UploadOverlay progress={uploadProgress} link={uploadLink} onClose={() => { setUploadProgress(0); setUploadLink(null); }} />}
+
+            {/* Custom Styles for Activity Tiles */}
+            <style dangerouslySetInnerHTML={{ __html: `
+                .activity-tile {
+                    display: flex;
+                    align-items: center;
+                    gap: 16px;
+                    padding: 16px;
+                    background: #fff;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 16px;
+                    text-decoration: none;
+                    color: inherit;
+                    transition: all 0.2s ease;
+                    position: relative;
+                }
+                .activity-tile:hover {
+                    border-color: var(--primary);
+                    transform: translateY(-2px);
+                    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+                }
+                .activity-tile .icon-wrap {
+                    padding: 10px;
+                    border-radius: 12px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                }
+                .activity-tile .tile-content {
+                    flex: 1;
+                    display: flex;
+                    flex-direction: column;
+                }
+                .activity-tile .label {
+                    font-size: 0.75rem;
+                    color: #64748b;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                }
+                .activity-tile .value {
+                    font-weight: 800;
+                    font-size: 0.95rem;
+                    color: #1e293b;
+                }
+                .activity-tile .arrow {
+                    color: #cbd5e1;
+                    transition: transform 0.2s ease;
+                }
+                .activity-tile:hover .arrow {
+                    transform: translateX(4px);
+                    color: var(--primary);
+                }
+                .activity-tile.disabled {
+                    opacity: 0.6;
+                    cursor: not-allowed;
+                    background: #f1f5f9;
+                }
+                .status-badge {
+                    font-size: 0.65rem;
+                    padding: 2px 8px;
+                    border-radius: 4px;
+                    font-weight: 700;
+                    width: fit-content;
+                    margin-top: 4px;
+                }
+                .status-badge.success { background: #dcfce7; color: #166534; }
+                .status-badge.warning { background: #fef3c7; color: #92400e; }
+                .status-badge.danger { background: #fee2e2; color: #991b1b; }
+
+                .upload-btn {
+                    display: flex;
+                    align-items: center;
+                    gap: 10px;
+                    padding: 10px 16px;
+                    background: #f8fafc;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 10px;
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                    color: #475569;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    text-align: left;
+                }
+                .upload-btn:hover {
+                    background: #f1f5f9;
+                    border-color: var(--primary);
+                    color: var(--primary);
+                }
+            `}} />
         </div>
     );
 }

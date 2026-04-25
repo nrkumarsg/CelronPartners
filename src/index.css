@@ -11,6 +11,8 @@
   --danger-hover: #dc2828;
   --border-color: #e2e8f0;
   --input-bg: #ffffff;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.3);
 }
 
 * {
@@ -29,13 +31,14 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Glassmorphism replaced with Flat pristine styling */
+/* Premium Glassmorphism styling restored */
 .glass-panel {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  /* very flat clean shadow */
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.07);
   padding: 24px;
 }
 
@@ -431,9 +434,12 @@ body {
 /* Tables */
 .table-container {
   overflow-x: auto;
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-secondary);
+  border-radius: 16px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.07);
 }
 
 table {
@@ -574,17 +580,19 @@ tr:hover {
   animation: fadeIn 0.3s ease-out forwards;
 }
 
-/* Dashboard Cards - match new white flat style */
+/* Dashboard Cards - Premium Glassmorphism */
 .stat-card {
   padding: 24px;
-  border-radius: 12px;
-  background: #ffffff;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border-radius: 16px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.07);
   display: flex;
   flex-direction: column;
   gap: 12px;
-  transition: transform 0.2s ease;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s ease;
 }
 
 .stat-card:hover {

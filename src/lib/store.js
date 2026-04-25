@@ -229,6 +229,19 @@ export const getWorkLocations = async () => {
   return data || [];
 };
 
+export const saveWorkLocation = async (locationData) => {
+  const isExisting = !!locationData.id;
+  if (isExisting) {
+    const { data, error } = await supabase.from('work_locations').update(locationData).eq('id', locationData.id).select();
+    if (error) throw error;
+    return data[0];
+  } else {
+    const { data, error } = await supabase.from('work_locations').insert([locationData]).select();
+    if (error) throw error;
+    return data[0];
+  }
+};
+
 // --- Storage / File Uploads ---
 export const uploadFile = async (bucket, folderPath, file, options = {}) => {
   let fileToUpload = file;

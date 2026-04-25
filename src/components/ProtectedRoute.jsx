@@ -46,12 +46,21 @@ const ProtectedRoute = ({ children, requiredModule }) => {
     }
 
     // Role-based Access Control logic
+    const { activeCompany } = useAuth();
+
     if (requiredModule) {
         // Superadmin bypasses module checks
         if (profile.role === 'superadmin') {
             return children;
         }
 
+        // 1. Check if company has this module enabled
+        const companyModules = activeCompany?.enabled_modules;
+        if (companyModules && !companyModules.includes(requiredModule)) {
+            return <Navigate to="/unauthorized" replace />;
+        }
+
+        // 2. Check if user has this module allotted
         const modules = profile.accessible_modules || [];
         if (!modules.includes(requiredModule)) {
             return <Navigate to="/unauthorized" replace />;

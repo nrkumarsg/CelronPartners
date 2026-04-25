@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { LogOut, Bell, Building2, User, ChevronDown, Search, X, Folder, FileText, Briefcase, LayoutDashboard, StickyNote, MessageSquare, Loader2, Package } from 'lucide-react';
+import { LogOut, Bell, Building2, User, ChevronDown, Search, X, Folder, FileText, Briefcase, LayoutDashboard, StickyNote, MessageSquare, Loader2, Package, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getTodos } from '../lib/todoService';
 import { searchInternal, searchDrive } from '../lib/searchService';
@@ -99,7 +99,7 @@ export default function Header() {
         <header className="top-header">
             <div className="header-left">
                 {/* Company Switcher */}
-                {companies.length > 0 && (
+                {(companies.length > 0 || profile?.role === 'superadmin') && (
                     <div style={{ position: 'relative' }}>
                         <button
                             onClick={() => setShowCompanyMenu(!showCompanyMenu)}
@@ -107,41 +107,54 @@ export default function Header() {
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: '10px',
-                                background: 'rgba(99, 102, 241, 0.05)',
-                                border: '1px solid rgba(99, 102, 241, 0.1)',
+                                background: '#ffffff',
+                                border: '1px solid #e2e8f0',
                                 padding: '8px 16px',
-                                borderRadius: '10px',
+                                borderRadius: '12px',
                                 cursor: 'pointer',
-                                transition: 'all 0.2s',
+                                transition: 'all 0.2s ease',
                                 fontWeight: 600,
-                                color: '#1e293b',
-                                fontSize: '0.9rem'
+                                color: '#334155',
+                                fontSize: '0.85rem',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                                letterSpacing: '0.01em'
                             }}
-                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)'}
-                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(99, 102, 241, 0.05)'}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.borderColor = '#6366f1';
+                                e.currentTarget.style.background = '#f5f3ff';
+                                e.currentTarget.style.boxShadow = '0 4px 12px rgba(99, 102, 241, 0.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.borderColor = '#e2e8f0';
+                                e.currentTarget.style.background = '#ffffff';
+                                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.05)';
+                            }}
                         >
                             <div style={{
-                                width: '28px',
-                                height: '28px',
+                                width: '32px',
+                                height: '32px',
                                 background: activeCompany.logo_url ? '#fff' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
-                                borderRadius: '6px',
+                                borderRadius: '8px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 color: '#fff',
                                 overflow: 'hidden',
-                                border: activeCompany.logo_url ? '1px solid rgba(0,0,0,0.05)' : 'none'
+                                border: activeCompany.logo_url ? '1px solid #e2e8f0' : 'none'
                             }}>
                                 {activeCompany.logo_url ? (
                                     <img src={activeCompany.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                                 ) : (
-                                    <Building2 size={16} />
+                                    <Building2 size={20} />
                                 )}
                             </div>
-                            <span style={{ maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {activeCompany.name}
                             </span>
-                            <ChevronDown size={16} />
+                            <ChevronDown size={20} style={{ 
+                                transition: 'transform 0.3s ease',
+                                transform: showCompanyMenu ? 'rotate(180deg)' : 'rotate(0)'
+                            }} />
                         </button>
 
                         {showCompanyMenu && (
@@ -227,6 +240,38 @@ export default function Header() {
                                                 </div>
                                             </button>
                                         ))}
+                                        {profile?.role === 'superadmin' && (
+                                            <div style={{ borderTop: '1px solid #f1f5f9', marginTop: '4px', paddingTop: '4px' }}>
+                                                <button
+                                                    onClick={() => {
+                                                        setShowCompanyMenu(false);
+                                                        navigate('/admin/users');
+                                                    }}
+                                                    style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '12px',
+                                                        width: '100%',
+                                                        padding: '12px',
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        borderRadius: '8px',
+                                                        cursor: 'pointer',
+                                                        textAlign: 'left',
+                                                        color: '#6366f1',
+                                                        fontSize: '0.85rem',
+                                                        fontWeight: 800,
+                                                        textTransform: 'uppercase',
+                                                        letterSpacing: '0.05em'
+                                                    }}
+                                                    onMouseEnter={(e) => e.currentTarget.style.background = '#f5f3ff'}
+                                                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                                                >
+                                                    <Plus size={16} />
+                                                    Create / Manage
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </>
@@ -238,8 +283,8 @@ export default function Header() {
             {/* Universal Search Bar */}
             <div className="header-center" ref={searchRef} style={{ flex: 1, maxWidth: '600px', margin: '0 40px', position: 'relative' }}>
                 <div style={{ position: 'relative', width: '100%' }}>
-                    <div style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}>
-                        {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Search size={18} />}
+                    <div style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }}>
+                        {isSearching ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
                     </div>
                     <input
                         ref={inputRef}

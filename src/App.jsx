@@ -29,6 +29,7 @@ import WorkflowV2Board from './pages/workflows/WorkflowV2Board';
 import EnquiryList from './pages/workflows/EnquiryList';
 import WorkflowEditor from './pages/workflows/WorkflowEditor';
 import WorkflowPrintPreview from './pages/workflows/WorkflowPrintPreview';
+import EnquiryPrintPreview from './pages/workflows/EnquiryPrintPreview';
 import CategoriesDirectory from './pages/CategoriesDirectory';
 import BrandsDirectory from './pages/BrandsDirectory';
 import TodoList from './pages/TodoList';
@@ -153,6 +154,7 @@ function App() {
               <Route path="/soa" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
               <Route path="/payments" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
               <Route path="/workflows/legacy" element={<ProtectedRoute><WorkflowBoard /></ProtectedRoute>} />
+              <Route path="/workflows/enquiry/print/:id" element={<ProtectedRoute><EnquiryPrintPreview /></ProtectedRoute>} />
               <Route path="/workflows/enquiry/:id" element={<ProtectedRoute><EnquiryDetails /></ProtectedRoute>} />
               <Route path="/workflows/job/:id" element={<ProtectedRoute><JobDetails /></ProtectedRoute>} />
               <Route path="/workflows/editor/:type/:id" element={<ProtectedRoute><WorkflowEditor /></ProtectedRoute>} />
@@ -183,6 +185,7 @@ function App() {
               <Route path="/scanner" element={<ProtectedRoute><ScannerModule /></ProtectedRoute>} />
               <Route path="/tools/ocr" element={<ProtectedRoute><SmartOCR /></ProtectedRoute>} />
               <Route path="/tools/converter" element={<ProtectedRoute><Converter /></ProtectedRoute>} />
+              <Route path="/converter" element={<ProtectedRoute><Converter /></ProtectedRoute>} />
               <Route path="/tools/locator" element={<ProtectedRoute><LiveLocator /></ProtectedRoute>} />
               <Route path="/tools" element={<ProtectedRoute><Tools /></ProtectedRoute>} />
 

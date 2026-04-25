@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getEnquiries, getJobs } from '../../lib/workflowService';
 import { Bell, AlertCircle, ArrowRight, Clock, FileText, CheckCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
 
 export default function StageReminders() {
     const { profile } = useAuth();
@@ -22,9 +23,10 @@ export default function StageReminders() {
     const fetchReminders = async () => {
         setLoading(true);
         try {
-            const [enqRes, jobRes] = await Promise.all([
+            const [enqRes, jobRes, v2Res] = await Promise.all([
                 getEnquiries(profile?.company_id),
-                getJobs(profile?.company_id)
+                getJobs(profile?.company_id),
+                supabase.from('workflow_documents').select('*').eq('company_id', profile.company_id).eq('document_type', 'Job')
             ]);
 
             const newReminders = [];
@@ -56,14 +58,30 @@ export default function StageReminders() {
                 });
             }
 
-            // Stage Logic for Jobs (POs)
+            // Stage Logic for New Jobs (Workflow V2)
+            if (v2Res && v2Res.data) {
+                v2Res.data.forEach(job => {
+                    if (job.status === 'Confirmed' || job.status === 'Draft') {
+                        newReminders.push({
+                            id: `v2-job-inv-${job.id}`,
+                            type: 'action',
+                            title: `Job ${job.document_no} requires Delivery/Invoicing`,
+                            actionText: 'Process Job',
+                            link: `/workflows/editor/Job/${job.id}`,
+                            icon: <FileText size={18} color="#34d399" />
+                        });
+                    }
+                });
+            }
+
+            // Stage Logic for Legacy Jobs (POs)
             if (jobRes && jobRes.data) {
                 jobRes.data.forEach(job => {
                     if (job.status === 'Active') {
                         newReminders.push({
                             id: `job-inv-${job.id}`,
                             type: 'action',
-                            title: `Job ${job.job_no} requires Delivery/Invoicing`,
+                            title: `Legacy Job ${job.job_no} requires Delivery/Invoicing`,
                             actionText: 'Process Job',
                             link: `/workflows/job/${job.id}`, // Proper Job URL
                             icon: <FileText size={18} color="#34d399" />

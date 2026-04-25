@@ -3,18 +3,16 @@ import { ShieldCheck, UserCheck, Shield, Disc, Check, X, Search, Building2 } fro
 import { useAuth } from '../contexts/AuthContext';
 import { getAllProfiles, updateProfile } from '../lib/userService';
 
-const ALL_MODULES = [
-    { id: 'partners', label: 'Partners' },
-    { id: 'contacts', label: 'Contacts' },
-    { id: 'vessels', label: 'Vessels' },
-    { id: 'work-locations', label: 'Work Locations' },
-    { id: 'catalog', label: 'Catalog' },
-    { id: 'reports', label: 'Reports' },
-    { id: 'settings', label: 'Settings' }
-];
+import { ALL_MODULES } from '../lib/constants';
 
 const UserManagement = () => {
-    const { profile: currentUserProfile } = useAuth();
+    const { profile: currentUserProfile, activeCompany } = useAuth();
+    
+    // For Company Admins, only allow allotting modules that are enabled for their company
+    const availableModules = currentUserProfile?.role === 'superadmin' 
+        ? ALL_MODULES 
+        : ALL_MODULES.filter(m => activeCompany?.enabled_modules?.includes(m.id));
+
     const [users, setUsers] = useState([]);
     const [companies, setCompanies] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -219,7 +217,7 @@ const UserManagement = () => {
                             className="btn btn-primary"
                             onClick={() => {
                                 setEditingCompany(null);
-                                setCompanyForm({ name: '', slug: '', logo_url: '' });
+                                setCompanyForm({ name: '', slug: '', logo_url: '', enabled_modules: ALL_MODULES.map(m => m.id) });
                                 setIsCompanyModalOpen(true);
                             }}
                         >
@@ -323,7 +321,7 @@ const UserManagement = () => {
                                                     </span>
                                                 ) : (
                                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                                        {ALL_MODULES.map(mod => {
+                                                        {availableModules.map(mod => {
                                                             const isChecked = (user.accessible_modules || []).includes(mod.id);
                                                             return (
                                                                 <button
@@ -390,7 +388,12 @@ const UserManagement = () => {
                                                 <button
                                                     onClick={() => {
                                                         setEditingCompany(comp);
-                                                        setCompanyForm({ name: comp.name, slug: comp.slug || '', logo_url: comp.logo_url || '' });
+                                                        setCompanyForm({ 
+                                                            name: comp.name, 
+                                                            slug: comp.slug || '', 
+                                                            logo_url: comp.logo_url || '',
+                                                            enabled_modules: comp.enabled_modules || ALL_MODULES.map(m => m.id)
+                                                        });
                                                         setIsCompanyModalOpen(true);
                                                     }}
                                                     className="btn btn-secondary"
@@ -548,6 +551,40 @@ const UserManagement = () => {
                                     value={companyForm.logo_url}
                                     onChange={e => setCompanyForm({ ...companyForm, logo_url: e.target.value })}
                                 />
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Enabled Modules (Mission Control)</label>
+                                <div style={{ 
+                                    display: 'grid', 
+                                    gridTemplateColumns: '1fr 1fr', 
+                                    gap: '8px',
+                                    padding: '12px',
+                                    background: '#f8fafc',
+                                    borderRadius: '12px',
+                                    border: '1px solid #e2e8f0',
+                                    maxHeight: '200px',
+                                    overflowY: 'auto'
+                                }}>
+                                    {ALL_MODULES.map(mod => {
+                                        const isChecked = companyForm.enabled_modules?.includes(mod.id);
+                                        return (
+                                            <label key={mod.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.85rem' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={isChecked}
+                                                    onChange={e => {
+                                                        const newModules = e.target.checked 
+                                                            ? [...(companyForm.enabled_modules || []), mod.id]
+                                                            : (companyForm.enabled_modules || []).filter(id => id !== mod.id);
+                                                        setCompanyForm({ ...companyForm, enabled_modules: newModules });
+                                                    }}
+                                                />
+                                                {mod.label}
+                                            </label>
+                                        );
+                                    })}
+                                </div>
                             </div>
 
                             <div style={{ marginTop: '12px', display: 'flex', gap: '12px' }}>

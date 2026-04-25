@@ -5,7 +5,8 @@ import {
     Printer, Send, X, Package,
     FileText, Calculator, Ship,
     MoreHorizontal, Search, Settings,
-    ChevronDown, CreditCard, User, Users, MapPin, Paperclip
+    ChevronDown, CreditCard, User, Users, MapPin, Paperclip,
+    FileCheck, Play
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
@@ -37,6 +38,7 @@ export default function WorkflowEditor() {
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
     const linkedJobId = searchParams.get('job_id');
+    const sourceId = searchParams.get('source_id');
 
     const { profile } = useAuth();
     const isNew = id === 'new';
@@ -48,6 +50,8 @@ export default function WorkflowEditor() {
     const [modal, setModal] = useState({ isOpen: false, type: null });
     const [emailPreview, setEmailPreview] = useState(null);
     const [poModal, setPoModal] = useState({ isOpen: false });
+    const [lineItems, setLineItems] = useState([]);
+    const [workflowDocs, setWorkflowDocs] = useState([]); // Documents in the same job suite
 
     const [settings, setSettings] = useState(null);
     const [logoBase64, setLogoBase64] = useState('');
@@ -123,9 +127,11 @@ export default function WorkflowEditor() {
         contact_id: '',
         vessel_id: '',
         work_location_id: '',
-        salesperson_name: profile?.email?.split('@')[0] || '',
+        salesperson_name: 'N.R.KUMAR',
+        salesperson_phone: '+6597685891',
+        salesperson_email: 'kumar@celron.net',
         subject: '',
-        customer_ref: '',
+        customer_ref: 'WALK IN',
         currency: 'SGD',
         status: 'Draft',
         notes: '',
@@ -147,14 +153,62 @@ export default function WorkflowEditor() {
         delivery_verification: {}
     });
 
-    const [lineItems, setLineItems] = useState([]);
-
     const fetchDocument = async () => {
         setLoading(true);
-        const { data } = await getWorkflowDocumentById(id);
-        if (data) {
-            setFormData(prev => ({ ...prev, ...data }));
-            setLineItems(data.items || []);
+        console.log('Fetching document with ID:', id);
+        try {
+            const { data, error } = await getWorkflowDocumentById(id);
+            if (error) {
+                console.error('Fetch error:', error);
+                alert('Error loading document: ' + error.message);
+            } else if (data) {
+                console.log('Document loaded:', data);
+                setFormData(prev => ({ ...prev, ...data }));
+                
+                // Deduplicate items on load to fix any existing database repeats
+                // We use a more robust key to handle null/undefined and whitespace
+                const rawItems = data.items || [];
+                const uniqueItems = [];
+                const seen = new Set();
+                
+                rawItems.forEach(item => {
+                    const desc = (item.description || '').trim();
+                    const details = (item.details || '').trim();
+                    const qty = parseFloat(item.quantity) || 0;
+                    const price = parseFloat(item.unit_price) || 0;
+                    const isSec = !!item.is_section;
+                    const isNote = !!item.is_note;
+
+                    const key = `${desc}|${details}|${qty}|${price}|${isSec}|${isNote}`;
+                    
+                    if (!seen.has(key)) {
+                        uniqueItems.push(item);
+                        seen.add(key);
+                    }
+                });
+                
+                setLineItems(uniqueItems);
+
+                // Fetch other docs in the same job suite
+                if (data.assigned_job_no) {
+                    const { data: suiteData } = await supabase
+                        .from('workflow_documents')
+                        .select('id, document_no, document_type, status, total_amount, currency, issue_date')
+                        .eq('assigned_job_no', data.assigned_job_no)
+                        .eq('company_id', profile.company_id)
+                        .order('issue_date', { ascending: true });
+                    
+                    if (suiteData) {
+                        setWorkflowDocs(suiteData);
+                    }
+                }
+            } else {
+                console.warn('No data returned for ID:', id);
+                alert('Document not found.');
+            }
+        } catch (err) {
+            console.error('Unexpected fetch error:', err);
+            alert('An unexpected error occurred while loading the document.');
         }
         setLoading(false);
     };
@@ -164,6 +218,49 @@ export default function WorkflowEditor() {
 
         let initialPartnerId = '';
         let initialContactId = '';
+
+        const docType = formData.document_type?.toUpperCase();
+        const DEFAULT_TERMS = `<ul>
+            <li><strong>Availability:</strong> Ex-stock, subject to prior sale.</li>
+            <li><strong>Product Type:</strong> Maker's genuine spare parts | OEM spare parts | Equivalent spare parts</li>
+            <li><strong>Delivery Time:</strong> Ex-stock | 1-2 days | 4-6 weeks</li>
+            <li><strong>Quote Validity:</strong> As per stated due date</li>
+            <li><strong>Payment Terms:</strong> Advance payment | 50% advance & 50% on COD | 7 days | 14 days | 30 days</li>
+        </ul>
+        <p><strong>Warranty:</strong> Manufacturer's standard warranty against manufacturing defects only. This warranty does not cover workmanship errors, misuse, or improper handling.</p>`;
+        
+        const defaultNotes = '';
+
+        if (sourceId) {
+            const { data: sourceDoc } = await getWorkflowDocumentById(sourceId);
+            if (sourceDoc) {
+                setFormData(prev => ({
+                    ...prev,
+                    document_no: newNo,
+                    partner_id: sourceDoc.partner_id || '',
+                    contact_id: sourceDoc.contact_id || '',
+                    vessel_id: sourceDoc.vessel_id || '',
+                    work_location_id: sourceDoc.work_location_id || '',
+                    subject: sourceDoc.subject || `Derived from ${sourceDoc.document_no}`,
+                    customer_ref: sourceDoc.customer_ref || '',
+                    currency: sourceDoc.currency || 'SGD',
+                    enquiry_id: sourceDoc.enquiry_id || '',
+                    job_id: sourceDoc.job_id || '',
+                    notes: sourceDoc.notes || defaultNotes,
+                    terms_conditions: sourceDoc.terms_conditions || (docType === 'QUOTATION' ? DEFAULT_TERMS : '')
+                }));
+
+                if (sourceDoc.items && sourceDoc.items.length > 0) {
+                    const inheritedItems = sourceDoc.items.map((item, idx) => ({
+                        ...item,
+                        id: 'src-' + idx + '-' + Date.now(),
+                        document_id: undefined // Will be set on save
+                    }));
+                    setLineItems(inheritedItems);
+                }
+                return; // Skip other inheritance if sourceId is used
+            }
+        }
 
         if (linkedJobId) {
             const { getJobById } = await import('../../lib/workflowService');
@@ -184,7 +281,9 @@ export default function WorkflowEditor() {
                     vessel_id: job.vessel_id || enq.vessel_id || '',
                     work_location_id: job.work_location_id || enq.work_location_id || '',
                     subject: prev.subject || job.subject || enq.subject || `Ref: ${job.job_no}`,
-                    customer_ref: prev.customer_ref || job.customer_ref || enq.customer_ref || ''
+                    customer_ref: prev.customer_ref || job.customer_ref || enq.customer_ref || '',
+                    notes: prev.notes || defaultNotes,
+                    terms_conditions: prev.terms_conditions || (docType === 'QUOTATION' ? DEFAULT_TERMS : '')
                 }));
 
                 // Inherit line items if available
@@ -208,12 +307,34 @@ export default function WorkflowEditor() {
             }
         }
 
+        let defaultNotesVal = formData.notes || '';
+        const docTypeUpper = formData.document_type?.toUpperCase();
+        
+        const packageDetailsTemplate = `
+            <p><strong>Package Details</strong></p>
+            <ul>
+                <li>Size of the Package : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mm (L) x &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mm (B) x &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mm (H)</li>
+                <li>Weight of the Package : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Kgs</li>
+                <li>Origin of spares : Singapore</li>
+                <li>Total No. of Packages: </li>
+                <li>Package Type (Carton / Wooden Crate / Pallet / Drum): </li>
+                <li>Package Qty: </li>
+                <li>Description of Contents: </li>
+            </ul>
+        `;
+
+        if ((docTypeUpper === 'DELIVERY ORDER' || docTypeUpper === 'PACKING LIST') && !defaultNotesVal) {
+            defaultNotesVal = packageDetailsTemplate;
+        }
+
         setFormData(prev => ({
             ...prev,
             document_no: newNo,
             job_id: linkedJobId || '',
             partner_id: initialPartnerId || prev.partner_id,
-            contact_id: initialContactId || prev.contact_id
+            contact_id: initialContactId || prev.contact_id,
+            notes: defaultNotesVal,
+            terms_conditions: prev.terms_conditions || (docTypeUpper === 'QUOTATION' ? DEFAULT_TERMS : '')
         }));
 
         // Add one empty line
@@ -266,6 +387,18 @@ export default function WorkflowEditor() {
 
         if (value === 'ADD_NEW') {
             setModal({ isOpen: true, type: name });
+            return;
+        }
+
+        if (name.startsWith('delivery_verification.')) {
+            const field = name.split('.')[1];
+            setFormData(prev => ({
+                ...prev,
+                delivery_verification: {
+                    ...(prev.delivery_verification || {}),
+                    [field]: value
+                }
+            }));
             return;
         }
 
@@ -366,8 +499,27 @@ export default function WorkflowEditor() {
     const handleSave = async () => {
         setSaving(true);
         try {
+            // Deduplicate items proactively before saving
+            const uniqueItems = [];
+            const seen = new Set();
+            lineItems.forEach(item => {
+                const desc = (item.description || '').trim();
+                const details = (item.details || '').trim();
+                const qty = parseFloat(item.quantity) || 0;
+                const price = parseFloat(item.unit_price) || 0;
+                const isSec = !!item.is_section;
+                const isNote = !!item.is_note;
+                const key = `${desc}|${details}|${qty}|${price}|${isSec}|${isNote}`;
+                if (!seen.has(key)) {
+                    uniqueItems.push(item);
+                    seen.add(key);
+                }
+            });
+            setLineItems(uniqueItems);
+
             const dataToSave = { ...formData, company_id: profile.company_id };
-            const { data, error } = await saveWorkflowDocument(dataToSave, lineItems);
+            
+            const { data, error } = await saveWorkflowDocument(dataToSave, uniqueItems);
             if (error) throw error;
             if (isNew) navigate(`/workflows/editor/${type}/${data.id}`, { replace: true });
             else {
@@ -398,19 +550,29 @@ export default function WorkflowEditor() {
     };
 
     const handleConvertToJob = async () => {
-        setPoModal({ isOpen: true });
-    };
-
-    const confirmJobConversion = async (poData) => {
+        // Save first to ensure all current edits are captured
         setSaving(true);
         try {
-            const { data } = await convertQuotationToJob(id, poData);
-            alert(`Job Created: ${data.assigned_job_no}`);
+            await handleSave();
+            setPoModal({ isOpen: true });
+        } catch (err) {
+            console.error('Failed to save before conversion:', err);
+            alert('Please save the document successfully before converting to job.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const confirmJobConversion = async (poData, options) => {
+        setSaving(true);
+        try {
+            const { jobNo } = await convertQuotationToJob(id, poData, options);
+            alert(`Job ${jobNo} created successfully with all associated documents!`);
             setPoModal({ isOpen: false });
             fetchDocument(); // Refresh to show job info
         } catch (err) {
             console.error(err);
-            alert('Failed to convert to job');
+            alert('Failed to convert to job: ' + (err.message || 'Unknown error'));
         } finally {
             setSaving(false);
         }
@@ -583,7 +745,7 @@ export default function WorkflowEditor() {
     };
 
     return (
-        <div className="workflow-editor-theme">
+        <div className="workflow-editor-theme" style={{ overflow: 'visible' }}>
             {/* Header / Actions */}
             <header className="editor-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -611,9 +773,22 @@ export default function WorkflowEditor() {
                             <FileText size={18} /> Create Revision
                         </button>
                     )}
-                    {!isNew && formData.document_type === 'Quotation' && !formData.is_job && (
-                        <button className="btn-vibrant" onClick={handleConvertToJob} style={{ background: '#10b981' }}>
-                            <Package size={18} /> Convert to Job
+                    {!isNew && (formData.document_type?.toUpperCase() === 'QUOTATION' || formData.document_type?.toUpperCase() === 'ENQUIRY') && (
+                        <button 
+                            className="btn-vibrant" 
+                            onClick={handleConvertToJob} 
+                            disabled={saving || formData.is_job} 
+                            style={{ 
+                                background: formData.is_job ? '#94a3b8' : '#10b981', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '8px', 
+                                opacity: (saving || formData.is_job) ? 0.7 : 1,
+                                cursor: formData.is_job ? 'default' : 'pointer'
+                            }}
+                        >
+                            {formData.is_job ? <FileCheck size={18} /> : <Package size={18} />} 
+                            {formData.is_job ? 'Already Job' : (saving ? 'Processing...' : 'Convert to Job')}
                         </button>
                     )}
                     <button className="icon-btn" onClick={() => navigate('/workflows')}>
@@ -685,18 +860,69 @@ export default function WorkflowEditor() {
                             <div className="form-item">
                                 <label><Ship size={14} /> Vessel / Service Location</label>
                                 <div style={{ display: 'flex', gap: '8px' }}>
-                                    <select className="form-select" name="vessel_id" value={formData.vessel_id} onChange={handleHeaderChange} style={{ flex: 1 }}>
+                                    <select 
+                                        className="form-select" 
+                                        name="vessel_id" 
+                                        value={formData.vessel_id} 
+                                        onChange={(e) => {
+                                            if (e.target.value === 'ADD_NEW') {
+                                                setModal({ isOpen: true, type: 'vessel_id' });
+                                            } else {
+                                                handleHeaderChange(e);
+                                            }
+                                        }} 
+                                        style={{ flex: 1 }}
+                                    >
                                         <option value="">[Vessel]</option>
-                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New</option>
+                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Vessel</option>
                                         {vessels.map(v => <option key={v.id} value={v.id}>{v.vessel_name}</option>)}
                                     </select>
-                                    <select className="form-select" name="work_location_id" value={formData.work_location_id} onChange={handleHeaderChange} style={{ flex: 1 }}>
+                                    <select 
+                                        className="form-select" 
+                                        name="work_location_id" 
+                                        value={formData.work_location_id} 
+                                        onChange={(e) => {
+                                            if (e.target.value === 'ADD_NEW') {
+                                                setModal({ isOpen: true, type: 'work_location_id' });
+                                            } else {
+                                                handleHeaderChange(e);
+                                            }
+                                        }} 
+                                        style={{ flex: 1 }}
+                                    >
                                         <option value="">[Workplace]</option>
-                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New</option>
+                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Workplace</option>
                                         {workLocations.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}
                                     </select>
                                 </div>
                             </div>
+                            
+                            {formData.document_type === 'Delivery Order' && (
+                                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #cbd5e1', marginBottom: '16px' }}>
+                                    <div style={{ fontSize: '11px', fontWeight: 800, color: '#1e293b', textTransform: 'uppercase', marginBottom: '8px' }}>Delivery Details</div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                        <input 
+                                            type="text" 
+                                            className="form-input" 
+                                            name="delivery_verification.delivery_address" 
+                                            value={formData.delivery_verification?.delivery_address || ''} 
+                                            onChange={handleHeaderChange} 
+                                            placeholder="Delivery Address" 
+                                            style={{ fontSize: '12px', padding: '6px 10px' }}
+                                        />
+                                        <input 
+                                            type="text" 
+                                            className="form-input" 
+                                            name="delivery_verification.delivery_pic" 
+                                            value={formData.delivery_verification?.delivery_pic || ''} 
+                                            onChange={handleHeaderChange} 
+                                            placeholder="Person in Charge (PIC)" 
+                                            style={{ fontSize: '12px', padding: '6px 10px' }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="form-item">
                                 <label>Currency</label>
                                 <select className="form-select" name="currency" value={formData.currency} onChange={handleHeaderChange}>
@@ -730,6 +956,9 @@ export default function WorkflowEditor() {
                 <div className="tab-container">
                     <button className={`tab ${activeTab === 'items' ? 'active' : ''}`} onClick={() => setActiveTab('items')}>Order Lines</button>
                     <button className={`tab ${activeTab === 'other' ? 'active' : ''}`} onClick={() => setActiveTab('other')}>Other Info</button>
+                    {formData.assigned_job_no && (
+                        <button className={`tab ${activeTab === 'workflow' ? 'active' : ''}`} onClick={() => setActiveTab('workflow')}>Workflow Suite</button>
+                    )}
                 </div>
 
                 {activeTab === 'items' && (
@@ -754,12 +983,23 @@ export default function WorkflowEditor() {
                                 {lineItems.map((item, index) => (
                                     <tr key={item.id} className={item.is_section ? 'row-section' : item.is_note ? 'row-note' : ''}>
                                         <td>
-                                            <input
-                                                className="table-input"
-                                                value={item.description}
-                                                onChange={(e) => updateLineItem(index, 'description', e.target.value)}
-                                                placeholder={item.is_section ? "SECTION: e.g. Spare Parts" : item.is_note ? "Note: e.g. Lead time 1 week" : "Select product or enter description..."}
-                                            />
+                                            {item.is_note ? (
+                                                <textarea
+                                                    className="table-input"
+                                                    style={{ resize: 'vertical', minHeight: '40px' }}
+                                                    value={item.description}
+                                                    onChange={(e) => updateLineItem(index, 'description', e.target.value)}
+                                                    placeholder="Note: e.g. Lead time 1 week"
+                                                    rows={2}
+                                                />
+                                            ) : (
+                                                <input
+                                                    className="table-input"
+                                                    value={item.description}
+                                                    onChange={(e) => updateLineItem(index, 'description', e.target.value)}
+                                                    placeholder={item.is_section ? "SECTION: e.g. Spare Parts" : "Select product or enter description..."}
+                                                />
+                                            )}
                                             {!item.is_section && !item.is_note && (
                                                 <textarea
                                                     className="table-textarea"
@@ -983,6 +1223,38 @@ export default function WorkflowEditor() {
                                 </div>
                             )}
                         </div>
+                        
+                        {/* Terms & Conditions moved here */}
+                        <div className="glass-panel" style={{ marginTop: '24px' }}>
+                            <div className="form-item">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                    <FileText size={16} className="text-accent" />
+                                    <span style={{ fontWeight: 600, fontSize: '1rem' }}>Terms & Conditions</span>
+                                </label>
+                                <RichTextEditor
+                                    value={formData.terms_conditions}
+                                    onChange={(val) => handleEditorChange('terms_conditions', val)}
+                                    placeholder="Payment terms, delivery details..."
+                                    height="150px"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Notes & Comments moved here */}
+                        <div className="glass-panel" style={{ marginTop: '24px' }}>
+                            <div className="form-item">
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                    <FileText size={16} className="text-accent" />
+                                    <span style={{ fontWeight: 600, fontSize: '1rem' }}>Notes & Comments</span>
+                                </label>
+                                <RichTextEditor
+                                    value={formData.notes}
+                                    onChange={(val) => handleEditorChange('notes', val)}
+                                    placeholder="Add additional notes, technical details, or comments for this document (Included in PDF)..."
+                                    height="200px"
+                                />
+                            </div>
+                        </div>
                     </div>
                 )}
 
@@ -992,6 +1264,21 @@ export default function WorkflowEditor() {
                             <div className="form-item">
                                 <label>Company Reference</label>
                                 <input type="text" className="form-input" name="customer_ref" value={formData.customer_ref} onChange={handleHeaderChange} placeholder="PO Reference from Customer..." />
+                            </div>
+
+                            <div className="form-item">
+                                <label>Salesperson Name</label>
+                                <input type="text" className="form-input" name="salesperson_name" value={formData.salesperson_name} onChange={handleHeaderChange} placeholder="Your name" />
+                            </div>
+
+                            <div className="form-item">
+                                <label>Salesperson Phone</label>
+                                <input type="text" className="form-input" name="salesperson_phone" value={formData.salesperson_phone} onChange={handleHeaderChange} placeholder="+65 ..." />
+                            </div>
+
+                            <div className="form-item">
+                                <label>Salesperson Email</label>
+                                <input type="text" className="form-input" name="salesperson_email" value={formData.salesperson_email} onChange={handleHeaderChange} placeholder="your@email.com" />
                             </div>
                             
                             <div className="form-item" style={{ gridColumn: '1 / -1' }}>
@@ -1051,35 +1338,63 @@ export default function WorkflowEditor() {
                                     </div>
                                 </div>
                             </div>
-
-                            <div className="form-item" style={{ gridColumn: '1 / -1' }}>
-                                <label>Terms & Conditions</label>
-                                <RichTextEditor
-                                    value={formData.terms_conditions}
-                                    onChange={(val) => handleEditorChange('terms_conditions', val)}
-                                    placeholder="Payment terms, delivery details..."
-                                    height="150px"
-                                />
-                            </div>
                         </div>
                     </div>
                 )}
-
-                {/* Document Notes & Comments - Always visible at bottom */}
-                <div className="glass-panel" style={{ marginTop: '24px' }}>
-                    <div className="form-item">
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                            <FileText size={16} className="text-accent" />
-                            <span style={{ fontWeight: 600, fontSize: '1rem' }}>Notes & Comments</span>
-                        </label>
-                        <RichTextEditor
-                            value={formData.notes}
-                            onChange={(val) => handleEditorChange('notes', val)}
-                            placeholder="Add additional notes, technical details, or comments for this document (Included in PDF)..."
-                            height="200px"
-                        />
+                
+                {activeTab === 'workflow' && (
+                    <div className="glass-panel workflow-suite">
+                        <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <FileCheck size={20} className="text-accent" />
+                            <h3 style={{ margin: 0 }}>Documents Linked to Job: <span style={{ color: 'var(--accent)' }}>{formData.assigned_job_no}</span></h3>
+                        </div>
+                        
+                        <div className="table-container">
+                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead style={{ background: '#f8fafc' }}>
+                                    <tr>
+                                        <th style={{ padding: '12px', textAlign: 'left', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Type</th>
+                                        <th style={{ padding: '12px', textAlign: 'left', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Document No</th>
+                                        <th style={{ padding: '12px', textAlign: 'left', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Issue Date</th>
+                                        <th style={{ padding: '12px', textAlign: 'right', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Amount</th>
+                                        <th style={{ padding: '12px', textAlign: 'center', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Status</th>
+                                        <th style={{ padding: '12px', textAlign: 'right', fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {workflowDocs.map(doc => (
+                                        <tr key={doc.id} style={{ borderBottom: '1px solid #f1f5f9', background: doc.id === id ? '#f0f9ff' : 'transparent' }}>
+                                            <td style={{ padding: '12px', fontSize: '0.85rem', fontWeight: 600 }}>{doc.document_type}</td>
+                                            <td style={{ padding: '12px', fontSize: '0.85rem', color: 'var(--accent)' }}>{doc.document_no}</td>
+                                            <td style={{ padding: '12px', fontSize: '0.85rem' }}>{new Date(doc.issue_date).toLocaleDateString('en-GB')}</td>
+                                            <td style={{ padding: '12px', textAlign: 'right', fontSize: '0.85rem' }}>{doc.currency} {doc.total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                            <td style={{ padding: '12px', textAlign: 'center' }}>
+                                                <span style={{ padding: '2px 8px', borderRadius: '10px', fontSize: '0.7rem', fontWeight: 600, background: doc.status === 'Draft' ? '#f1f5f9' : '#dcfce7', color: doc.status === 'Draft' ? '#64748b' : '#15803d' }}>
+                                                    {doc.status}
+                                                </span>
+                                            </td>
+                                            <td style={{ padding: '12px', textAlign: 'right' }}>
+                                                {doc.id !== id ? (
+                                                    <button 
+                                                        className="btn btn-sm btn-secondary" 
+                                                        onClick={() => {
+                                                            const targetType = doc.document_type.toLowerCase().replace(/\s+/g, '-');
+                                                            navigate(`/workflows/editor/${targetType}/${doc.id}`);
+                                                        }}
+                                                    >
+                                                        Open
+                                                    </button>
+                                                ) : (
+                                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>Current</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* Quick Add Modal */}
@@ -1094,39 +1409,124 @@ export default function WorkflowEditor() {
 
             {/* Job Conversion PO Modal */}
             {poModal.isOpen && (
-                <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <div className="glass-panel" style={{ width: '400px', padding: '24px', position: 'relative' }}>
-                        <h2 style={{ fontSize: '1.25rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <Package className="text-accent" /> Convert to Job
-                        </h2>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                            <div className="form-item">
-                                <label>Customer PO Number</label>
-                                <input type="text" className="form-input" placeholder="e.g. PO-123456" id="po_no" />
-                            </div>
-                            <div className="form-item">
-                                <label>PO Date</label>
-                                <input type="date" className="form-input" id="po_date" />
-                            </div>
-                            <div className="form-item">
-                                <label>PO Value ({formData.currency})</label>
-                                <input type="number" className="form-input" defaultValue={formData.total_amount} id="po_val" />
-                            </div>
+                <div className="modal-backdrop" style={{ zIndex: 10000 }}>
+                    <div className="modal-content" style={{ 
+                        maxWidth: '560px', 
+                        width: '95%', 
+                        background: '#ffffff', 
+                        borderRadius: '12px', 
+                        padding: '24px', 
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+                        border: '1px solid #e5e7eb'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', color: '#1e3a8a', fontSize: '1.25rem', fontWeight: 700 }}>
+                                <Package size={22} color="#1e3a8a" /> Convert Quotation to Job
+                            </h3>
+                            <button onClick={() => setPoModal({ isOpen: false })} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>
+                                <X size={24} />
+                            </button>
                         </div>
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-                            <button className="btn-vibrant-secondary" onClick={() => setPoModal({ isOpen: false })}>Cancel</button>
-                            <button className="btn-vibrant" onClick={() => {
-                                const poData = {
-                                    customer_po_no: document.getElementById('po_no').value,
-                                    customer_po_date: document.getElementById('po_date').value,
-                                    po_value: document.getElementById('po_val').value
-                                };
-                                confirmJobConversion(poData);
-                            }}>Confirm & Create Job</button>
-                        </div>
+
+                        <form onSubmit={(e) => {
+                            e.preventDefault();
+                            const formData = new FormData(e.target);
+                            const poData = {
+                                po_no: formData.get('po_no'),
+                                po_date: formData.get('po_date'),
+                                po_value: formData.get('po_value'),
+                                po_description: formData.get('po_description'),
+                                po_by: formData.get('po_by')
+                            };
+                            const options = {
+                                includeCertificates: formData.get('includeCertificates') === 'on',
+                                includeServiceReport: formData.get('includeServiceReport') === 'on'
+                            };
+                            confirmJobConversion(poData, options);
+                        }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                                <div className="form-item">
+                                    <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>Customer PO No.</label>
+                                    <input type="text" required className="form-input" name="po_no" placeholder="PO-12345" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }} />
+                                </div>
+                                <div className="form-item">
+                                    <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>PO Date</label>
+                                    <input type="date" required className="form-input" name="po_date" defaultValue={new Date().toISOString().split('T')[0]} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }} />
+                                </div>
+                                <div className="form-item">
+                                    <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>PO Value ({formData.currency})</label>
+                                    <input type="number" step="0.01" required className="form-input" name="po_value" defaultValue={formData.total_amount} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }} />
+                                </div>
+                                <div className="form-item">
+                                    <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>PO Issued By</label>
+                                    <input type="text" className="form-input" name="po_by" placeholder="Name of Person" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }} />
+                                </div>
+                            </div>
+
+                            <div className="form-item" style={{ marginBottom: '24px' }}>
+                                <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>PO Description / Project Scope</label>
+                                <textarea className="form-input" name="po_description" rows="3" placeholder="Briefly describe the PO scope..." style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem', resize: 'none' }}></textarea>
+                            </div>
+
+                            <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '12px', border: '1px solid #f3f4f6', marginBottom: '24px' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1e40af', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Automatically Generate:</div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.9rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><Package size={16} /> Order Acknowledgment</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><Package size={16} /> Delivery Order</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><Package size={16} /> Proforma Invoice</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><Package size={16} /> Tax Invoice</div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><Package size={16} /> Packing List</div>
+                                </div>
+                                
+                                <div style={{ marginTop: '16px', borderTop: '1px solid #e5e7eb', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem', color: '#374151' }}>
+                                        <input type="checkbox" name="includeCertificates" style={{ width: '16px', height: '16px', accentColor: '#4f46e5' }} /> Include Certificates (CERT)
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem', color: '#374151' }}>
+                                        <input type="checkbox" name="includeServiceReport" style={{ width: '16px', height: '16px', accentColor: '#4f46e5' }} /> Include Service Report (SR)
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '32px' }}>
+                                <button type="button" onClick={() => setPoModal({ isOpen: false })} style={{ 
+                                    padding: '10px 24px', 
+                                    borderRadius: '8px', 
+                                    border: '1px solid #d1d5db', 
+                                    background: '#ffffff', 
+                                    color: '#374151', 
+                                    fontSize: '0.95rem', 
+                                    fontWeight: 500,
+                                    cursor: 'pointer'
+                                }}>Cancel</button>
+                                <button type="submit" disabled={saving} style={{ 
+                                    padding: '10px 24px', 
+                                    borderRadius: '8px', 
+                                    border: 'none', 
+                                    background: '#5865f2', 
+                                    color: '#ffffff', 
+                                    fontSize: '0.95rem', 
+                                    fontWeight: 600,
+                                    cursor: 'pointer',
+                                    minWidth: '200px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '8px',
+                                    boxShadow: '0 4px 6px -1px rgba(88, 101, 242, 0.2)'
+                                }}>
+                                    {saving ? (
+                                        <>
+                                            <div className="animate-spin" style={{ width: '18px', height: '18px', border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%' }}></div> Generating...
+                                        </>
+                                    ) : 'Confirm & Generate Job'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
+
 
             {/* Email Preview Modal */}
             {emailPreview && (
@@ -1550,7 +1950,25 @@ export default function WorkflowEditor() {
                     max-width: 1400px;
                     margin: 0 auto;
                 }
-                /* ... more styles if needed ... */
+                .modal-backdrop {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0, 0, 0, 0.5);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 2000;
+                    backdrop-filter: blur(4px);
+                }
+                .modal-content {
+                    background: white;
+                    border-radius: 12px;
+                    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+                    position: relative;
+                }
                 `
             }} />
         </div>

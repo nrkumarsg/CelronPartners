@@ -1,0 +1,8 @@
+{
+  "columns": [],
+  "rels": {
+    "partners": "SUCCESS",
+    "vessels": "FAIL: Could not find a relationship between 'customer_enquiries' and 'vessels' in the schema cache",
+    "work_locations": "FAIL: Could not find a relationship between 'customer_enquiries' and 'work_locations' in the schema cache"
+  }
+}

@@ -2,9 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useVesselsStore } from '../lib/vesselsStore';
 import { uploadFile } from '../lib/store';
-import { ArrowLeft, Save, Trash2, Search, Ship } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Search, Ship, Globe } from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function VesselForm() {
     const { id } = useParams();
@@ -13,6 +14,7 @@ export default function VesselForm() {
     const quillRef = useRef(null);
     const { vessels, fetchVessels, addVessel, updateVessel, deleteVessel } = useVesselsStore();
 
+    const { profile } = useAuth();
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         vessel_name: '',
@@ -21,7 +23,8 @@ export default function VesselForm() {
         vessel_type: '',
         vessel_management: '',
         vessel_owner: '',
-        other_details: ''
+        other_details: '',
+        is_shared: false
     });
 
     useEffect(() => {
@@ -153,6 +156,19 @@ export default function VesselForm() {
                             <Ship size={24} />
                         </div>
                         <h2 className="page-title">{id && !isNew ? 'Edit Vessel' : 'New Vessel Entry'}</h2>
+                        {profile?.role === 'superadmin' && (
+                            <div style={{ marginLeft: '12px' }}>
+                                <label className="form-label" style={{ fontSize: '0.75rem', color: '#6366f1', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', margin: 0 }}>
+                                    <Globe size={14} /> GLOBAL
+                                    <input 
+                                        type="checkbox" 
+                                        checked={formData.is_shared}
+                                        onChange={e => setFormData(prev => ({ ...prev, is_shared: e.target.checked }))}
+                                        style={{ cursor: 'pointer' }}
+                                    />
+                                </label>
+                            </div>
+                        )}
                     </div>
                 </div>
 

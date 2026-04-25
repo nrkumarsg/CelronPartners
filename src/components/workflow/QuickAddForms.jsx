@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map, ExternalLink } from 'lucide-react';
+import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map, ExternalLink, Plus, Sparkles, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { savePartner } from '../../lib/store';
 import BusinessCardUpload from '../common/BusinessCardUpload';
 import { COUNTRIES, PARTNER_CATEGORIES } from '../../lib/constants';
+import { smartSearchCompany, researchContactWithGemini, researchVesselWithGemini } from '../../lib/geminiService';
+import { runUniversalSearch } from '../../lib/universalFinder';
 
 // Generic Modal Base
 export const Modal = ({ isOpen, onClose, title, children, icon: Icon }) => {
@@ -95,6 +97,13 @@ export const Modal = ({ isOpen, onClose, title, children, icon: Icon }) => {
                 .full-width {
                     grid-column: 1 / -1;
                 }
+                .ai-pulse {
+                    animation: ai-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+                }
+                @keyframes ai-pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: .5; }
+                }
             `}} />
         </div>
     );
@@ -104,6 +113,7 @@ export const Modal = ({ isOpen, onClose, title, children, icon: Icon }) => {
 export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
     const [formData, setFormData] = useState({
         name: '',
+        uen: '',
         types: ['Customer'],
         address: '',
         country: '',
@@ -115,12 +125,87 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
         customerCreditTime: '',
         supplierCreditTime: '',
         city: '',
+        pincode: '',
         brand: '',
         notes: '',
         business_card_url: '',
         business_card_back_url: ''
     });
     const [customCategory, setCustomCategory] = useState('');
+    const [isAiResearching, setIsAiResearching] = useState(false);
+    const [aiPreview, setAiPreview] = useState(null);
+
+    const handleAiAutofill = async () => {
+        if (!formData.name) return alert('Please enter a Company Name first.');
+        
+        setIsAiResearching(true);
+        try {
+            // 1. Gather live context using Google Custom Search (Separate quota, more reliable for free tier)
+            let searchContext = '';
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                const searchId = await runUniversalSearch({ 
+                    query: formData.name, 
+                    userId: user?.id || '00000000-0000-0000-0000-000000000000' 
+                });
+                
+                const { data: results } = await supabase
+                    .from('search_results')
+                    .select('title, snippet, url')
+                    .eq('search_id', searchId)
+                    .limit(5);
+                
+                if (results && results.length > 0) {
+                    searchContext = results.map(r => `[Web Data] ${r.title}: ${r.snippet}`).join('\n');
+                }
+            } catch (searchErr) {
+                console.warn('[AI] Live search unavailable, using model intelligence only.');
+            }
+
+            // 2. Use the new Smart Search with the gathered context
+            const result = await smartSearchCompany(formData.name, formData.weblink, searchContext);
+
+            if (result) {
+                setAiPreview({
+                    uen: result.uen || '',
+                    address: result.address || '',
+                    country: result.country || '',
+                    city: result.city || '',
+                    pincode: result.postal_code || '',
+                    email1: result.email || '',
+                    phone1: result.phone || '',
+                    website: result.website || '',
+                    categories: result.categories || [],
+                    confidence: result.confidence || 'low',
+                    manual_verification_required: result.manual_verification_required,
+                    extraInfo: `Categories: ${result.categories?.join(', ') || 'N/A'}. Confidence: ${result.confidence || 'low'}.`
+                });
+            }
+        } catch (err) {
+            console.error('AI Research Error:', err);
+            // Basic fallback
+            setFormData(prev => ({ ...prev, country: prev.country || 'Singapore' }));
+        } finally {
+            setIsAiResearching(false);
+        }
+    };
+
+    const applyAiResults = () => {
+        if (!aiPreview) return;
+        setFormData(prev => ({
+            ...prev,
+            uen: aiPreview.uen || prev.uen,
+            address: aiPreview.address || prev.address,
+            country: aiPreview.country || prev.country,
+            city: aiPreview.city || prev.city,
+            pincode: aiPreview.pincode || prev.pincode,
+            email1: aiPreview.email1 || prev.email1,
+            phone1: aiPreview.phone1 || prev.phone1,
+            weblink: aiPreview.website || prev.weblink,
+            notes: aiPreview.extraInfo ? `${prev.notes || ''}\n\n--- AI RESEARCH ---\n${aiPreview.extraInfo}` : (prev.notes || '')
+        }));
+        setAiPreview(null);
+    };
 
     const handleCategoryToggle = (cat) => {
         setFormData(prev => ({
@@ -178,6 +263,143 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* AI Research Banner */}
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                padding: '12px 20px', 
+                background: 'linear-gradient(90deg, #f5f3ff 0%, #ede9fe 100%)', 
+                borderRadius: '12px',
+                border: '1px solid #ddd6fe'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Sparkles size={18} className={isAiResearching ? 'ai-pulse text-accent' : 'text-accent'} />
+                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#5b21b6' }}>
+                        {isAiResearching ? 'AI is researching HQ details...' : 'Intelligent Auto-fill'}
+                    </span>
+                </div>
+                <button 
+                    type="button" 
+                    onClick={handleAiAutofill}
+                    disabled={isAiResearching || !formData.name}
+                    style={{ 
+                        padding: '6px 12px', 
+                        borderRadius: '8px', 
+                        background: '#fff', 
+                        border: '1px solid #ddd6fe', 
+                        color: '#6366f1', 
+                        fontSize: '0.85rem', 
+                        fontWeight: 600, 
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}
+                >
+                    {isAiResearching ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                    Research with AI
+                </button>
+            </div>
+
+            {/* AI Preview Result Card (Message Box) */}
+            {aiPreview && (
+                <div style={{ 
+                    padding: '16px', 
+                    background: aiPreview.manual_verification_required ? '#fffbeb' : '#f0fdf4', 
+                    border: aiPreview.manual_verification_required ? '1px solid #fde68a' : '1px solid #bbf7d0', 
+                    borderRadius: '12px',
+                    animation: 'slideIn 0.3s ease-out',
+                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Sparkles size={16} color={aiPreview.manual_verification_required ? '#b45309' : '#15803d'} />
+                            <span style={{ fontWeight: 600, color: aiPreview.manual_verification_required ? '#b45309' : '#15803d', fontSize: '0.9rem' }}>
+                                AI Research Findings 
+                                <span style={{ 
+                                    marginLeft: '8px', 
+                                    padding: '2px 8px', 
+                                    borderRadius: '12px', 
+                                    fontSize: '0.7rem', 
+                                    background: aiPreview.confidence === 'high' ? '#dcfce7' : aiPreview.confidence === 'medium' ? '#fef3c7' : '#fee2e2',
+                                    color: aiPreview.confidence === 'high' ? '#166534' : aiPreview.confidence === 'medium' ? '#92400e' : '#991b1b',
+                                    textTransform: 'uppercase'
+                                }}>
+                                    {aiPreview.confidence} Confidence
+                                </span>
+                            </span>
+                        </div>
+                        <button 
+                            onClick={() => setAiPreview(null)}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+
+                    {aiPreview.manual_verification_required && (
+                        <div style={{ marginBottom: '12px', padding: '8px', background: '#fff', borderRadius: '6px', border: '1px solid #fde68a', fontSize: '0.8rem', color: '#92400e', fontWeight: 500 }}>
+                            ⚠️ Accuracy is low. Please verify all details manually.
+                        </div>
+                    )}
+                    
+                    <div style={{ fontSize: '0.85rem', color: '#334155', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <div><strong>UEN:</strong> {aiPreview.uen || '-'}</div>
+                        <div><strong>Pincode:</strong> {aiPreview.pincode || '-'}</div>
+                        <div><strong>Email:</strong> {aiPreview.email1 || '-'}</div>
+                        <div><strong>Phone:</strong> {aiPreview.phone1 || '-'}</div>
+                        <div style={{ gridColumn: 'span 2' }}><strong>Address:</strong> {aiPreview.address || '-'}</div>
+                        <div style={{ gridColumn: 'span 2' }}><strong>Categories:</strong> {aiPreview.categories?.join(', ') || '-'}</div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
+                        <button 
+                            onClick={() => setAiPreview(null)}
+                            style={{ 
+                                flex: 1,
+                                padding: '10px', 
+                                background: '#fff', 
+                                color: '#64748b', 
+                                border: '1px solid #e2e8f0', 
+                                borderRadius: '8px', 
+                                fontWeight: 600, 
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px'
+                            }}
+                        >
+                            <X size={14} />
+                            Reject & Reset
+                        </button>
+                        <button 
+                            onClick={applyAiResults}
+                            style={{ 
+                                flex: 2,
+                                padding: '10px', 
+                                background: aiPreview.manual_verification_required ? '#d97706' : '#16a34a', 
+                                color: '#fff', 
+                                border: 'none', 
+                                borderRadius: '8px', 
+                                fontWeight: 600, 
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: '8px',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            <Save size={14} />
+                            Apply Results to Form
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Website Section */}
             <div style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '24px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc' }}>
                 <div style={{ width: '64px', height: '64px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -210,6 +432,10 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                     <input className="form-input" name="name" value={formData.name} onChange={handleChange} placeholder="Partner company name" autoFocus />
                 </div>
                 <div className="form-item">
+                    <label>UEN / Registration No</label>
+                    <input className="form-input" name="uen" value={formData.uen} onChange={handleChange} placeholder="e.g. 201436227C" />
+                </div>
+                <div className="form-item">
                     <label>Email *</label>
                     <input className="form-input" name="email1" type="email" value={formData.email1} onChange={handleChange} placeholder="contact@partner.com" />
                 </div>
@@ -229,8 +455,12 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                     <input className="form-input" name="city" value={formData.city} onChange={handleChange} placeholder="City" />
                 </div>
                 <div className="form-item">
-                    <label>Address</label>
-                    <input className="form-input" name="address" value={formData.address} onChange={handleChange} placeholder="Full address" />
+                    <label>Pincode / Postal Code</label>
+                    <input className="form-input" name="pincode" value={formData.pincode} onChange={handleChange} placeholder="6-digit code" />
+                </div>
+                <div className="form-item full-width">
+                    <label>HQ Address</label>
+                    <input className="form-input" name="address" value={formData.address} onChange={handleChange} placeholder="Full primary address" />
                 </div>
             </div>
 
@@ -319,6 +549,40 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, o
         business_card_back_url: ''
     });
     const [loading, setLoading] = useState(false);
+    const [isAiResearching, setIsAiResearching] = useState(false);
+
+    const handleAiAutofill = async () => {
+        if (!formData.name) return alert('Please enter a Contact Name first.');
+        
+        setIsAiResearching(true);
+        try {
+            let researchData;
+            try {
+                const partner = partners.find(p => p.id === formData.partnerId);
+                researchData = await researchContactWithGemini(formData.name, partner?.name);
+            } catch (geminiErr) {
+                console.warn('Gemini Contact Research failed, falling back to edge function...', geminiErr);
+                const { data, error } = await supabase.functions.invoke('research-contact', {
+                    body: { name: formData.name, partnerId: formData.partnerId }
+                });
+                if (error) throw error;
+                researchData = data;
+            }
+
+            if (researchData) {
+                setFormData(prev => ({
+                    ...prev,
+                    ...researchData.fields
+                }));
+            }
+        } catch (err) {
+            console.error('AI Research Error:', err);
+            alert('AI Research failed. Please fill manually or check contact name.');
+        } finally {
+            setIsAiResearching(false);
+        }
+    };
+
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -344,7 +608,47 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, o
     };
 
     return (
-        <div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* AI Research Banner */}
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                padding: '12px 20px', 
+                background: 'linear-gradient(90deg, #f0f9ff 0%, #e0f2fe 100%)', 
+                borderRadius: '12px',
+                border: '1px solid #bae6fd'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Sparkles size={18} className={isAiResearching ? 'ai-pulse text-accent' : 'text-accent'} />
+                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#0369a1' }}>
+                        {isAiResearching ? 'AI is profiling contact...' : 'Contact Intelligence'}
+                    </span>
+                </div>
+                <button 
+                    type="button" 
+                    onClick={handleAiAutofill}
+                    disabled={isAiResearching || !formData.name}
+                    style={{ 
+                        padding: '6px 12px', 
+                        borderRadius: '8px', 
+                        background: '#fff', 
+                        border: '1px solid #bae6fd', 
+                        color: '#0ea5e9', 
+                        fontSize: '0.85rem', 
+                        fontWeight: 600, 
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}
+                >
+                    {isAiResearching ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                    Profile with AI
+                </button>
+            </div>
+
             <div className="grid-2">
                 <div className="form-item full-width">
                     <label>Customer / Partner *</label>
@@ -459,6 +763,39 @@ export const QuickVesselAdd = ({ company_id, onSuccess, onCancel }) => {
         vessel_owner: ''
     });
     const [loading, setLoading] = useState(false);
+    const [isAiResearching, setIsAiResearching] = useState(false);
+
+    const handleAiAutofill = async () => {
+        if (!formData.vessel_name) return alert('Please enter a Vessel Name first.');
+        
+        setIsAiResearching(true);
+        try {
+            let researchData;
+            try {
+                researchData = await researchVesselWithGemini(formData.vessel_name);
+            } catch (geminiErr) {
+                console.warn('Gemini Vessel Research failed, falling back to edge function...', geminiErr);
+                const { data, error } = await supabase.functions.invoke('research-vessel', {
+                    body: { vesselName: formData.vessel_name }
+                });
+                if (error) throw error;
+                researchData = data;
+            }
+
+            if (researchData) {
+                setFormData(prev => ({
+                    ...prev,
+                    ...researchData.fields
+                }));
+            }
+        } catch (err) {
+            console.error('AI Research Error:', err);
+            alert('AI Research failed. Please fill manually or check vessel name.');
+        } finally {
+            setIsAiResearching(false);
+        }
+    };
+
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -485,6 +822,46 @@ export const QuickVesselAdd = ({ company_id, onSuccess, onCancel }) => {
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* AI Research Banner */}
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                padding: '12px 20px', 
+                background: 'linear-gradient(90deg, #f0fdf4 0%, #dcfce7 100%)', 
+                borderRadius: '12px',
+                border: '1px solid #bbf7d0'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Sparkles size={18} className={isAiResearching ? 'ai-pulse text-accent' : 'text-accent'} />
+                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#15803d' }}>
+                        {isAiResearching ? 'AI is sourcing maritime data...' : 'Vessel Intelligence'}
+                    </span>
+                </div>
+                <button 
+                    type="button" 
+                    onClick={handleAiAutofill}
+                    disabled={isAiResearching || !formData.vessel_name}
+                    style={{ 
+                        padding: '6px 12px', 
+                        borderRadius: '8px', 
+                        background: '#fff', 
+                        border: '1px solid #bbf7d0', 
+                        color: '#16a34a', 
+                        fontSize: '0.85rem', 
+                        fontWeight: 600, 
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                    }}
+                >
+                    {isAiResearching ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                    Source with AI
+                </button>
+            </div>
+
             <div className="form-item">
                 <label>Vessel Name *</label>
                 <input

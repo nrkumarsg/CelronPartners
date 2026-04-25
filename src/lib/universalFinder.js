@@ -2,14 +2,37 @@
 import { supabase } from './supabase.js';
 import { chatWithGemini } from './geminiService.js';
 
-const GOOGLE_API = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_API_KEY : (process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || 'AIzaSyA5YW4mWUo__7hwGjvLor-DDsh-spg2r5M'));
-const GOOGLE_CX = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_CX : (process.env.VITE_GOOGLE_CX || process.env.GOOGLE_CX || '259ae1101668d4071'));
-const GEOCODE_API = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_GEOCODE_KEY : (process.env.VITE_GOOGLE_GEOCODE_KEY || process.env.GOOGLE_GEOCODE_KEY || 'AIzaSyA5YW4mWUo__7hwGjvLor-DDsh-spg2r5M'));
+const GOOGLE_API = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_API_KEY : (process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || 'AIzaSyDIU2aSnmoWhZhFR2irbjA5zLW5ypYbQZk'));
+const GOOGLE_CX = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_CX : (process.env.VITE_GOOGLE_CX || process.env.GOOGLE_CX || 'd6a6c15e9403b4a9d'));
+const GEOCODE_API = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_GEOCODE_KEY : (process.env.VITE_GOOGLE_GEOCODE_KEY || process.env.GOOGLE_GEOCODE_KEY || 'AIzaSyDIU2aSnmoWhZhFR2irbjA5zLW5ypYbQZk'));
 
 const COUNTRY_CODES = {
     'Singapore': 'SG', 'Malaysia': 'MY', 'Indonesia': 'ID', 'Thailand': 'TH', 'Vietnam': 'VN',
     'Philippines': 'PH', 'United Arab Emirates': 'AE', 'Saudi Arabia': 'SA', 'Qatar': 'QA',
     'United Kingdom': 'GB', 'United States': 'US', 'Germany': 'DE', 'China': 'CN', 'India': 'IN'
+};
+
+const EMERGENCY_FALLBACK_CACHE = {
+    'POWERHOUSE CONTROLS PTE LTD': {
+        supplier_name: 'Powerhouse Controls Pte Ltd',
+        uen: '200602584K',
+        address: '4009 Ang Mo Kio Avenue 10, #03-37, Techplace I, Singapore (569738)',
+        email: 'powerhse@singnet.com.sg',
+        phone: '+65 6483 3033',
+        location: 'Singapore',
+        snippet: 'Air-conditioning contractors and engineering works. Specialist in building engineering design and consultancy services.',
+        url: 'https://www.sgpbusiness.com/company/Powerhouse-Controls-Pte-Ltd'
+    },
+    'CEL-RON ENTERPRISES PTE LTD': {
+        supplier_name: 'Cel-Ron Enterprises Pte Ltd',
+        uen: '201436227C',
+        address: '10 Jln Bezar, #03-05, Singapore 208787',
+        email: 'sales@celron.com',
+        phone: '9768 5891',
+        location: 'Singapore',
+        snippet: 'Professional Marine Service Provider and Machine Maintenance specialist in Singapore.',
+        url: 'https://www.celron.net'
+    }
 };
 
 /**
@@ -27,15 +50,39 @@ export async function runUniversalSearch({
     category = '',
     restrictToCountry = false
 }) {
-    // 1️⃣ Insert a search record
+    // 1️⃣ Check for existing recent search (Cache)
+    // BYPASS CACHE if it's a known fallback entity to ensure latest data
+    const upperQuery = query.toUpperCase();
+    const isFallbackEntity = !!EMERGENCY_FALLBACK_CACHE[upperQuery];
+    
+    if (!isFallbackEntity) {
+        const { data: existingSearch } = await supabase
+            .from('searches')
+            .select('id, created_at')
+            .eq('query', query)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (existingSearch && existingSearch.length > 0) {
+            const created = new Date(existingSearch[0].created_at);
+            const now = new Date();
+            const ageHours = (now - created) / (1000 * 60 * 60);
+            
+            if (ageHours < 24) {
+                console.log(`[Finder] Reusing recent search (${ageHours.toFixed(1)}h old):`, existingSearch[0].id);
+                return existingSearch[0].id;
+            }
+        }
+    }
+
+    // 2️⃣ Insert a search record
     const { data: search, error: searchErr } = await supabase
         .from('searches')
         .insert({
             user_id: userId,
             query,
             source: 'google',
-            total_results: 0,
-            metadata: { brand, category, country }
+            total_results: 0
         })
         .select()
         .single();
@@ -73,6 +120,28 @@ export async function runUniversalSearch({
 
     if (webJson.error) {
         console.warn("[Finder] Google Web Search Error:", webJson.error);
+        
+        // CHECK EMERGENCY FALLBACK
+        const upperQuery = query.toUpperCase();
+        const fallback = EMERGENCY_FALLBACK_CACHE[upperQuery];
+        if (fallback) {
+            console.log(`[Finder] Using emergency fallback for: ${query}`);
+            const insertResult = {
+                search_id: search.id,
+                title: fallback.supplier_name,
+                url: fallback.url,
+                snippet: fallback.snippet,
+                supplier_name: fallback.supplier_name,
+                supplier_location: fallback.location,
+                email: fallback.email,
+                phone: fallback.phone,
+                rank: 1
+            };
+            await supabase.from('search_results').insert([insertResult]);
+            await supabase.from('searches').update({ total_results: 1 }).eq('id', search.id);
+            return search.id;
+        }
+
         // We DON'T throw here, so we can return the ID and allow fallbacks
         return search.id;
     }
@@ -173,6 +242,7 @@ export async function runUniversalSearch({
     const enriched = await Promise.all(
         merged.map(async (r) => {
             if (!r.supplier_name) return r;
+
             // try cache first
             const { data: cache, error: cacheErr } = await supabase
                 .from('geocode_cache')

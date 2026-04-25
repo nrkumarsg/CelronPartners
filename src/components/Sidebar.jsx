@@ -59,7 +59,18 @@ export default function Sidebar() {
 
     const hasAccess = (moduleName) => {
         if (!profile) return false;
+        
+        // 1. Superadmins have override access for system management
         if (profile.role === 'superadmin') return true;
+
+        // 2. Check if the module is enabled for the current company
+        // If the company has no enabled_modules defined, we assume a legacy/all-access state for safety
+        const companyModules = activeCompany?.enabled_modules;
+        const isCompanyAllowed = !companyModules || companyModules.includes(moduleName);
+        
+        if (!isCompanyAllowed) return false;
+
+        // 3. Check user-level module allotment
         return profile.accessible_modules?.includes(moduleName);
     };
 
@@ -144,12 +155,13 @@ export default function Sidebar() {
                     )}
                 </div>
 
+
                 <NavLink to="/tools/ocr" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Smart OCR">
                     <Sparkles size={20} color="#a855f7" />
                     <span className="nav-text">Smart OCR</span>
                 </NavLink>
 
-                <NavLink to="/tools/converter" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Converter">
+                <NavLink to="/converter" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Converter">
                     <Calculator size={20} color="#10b981" />
                     <span className="nav-text">Converter</span>
                 </NavLink>
@@ -222,9 +234,9 @@ export default function Sidebar() {
                     {isPinned ? "1. ENQUIRY & SUPPLIER PHASE" : "1."}
                 </div>
 
-                <NavLink to="/enquiries" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Enquiry Hub">
+                <NavLink to="/enquiries" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Enquiries & RFQ Hub">
                     <LayoutDashboard size={20} color="#6366f1" />
-                    <span className="nav-text">Enquiry & RFQ Hub</span>
+                    <span className="nav-text">Enquiries & RFQ Hub</span>
                 </NavLink>
 
                 <NavLink to="/workflows?type=Enquiry&view=depository" className={`nav-link ${(location.pathname === '/workflows' && location.search.includes('view=depository')) ? 'active' : ''}`} title="RFQ Repository">
@@ -242,24 +254,39 @@ export default function Sidebar() {
                     <span className="nav-text" style={{ color: '#f97316', fontWeight: 600 }}>Float Supplier Order</span>
                 </NavLink>
 
-                <NavLink to="/purchase-orders" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Purchase Orders">
+                <NavLink to="/purchase-orders" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="P.O. 2 Suppliers">
                     <ShoppingCart size={20} color="#8b5cf6" />
-                    <span className="nav-text">Purchase Orders</span>
+                    <span className="nav-text">P.O. 2 Suppliers</span>
                 </NavLink>
 
-                {/* 2. Jobs & Quotations */}
+                <NavLink to="/workflows?type=Order+Acknowledgment" className={`nav-link ${(location.pathname === '/workflows' && location.search.includes('Order+Acknowledgment')) ? 'active' : ''}`} title="Order Acknowledgments">
+                    <FileCheck size={20} color="#059669" />
+                    <span className="nav-text">Order Acknowledgments</span>
+                </NavLink>
+
+                {/* 2. Jobs & Quote2Customers */}
                 <div style={{ padding: '0 8px 0 16px', fontSize: '0.65rem', fontWeight: 700, color: '#6366f1', opacity: 0.85, marginTop: '8px', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }} title="Phase 2: Job & Quotation Phase">
                     {isPinned ? "2. JOB & QUOTATION PHASE" : "2."}
                 </div>
 
-                <NavLink to="/enquiries?tab=jobs" className={`nav-link ${(location.pathname === '/enquiries' && location.search.includes('tab=jobs')) ? 'active' : ''}`} title="Active Jobs (Job Details)">
+                <NavLink to="/workflows?type=Job" className={`nav-link ${(location.pathname === '/workflows' && location.search.includes('type=Job')) ? 'active' : ''}`} title="Active Jobs (Job Details)">
                     <ShieldCheck size={20} color="#10b981" />
                     <span className="nav-text">Active Jobs</span>
                 </NavLink>
 
-                <NavLink to="/quotations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Quotations">
-                    <Briefcase size={20} color="#3b82f6" />
-                    <span className="nav-text">Quotations</span>
+                <NavLink to="/quotations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Quote2Customers">
+                    <Briefcase size={20} color="#6366f1" />
+                    <span className="nav-text">Quote2Customers</span>
+                </NavLink>
+
+                <NavLink 
+                    to="/workflows" 
+                    className={({ isActive }) => `nav-link ${isActive ? (isActive && !location.search.includes('view=depository') ? 'active' : '') : ''}`} 
+                    style={({ isActive }) => (isActive && !location.search.includes('view=depository')) ? { borderLeft: '4px solid #6366f1', background: 'rgba(99, 102, 241, 0.05)' } : {}}
+                    title="All Workflows (Master Board)"
+                >
+                    <LayoutDashboard size={20} color="#6366f1" />
+                    <span className="nav-text">All Workflows</span>
                 </NavLink>
 
 

@@ -7,11 +7,17 @@ CREATE TABLE IF NOT EXISTS public.workflow_documents (
     document_type text NOT NULL CHECK (document_type IN (
         'Enquiry', 
         'Quotation', 
+        'Job',
         'Purchase Order', 
+        'Order Acknowledgment',
         'Delivery Order', 
+        'Service Report',
         'Proforma Invoice', 
         'Packing List', 
-        'Tax Invoice'
+        'Tax Invoice',
+        'Certificate',
+        'Payment Received',
+        'Statement of Account'
     )),
     document_no text NOT NULL UNIQUE,
     issue_date date DEFAULT CURRENT_DATE,

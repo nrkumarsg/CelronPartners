@@ -72,7 +72,7 @@ const UNIT_CATEGORIES = {
 };
 
 export default function Converter() {
-    const [activeTab, setActiveTab] = useState('currency');
+    const [activeTab, setActiveTab] = useState('calculator');
 
     // Currency State
     const [currencyAmount, setCurrencyAmount] = useState(1);
@@ -90,13 +90,124 @@ export default function Converter() {
     // PDF State
     const [pdfFiles, setPdfFiles] = useState([]);
     const [pdfStatus, setPdfStatus] = useState('');
-    const [isProcessingPdf, setIsProcessingPdf] = useState(false);
+    // Calculator State
+    const [calcDisplay, setCalcDisplay] = useState('0');
+    const [calcFormula, setCalcFormula] = useState('');
+    const [calcResult, setCalcResult] = useState(null);
+
+    // Percentage Helper State
+    const [percX, setPercX] = useState(0);
+    const [percY, setPercY] = useState(() => {
+        return localStorage.getItem('custom_gst_rate') || '9';
+    });
+    const [percType, setPercType] = useState('of'); // of, isWhat, inc, dec, add, sub
+    const [isEditingRate, setIsEditingRate] = useState(false);
+    const [tempRate, setTempRate] = useState('');
+
+    const calculatePercentage = () => {
+        const x = parseFloat(percX) || 0;
+        const y = parseFloat(percY) || 0;
+        switch (percType) {
+            case 'of': return (y / 100) * x;
+            case 'isWhat': return (x / y) * 100;
+            case 'inc': return ((y - x) / x) * 100;
+            case 'dec': return ((x - y) / x) * 100;
+            case 'add': return x * (1 + (y / 100));
+            case 'sub': return x * (1 - (y / 100));
+            default: return 0;
+        }
+    };
 
     useEffect(() => {
         if (activeTab === 'currency' && fromCurrency && toCurrency) {
             fetchRate();
         }
     }, [fromCurrency, toCurrency]);
+
+    // Keyboard Support
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            // If user is typing in ANY input, let the input handle it unless it's the Escape key
+            const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+            if (isInput && e.key !== 'Escape') return;
+            
+            if (activeTab !== 'calculator') return;
+
+            const key = e.key;
+            
+            // Numbers and basic operators
+            if (/[0-9]/.test(key) || ['+', '-', '*', '/', '.', '(', ')', '%'].includes(key)) {
+                e.preventDefault();
+                handleCalcPress(key);
+            } else if (key === 'Enter' || key === '=') {
+                e.preventDefault();
+                handleCalcPress('=');
+            } else if (key === 'Backspace') {
+                e.preventDefault();
+                handleCalcPress('DEL');
+            } else if (key === 'Escape' || key.toLowerCase() === 'c') {
+                e.preventDefault();
+                handleCalcPress('C');
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeTab, calcFormula, calcDisplay, calcResult]); // Keeping it fresh
+
+    const handleCalcPress = (btn) => {
+        if (btn === 'C') {
+            setCalcDisplay('0');
+            setCalcFormula('');
+            setCalcResult(null);
+        } else if (btn === '=') {
+            try {
+                // Basic cleanup for eval (only simple arithmetic)
+                const result = eval(calcFormula.replace(/[^-()\d/*+.]/g, ''));
+                setCalcDisplay(result.toString());
+                setCalcFormula(calcFormula + ' =');
+                setCalcResult(result);
+                setPercX(result); // Sync to Percentage Master
+            } catch (e) {
+                setCalcDisplay('Error');
+            }
+        } else if (btn === '%') {
+            // In standard calc, % often means divide by 100 or partial calc
+            const val = parseFloat(calcDisplay) / 100;
+            setCalcDisplay(val.toString());
+            setCalcFormula(calcFormula + '/100');
+        } else if (btn === 'DEL') {
+            if (calcResult !== null) {
+                setCalcDisplay('0');
+                setCalcFormula('');
+                setCalcResult(null);
+            } else {
+                const nextDisplay = calcDisplay.length > 1 ? calcDisplay.slice(0, -1) : '0';
+                const nextFormula = calcFormula.length > 0 ? calcFormula.slice(0, -1) : '';
+                setCalcDisplay(nextDisplay);
+                setCalcFormula(nextFormula);
+            }
+        } else {
+            const nextDisplay = calcDisplay === '0' || calcResult !== null ? btn : calcDisplay + btn;
+            const nextFormula = calcResult !== null ? btn : calcFormula + btn;
+            setCalcDisplay(nextDisplay);
+            setCalcFormula(nextFormula);
+            if (calcResult !== null) setCalcResult(null);
+        }
+    };
+
+    const btnStyle = (type) => ({
+        padding: '16px',
+        fontSize: '1.1rem',
+        fontWeight: 700,
+        borderRadius: '12px',
+        border: 'none',
+        cursor: 'pointer',
+        transition: 'all 0.2s',
+        background: type === 'num' ? '#f1f5f9' : (type === 'accent' ? '#f5f3ff' : (type === 'primary' ? '#3b82f6' : '#e2e8f0')),
+        color: type === 'num' ? '#475569' : (type === 'accent' ? '#6366f1' : (type === 'primary' ? '#fff' : '#64748b')),
+        boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+    });
 
     const fetchRate = async () => {
         setIsFetchingRate(true);
@@ -408,6 +519,7 @@ export default function Converter() {
                 {/* Custom Tabs */}
                 <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
                     {[
+                        { id: 'calculator', label: 'Calculator', icon: <Calculator size={18} /> },
                         { id: 'currency', label: 'Currency', icon: <DollarSign size={18} /> },
                         { id: 'unit', label: 'Unit Converter', icon: <Ruler size={18} /> },
                         { id: 'pdf', label: 'PDF Tools (Merge/Split)', icon: <Scissors size={18} /> },
@@ -436,6 +548,183 @@ export default function Converter() {
                 </div>
 
                 <div style={{ padding: '32px', flex: 1 }}>
+                    {activeTab === 'calculator' && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', maxWidth: '1200px', margin: '0 auto' }}>
+                            {/* Standard Calculator */}
+                            <div className="glass-panel" style={{ padding: '24px', background: '#fff' }}>
+                                <div style={{ marginBottom: '16px', fontSize: '0.85rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Basic Calculator</div>
+                                <div style={{ 
+                                    background: '#1e293b', 
+                                    padding: '20px', 
+                                    borderRadius: '12px', 
+                                    marginBottom: '20px',
+                                    textAlign: 'right'
+                                }}>
+                                    <div style={{ color: '#94a3b8', fontSize: '0.85rem', marginBottom: '4px', height: '1.2rem' }}>{calcFormula}</div>
+                                    <div style={{ color: '#fff', fontSize: '2rem', fontWeight: 700, overflow: 'hidden' }}>{calcDisplay}</div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                                    {['C', 'DEL', '(', ')'].map(btn => (
+                                        <button key={btn} onClick={() => handleCalcPress(btn)} style={btnStyle(btn === 'DEL' || btn === 'C' ? 'secondary' : 'accent')}>{btn}</button>
+                                    ))}
+                                    {['7', '8', '9', '/'].map(btn => (
+                                        <button key={btn} onClick={() => handleCalcPress(btn)} style={btnStyle(btn === '/' ? 'accent' : 'num')}>{btn}</button>
+                                    ))}
+                                    {['4', '5', '6', '*'].map(btn => (
+                                        <button key={btn} onClick={() => handleCalcPress(btn)} style={btnStyle(btn === '*' ? 'accent' : 'num')}>{btn}</button>
+                                    ))}
+                                    {['1', '2', '3', '-'].map(btn => (
+                                        <button key={btn} onClick={() => handleCalcPress(btn)} style={btnStyle(btn === '-' ? 'accent' : 'num')}>{btn}</button>
+                                    ))}
+                                    {['0', '.', '%', '+'].map(btn => (
+                                        <button key={btn} onClick={() => handleCalcPress(btn)} style={btnStyle(btn === '+' ? 'accent' : 'num')}>{btn}</button>
+                                    ))}
+                                    <button 
+                                        onClick={() => handleCalcPress('=')} 
+                                        style={{ 
+                                            ...btnStyle('primary'), 
+                                            gridColumn: '1 / -1', 
+                                            padding: '12px',
+                                            marginTop: '4px'
+                                        }}
+                                    >
+                                        =
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Percentage Specialty Tools */}
+                            <div className="glass-panel" style={{ padding: '24px', background: '#f8fafc' }}>
+                                <div style={{ marginBottom: '16px', fontSize: '0.85rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>Percentage Master</div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                                    <div className="form-group">
+                                        <label className="form-label" style={{ fontSize: '0.8rem' }}>Calculation Type</label>
+                                        <select 
+                                            value={percType} 
+                                            onChange={e => setPercType(e.target.value)}
+                                            style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #e2e8f0' }}
+                                        >
+                                            <option value="of">What is Y% of X?</option>
+                                            <option value="isWhat">X is what % of Y?</option>
+                                            <option value="inc">Percentage increase from X to Y</option>
+                                            <option value="dec">Percentage decrease from X to Y</option>
+                                            <option value="add">Add Y% to X (Tax/GST)</option>
+                                            <option value="sub">Subtract Y% from X (Discount)</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Quick GST Readymade Views - Swapped & Updated */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px', marginBottom: '12px' }}>
+                                        <div style={{ padding: '16px', background: '#f0f9ff', borderRadius: '12px', border: '1px solid #e0f2fe', textAlign: 'center' }}>
+                                            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', marginBottom: '8px' }}>Extract {percY}% (Base Price)</div>
+                                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#0c4a6e' }}>
+                                                {(parseFloat(percX) / (1 + parseFloat(percY)/100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: '#0284c7', marginTop: '4px' }}>Formula: X / {(1 + parseFloat(percY)/100).toFixed(2)}</div>
+                                        </div>
+                                        <div style={{ padding: '16px', background: '#fff7ed', borderRadius: '12px', border: '1px solid #ffedd5', textAlign: 'center' }}>
+                                            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#ea580c', textTransform: 'uppercase', marginBottom: '8px' }}>Tax Component (GST)</div>
+                                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#9a3412' }}>
+                                                {(parseFloat(percX) - (parseFloat(percX) / (1 + parseFloat(percY)/100))).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </div>
+                                            <div style={{ fontSize: '0.75rem', color: '#f97316', marginTop: '4px' }}>Formula: X - Base</div>
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                        <div className="form-group">
+                                            <label className="form-label" style={{ fontSize: '0.8rem' }}>Value X</label>
+                                            <input type="number" value={percX} onChange={e => setPercX(e.target.value)} className="form-input" />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label" style={{ fontSize: '0.8rem', marginBottom: '8px', display: 'block' }}>Value Y (%)</label>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                <input 
+                                                    type="number" 
+                                                    value={percY} 
+                                                    onChange={e => setPercY(e.target.value)} 
+                                                    className="form-input" 
+                                                    style={{ margin: 0, flex: 1 }}
+                                                />
+                                                <div style={{ flexShrink: 0 }}>
+                                                    {isEditingRate ? (
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <input 
+                                                                type="number"
+                                                                value={tempRate}
+                                                                onChange={(e) => setTempRate(e.target.value)}
+                                                                style={{ width: '45px', padding: '4px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid #6366f1', outline: 'none' }}
+                                                                autoFocus
+                                                            />
+                                                            <button 
+                                                                onClick={() => {
+                                                                    localStorage.setItem('custom_gst_rate', tempRate);
+                                                                    setPercY(tempRate);
+                                                                    setIsEditingRate(false);
+                                                                }}
+                                                                style={{ background: '#6366f1', color: 'white', border: 'none', borderRadius: '4px', padding: '4px 8px', fontSize: '0.7rem', fontWeight: 600, cursor: 'pointer' }}
+                                                            >
+                                                                Update
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <span 
+                                                            onClick={() => {
+                                                                setTempRate(percY);
+                                                                setIsEditingRate(true);
+                                                            }}
+                                                            style={{ 
+                                                                background: '#f1f5f9', 
+                                                                padding: '6px 14px', 
+                                                                borderRadius: '20px', 
+                                                                fontSize: '0.75rem', 
+                                                                fontWeight: 700, 
+                                                                color: '#475569', 
+                                                                cursor: 'pointer',
+                                                                border: '1px solid #e2e8f0',
+                                                                whiteSpace: 'nowrap'
+                                                            }}
+                                                            title="Click to change Default GST"
+                                                        >
+                                                            GST: {percY}%
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {/* Unified GST Summary Result */}
+                                <div style={{ 
+                                    padding: '24px', 
+                                    background: 'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)', 
+                                    borderRadius: '20px', 
+                                    border: '1px solid #d1fae5',
+                                    display: 'grid',
+                                    gridTemplateColumns: '1fr 1fr',
+                                    gap: '24px',
+                                    alignItems: 'center',
+                                    boxShadow: '0 10px 15px -3px rgba(16, 185, 129, 0.1)',
+                                    marginTop: '20px'
+                                }}>
+                                    <div style={{ textAlign: 'center', borderRight: '1px solid #d1fae5' }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#059669', textTransform: 'uppercase', marginBottom: '8px' }}>{percY}% Tax Amount</div>
+                                        <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#059669' }}>
+                                            {((parseFloat(percY)/100) * parseFloat(percX)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </div>
+                                        <p style={{ margin: '8px 0 0', color: '#059669', opacity: 0.7, fontSize: '0.85rem' }}>{percY}% of {percX}</p>
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#065f46', textTransform: 'uppercase', marginBottom: '8px' }}>Amount + {percY}%</div>
+                                        <div style={{ fontSize: '2.5rem', fontWeight: 800, color: '#065f46' }}>
+                                            {(parseFloat(percX) * (1 + parseFloat(percY)/100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </div>
+                                        <p style={{ margin: '8px 0 0', color: '#064e3b', opacity: 0.7, fontSize: '0.85rem' }}>Total Payable</p>
+                                    </div>
+                                </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {activeTab === 'currency' && (
                         <div style={{ maxWidth: '600px', margin: '0 auto' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
