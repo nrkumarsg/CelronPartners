@@ -234,7 +234,7 @@ export const saveWorkflowDocument = async (docData, lineItems) => {
         'customer_po_no', 'customer_po_date', 'customer_po_by_id', 'customer_po_attachment_url',
         'is_job', 'assigned_job_no',
         'original_document_id', 'revision_no',
-        'attachment_urls', 'delivery_verification'
+        'attachment_urls', 'delivery_verification', 'gdrive_folder_id'
     ];
 
     const sanitizedHeader = {};

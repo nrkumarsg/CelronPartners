@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS public.workflow_documents (
     total_amount numeric DEFAULT 0,
     
     -- Metadata
+    gdrive_folder_id text, -- NEW: Persistent link to Google Drive folder
     created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL
 );

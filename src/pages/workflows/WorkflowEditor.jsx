@@ -6,8 +6,11 @@ import {
     FileText, Calculator, Ship,
     MoreHorizontal, Search, Settings,
     ChevronDown, CreditCard, User, Users, MapPin, Paperclip,
-    FileCheck, Play
+    FileCheck, Play, RefreshCw, AlertCircle, Loader2,
+    ExternalLink, Folder, File, HardDrive, Upload
 } from 'lucide-react';
+import { listFolderContent, uploadFileToDrive, deleteFile, getOrCreateFolder, provisionFullProjectStructure } from '../../lib/driveService';
+import { validateToken, connectGoogleAPI, getStoredToken } from '../../lib/googleAuthService';
 import { useAuth } from '../../contexts/AuthContext';
 import {
     getWorkflowDocumentById,
@@ -31,6 +34,7 @@ import RichTextEditor from '../../components/common/RichTextEditor';
 import { ITEM_UNITS } from '../../utils/units';
 import WorkflowDocumentLayout from '../../components/workflow/WorkflowDocumentLayout';
 import html2pdf from 'html2pdf.js';
+import { generateSleekPDF } from '../../lib/pdfGeneratorV2';
 
 export default function WorkflowEditor() {
     const { type, id } = useParams();
@@ -52,6 +56,16 @@ export default function WorkflowEditor() {
     const [poModal, setPoModal] = useState({ isOpen: false });
     const [lineItems, setLineItems] = useState([]);
     const [workflowDocs, setWorkflowDocs] = useState([]); // Documents in the same job suite
+
+    // Explorer State
+    const [explorerFiles, setExplorerFiles] = useState([]);
+    const [loadingExplorer, setLoadingExplorer] = useState(false);
+    const [authStatus, setAuthStatus] = useState('checking'); // 'checking' | 'connected' | 'expired' | 'disconnected'
+    const [explorerFolderId, setExplorerFolderId] = useState(null);
+    const [explorerPath, setExplorerPath] = useState([]); // Array of {id, name} for breadcrumbs
+    const [explorerError, setExplorerError] = useState(null);
+    const [uploadingExplorer, setUploadingExplorer] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
 
     const [settings, setSettings] = useState(null);
     const [logoBase64, setLogoBase64] = useState('');
@@ -108,6 +122,170 @@ export default function WorkflowEditor() {
             if (sRes.paynow_url) toBase64(sRes.paynow_url).then(setPaynowBase64).catch(console.error);
         }
         if (allContacts) setContacts(allContacts);
+    };
+
+    const checkGoogleAuth = async () => {
+        const token = getStoredToken();
+        if (!token) {
+            setAuthStatus('disconnected');
+            return false;
+        }
+        const isValid = await validateToken(token);
+        if (!isValid) {
+            setAuthStatus('expired');
+            return false;
+        }
+        setAuthStatus('connected');
+        return true;
+    };
+
+    const handleExplorerReconnect = () => {
+        connectGoogleAPI(`job_${id}`);
+    };
+
+    const fetchExplorerFiles = async (folderId = null) => {
+        const targetId = folderId || explorerFolderId;
+        if (!targetId) return;
+
+        setLoadingExplorer(true);
+        setExplorerError(null);
+        try {
+            const token = getStoredToken();
+            const files = await listFolderContent(token, targetId);
+            setExplorerFiles(files);
+        } catch (err) {
+            console.error('Error fetching explorer files:', err);
+            setExplorerError('Failed to load files from Google Drive.');
+        } finally {
+            setLoadingExplorer(false);
+        }
+    };
+
+    const ensureJobFolder = async () => {
+        if (!formData.assigned_job_no || explorerFolderId) return;
+
+        setLoadingExplorer(true);
+        try {
+            const token = getStoredToken();
+            const year = new Date(formData.issue_date).getFullYear().toString();
+            const folderId = await provisionFullProjectStructure(
+                token, 
+                settings?.gdrive_celron_root_id, 
+                year, 
+                formData.assigned_job_no
+            );
+            setExplorerFolderId(folderId);
+            setExplorerPath([{ id: folderId, name: formData.assigned_job_no }]);
+            return folderId;
+        } catch (err) {
+            console.error('Error ensuring job folder:', err);
+            setExplorerError('Failed to connect to Google Drive project folder.');
+        } finally {
+            setLoadingExplorer(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'explorer') {
+            const run = async () => {
+                const isAuthed = await checkGoogleAuth();
+                if (isAuthed) {
+                    const folderId = await ensureJobFolder();
+                    if (folderId) fetchExplorerFiles(folderId);
+                    else if (explorerFolderId) fetchExplorerFiles();
+                }
+            };
+            run();
+        }
+    }, [activeTab, formData.assigned_job_no]);
+
+    const handleExplorerNavigate = (folder) => {
+        setExplorerPath(prev => [...prev, { id: folder.id, name: folder.name }]);
+        setExplorerFolderId(folder.id);
+        fetchExplorerFiles(folder.id);
+    };
+
+    const handleExplorerBack = (index) => {
+        const newPath = explorerPath.slice(0, index + 1);
+        const target = newPath[newPath.length - 1];
+        setExplorerPath(newPath);
+        setExplorerFolderId(target.id);
+        fetchExplorerFiles(target.id);
+    };
+
+    const handleExplorerUpload = async (e) => {
+        const selectedFiles = Array.from(e.target.files);
+        if (selectedFiles.length === 0) return;
+
+        setUploadingExplorer(true);
+        setUploadProgress(0);
+        try {
+            const token = getStoredToken();
+            for (const file of selectedFiles) {
+                await uploadFileToDrive(token, file, { 
+                    folderId: explorerFolderId,
+                    onProgress: (p) => setUploadProgress(p)
+                });
+            }
+            fetchExplorerFiles();
+        } catch (err) {
+            console.error('Error uploading explorer files:', err);
+            alert('Failed to upload files.');
+        } finally {
+            setUploadingExplorer(false);
+            setUploadProgress(0);
+            e.target.value = '';
+        }
+    };
+
+    const handleExplorerDelete = async (fileId, fileName) => {
+        if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return;
+        try {
+            const token = getStoredToken();
+            await deleteFile(token, fileId);
+            setExplorerFiles(prev => prev.filter(f => f.id !== fileId));
+        } catch (err) {
+            console.error('Error deleting explorer file:', err);
+            alert('Failed to delete file.');
+        }
+    };
+
+    const triggerAutoPdfUpload = async (docData) => {
+        // Only auto-upload for confirmed quotations or any job-linked documents
+        if (docData.document_type === 'Quotation' && docData.status !== 'Confirmed') return;
+        if (!docData.assigned_job_no) return;
+
+        try {
+            const token = getStoredToken();
+            if (!token) return;
+
+            // Generate Blob
+            const pdfBlob = await generateSleekPDF({
+                ...docData,
+                items: lineItems,
+                partners: partners.find(p => p.id === docData.partner_id),
+                contacts: contacts.find(c => c.id === docData.contact_id),
+                vessels: vessels.find(v => v.id === docData.vessel_id),
+                work_locations: workLocations.find(wl => wl.id === docData.work_location_id)
+            }, settings, 'blob');
+            
+            // Provision folder
+            const year = new Date(docData.issue_date).getFullYear().toString();
+            const rootId = await provisionFullProjectStructure(token, settings?.gdrive_celron_root_id, year, docData.assigned_job_no);
+            
+            // Respective sub-folders logic
+            let subfolderName = '7. Other_Documents';
+            const type = docData.document_type.toUpperCase();
+            if (type === 'DELIVERY ORDER') subfolderName = '7. Other_Documents'; // Could be 'Logistics' if exists
+            if (type === 'TAX INVOICE' || type === 'PROFORMA INVOICE') subfolderName = '7. Other_Documents';
+
+            const targetFolderId = await getOrCreateFolder(token, subfolderName, rootId);
+            
+            const file = new File([pdfBlob], `${docData.document_no}.pdf`, { type: 'application/pdf' });
+            await uploadFileToDrive(token, file, { folderId: targetFolderId });
+        } catch (err) {
+            console.warn('Auto-upload PDF background task failed:', err);
+        }
     };
 
     // Default Dates
@@ -957,7 +1135,11 @@ export default function WorkflowEditor() {
                     <button className={`tab ${activeTab === 'items' ? 'active' : ''}`} onClick={() => setActiveTab('items')}>Order Lines</button>
                     <button className={`tab ${activeTab === 'other' ? 'active' : ''}`} onClick={() => setActiveTab('other')}>Other Info</button>
                     {formData.assigned_job_no && (
-                        <button className={`tab ${activeTab === 'workflow' ? 'active' : ''}`} onClick={() => setActiveTab('workflow')}>Workflow Suite</button>
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                            <button className={`tab ${activeTab === 'workflow' ? 'active' : ''}`} onClick={() => setActiveTab('workflow')}>Workflow Suite</button>
+                            <button className={`tab ${activeTab === 'po' ? 'active' : ''}`} onClick={() => setActiveTab('po')}>PO Details</button>
+                            <button className={`tab ${activeTab === 'explorer' ? 'active' : ''}`} onClick={() => setActiveTab('explorer')}>Explorer</button>
+                        </div>
                     )}
                 </div>
 
@@ -1392,6 +1574,225 @@ export default function WorkflowEditor() {
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'po' && (
+                    <div className="glass-panel po-details">
+                        <div style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <Package size={20} className="text-accent" />
+                            <h3 style={{ margin: 0 }}>Customer Purchase Order Details</h3>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                            <div className="po-info-group">
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>PO Number</label>
+                                        <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1e293b' }}>{formData.customer_po_no || 'N/A'}</div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>PO Date</label>
+                                        <div style={{ fontSize: '1rem', color: '#1e293b' }}>
+                                            {formData.customer_po_date ? new Date(formData.customer_po_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }) : 'N/A'}
+                                        </div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>PO Value</label>
+                                        <div style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--accent)' }}>
+                                            {formData.currency} {formData.delivery_verification?.po_value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || formData.total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </div>
+                                    </div>
+                                    <div className="info-item">
+                                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Issued By</label>
+                                        <div style={{ fontSize: '1rem', color: '#1e293b' }}>
+                                            {formData.customer_po_by_id || 'N/A'}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="po-description-group">
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>Description / Project Scope</label>
+                                <div style={{ 
+                                    padding: '16px', 
+                                    background: '#f8fafc', 
+                                    borderRadius: '8px', 
+                                    border: '1px solid #e2e8f0',
+                                    fontSize: '0.95rem',
+                                    lineHeight: '1.5',
+                                    color: '#334155',
+                                    minHeight: '120px',
+                                    whiteSpace: 'pre-wrap'
+                                }}>
+                                    {formData.delivery_verification?.po_description || 'No description provided.'}
+                                </div>
+                            </div>
+                        </div>
+
+                        {formData.customer_po_attachment_url && (
+                            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
+                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '12px' }}>PO Attachment</label>
+                                <a 
+                                    href={formData.customer_po_attachment_url} 
+                                    target="_blank" 
+                                    rel="noreferrer"
+                                    style={{ 
+                                        display: 'inline-flex', 
+                                        alignItems: 'center', 
+                                        gap: '8px', 
+                                        padding: '10px 16px', 
+                                        background: '#eff6ff', 
+                                        color: '#2563eb', 
+                                        borderRadius: '8px', 
+                                        textDecoration: 'none',
+                                        fontWeight: 600,
+                                        fontSize: '0.9rem',
+                                        border: '1px solid #bfdbfe'
+                                    }}
+                                >
+                                    <FileText size={18} /> View Signed Purchase Order
+                                </a>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {activeTab === 'explorer' && (
+                    <div className="glass-panel animate-fade-in" style={{ padding: '32px' }}>
+                        {/* Auth Status Bar */}
+                        <div style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between', 
+                            alignItems: 'center', 
+                            background: authStatus === 'connected' ? '#f0fdf4' : '#fef2f2', 
+                            padding: '12px 20px', 
+                            borderRadius: '12px', 
+                            marginBottom: '24px',
+                            border: `1px solid ${authStatus === 'connected' ? '#bbf7d0' : '#fecaca'}`
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: authStatus === 'connected' ? '#22c55e' : '#ef4444' }} />
+                                <span style={{ fontSize: '0.9rem', fontWeight: 600, color: authStatus === 'connected' ? '#166534' : '#991b1b' }}>
+                                    Google Drive: {authStatus === 'connected' ? 'Connected' : authStatus === 'expired' ? 'Session Expired' : 'Disconnected'}
+                                </span>
+                            </div>
+                            {authStatus !== 'connected' && (
+                                <button onClick={handleExplorerReconnect} className="btn btn-sm btn-primary" style={{ fontSize: '0.8rem', padding: '6px 16px' }}>
+                                    <RefreshCw size={14} style={{ marginRight: '6px' }} /> Reconnect Now
+                                </button>
+                            )}
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <button 
+                                    onClick={() => handleExplorerBack(explorerPath.length - 2)} 
+                                    disabled={explorerPath.length <= 1}
+                                    style={{ background: 'none', border: 'none', cursor: explorerPath.length > 1 ? 'pointer' : 'default', color: explorerPath.length > 1 ? 'var(--accent)' : '#cbd5e1' }}
+                                >
+                                    <ArrowLeft size={20} />
+                                </button>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '1rem', fontWeight: 600 }}>
+                                    {explorerPath.map((segment, idx) => (
+                                        <React.Fragment key={segment.id}>
+                                            <span 
+                                                onClick={() => handleExplorerBack(idx)}
+                                                style={{ cursor: 'pointer', color: idx === explorerPath.length - 1 ? '#1e293b' : '#64748b' }}
+                                            >
+                                                {segment.name}
+                                            </span>
+                                            {idx < explorerPath.length - 1 && <span style={{ color: '#cbd5e1' }}>/</span>}
+                                        </React.Fragment>
+                                    ))}
+                                </div>
+                            </div>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <button onClick={() => fetchExplorerFiles()} className="btn btn-secondary" title="Refresh list">
+                                    <RefreshCw size={18} className={loadingExplorer ? 'animate-spin' : ''} />
+                                </button>
+                                <button className="btn btn-primary" onClick={() => document.getElementById('explorer-upload').click()}>
+                                    <Upload size={18} /> Upload Files
+                                </button>
+                                <input id="explorer-upload" type="file" multiple hidden onChange={handleExplorerUpload} />
+                            </div>
+                        </div>
+
+                        {explorerError && (
+                            <div style={{ color: '#ef4444', background: '#fef2f2', padding: '12px', borderRadius: '8px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <AlertCircle size={18} /> {explorerError}
+                            </div>
+                        )}
+
+                        {loadingExplorer && explorerFiles.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
+                                <Loader2 size={32} className="animate-spin" style={{ margin: '0 auto 16px' }} />
+                                <p>Syncing with Google Drive...</p>
+                            </div>
+                        ) : explorerFiles.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '80px', color: '#94a3b8', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
+                                <Folder size={48} style={{ margin: '0 auto 16px', opacity: 0.2 }} />
+                                <p style={{ fontSize: '1.1rem' }}>This folder is empty.</p>
+                                <p style={{ fontSize: '0.9rem', marginTop: '4px' }}>Upload drawings, photos, or documents to keep them with this job.</p>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
+                                {explorerFiles.map(file => (
+                                    <div key={file.id} className="glass-panel" style={{ padding: '16px', borderRadius: '12px', background: '#fff', border: '1px solid #e2e8f0', transition: 'transform 0.2s' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                                            <div 
+                                                style={{ display: 'flex', gap: '10px', alignItems: 'center', cursor: file.mimeType.includes('folder') ? 'pointer' : 'default', flex: 1, overflow: 'hidden' }}
+                                                onClick={() => file.mimeType.includes('folder') && handleExplorerNavigate(file)}
+                                            >
+                                                {file.mimeType.includes('folder') ? <Folder size={24} color="#6366f1" /> : <File size={24} color="#64748b" />}
+                                                <div style={{ overflow: 'hidden' }}>
+                                                    <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={file.name}>
+                                                        {file.name}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{file.size ? `${(file.size / 1024).toFixed(1)} KB` : 'Folder'}</div>
+                                                </div>
+                                            </div>
+                                            <button 
+                                                onClick={() => handleExplorerDelete(file.id, file.name)}
+                                                style={{ background: 'none', border: 'none', color: '#cbd5e1', padding: '4px', cursor: 'pointer' }}
+                                                onMouseOver={(e) => e.currentTarget.style.color = '#ef4444'}
+                                                onMouseOut={(e) => e.currentTarget.style.color = '#cbd5e1'}
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <a href={file.webViewLink} target="_blank" rel="noreferrer" className="btn btn-secondary" style={{ flex: 1, padding: '6px', fontSize: '0.75rem', gap: '4px' }}>
+                                                <ExternalLink size={12} /> View
+                                            </a>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Partner Vault Shortcut */}
+                        <div style={{ marginTop: '32px', paddingTop: '20px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ width: '40px', height: '40px', background: '#e0e7ff', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Users size={20} color="#4338ca" />
+                                </div>
+                                <div>
+                                    <div style={{ fontSize: '0.85rem', fontWeight: 700 }}>Partner Vault Bridge</div>
+                                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Quick access to {formData.partners?.name || 'Customer'}'s master documents</div>
+                                </div>
+                            </div>
+                            <button 
+                                className="btn btn-secondary" 
+                                style={{ fontSize: '0.8rem', gap: '8px' }}
+                                onClick={() => {
+                                    if (formData.partners?.google_drive_link) window.open(formData.partners.google_drive_link, '_blank');
+                                    else alert('No GDrive link found for this partner.');
+                                }}
+                            >
+                                <ExternalLink size={14} /> Open Partner Folder
+                            </button>
                         </div>
                     </div>
                 )}

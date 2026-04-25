@@ -260,6 +260,8 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
             document.body.removeChild(a);
             setTimeout(() => URL.revokeObjectURL(url), 2000);
             return;
+        } else if (action === 'blob') {
+            return pdfBlob;
         } else {
             return URL.createObjectURL(pdfBlob);
         }
