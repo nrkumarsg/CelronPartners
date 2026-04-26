@@ -78,10 +78,10 @@ export default function AIChatInterface({ onSearchTrigger, searchId }) {
             const data = await resp.json();
             if (data.error) throw new Error(data.error);
 
-            let cleanResponse = data.response;
+            let cleanResponse = String(data.response || "");
             let searchData = null;
 
-            if (data.response.includes('SEARCH_TRIGGER:')) {
+            if (cleanResponse.includes('SEARCH_TRIGGER:')) {
                 try {
                     const parts = data.response.split('SEARCH_TRIGGER:');
                     cleanResponse = parts[0].trim();

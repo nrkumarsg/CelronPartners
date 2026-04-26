@@ -294,7 +294,20 @@ app.post('/api/universal-finder/chat', async (req, res) => {
         const finalPrompt = req.body.system_prompt ? `${req.body.system_prompt}\n\n${context}\n\nUser Question: ${prompt}` : `${context}\n\nUser Question: ${prompt}`;
         const aiResponse = await chatWithGemini(finalPrompt, req.body.image, history);
 
-        res.json({ response: aiResponse });
+        // Ensure we return a string for the chat interface
+        let responseString = "";
+        if (typeof aiResponse === 'string') {
+            responseString = aiResponse;
+        } else if (aiResponse && aiResponse.raw) {
+            responseString = aiResponse.raw;
+        } else if (aiResponse && aiResponse.findings) {
+            responseString = Array.isArray(aiResponse.findings) ? aiResponse.findings.join('\n') : String(aiResponse.findings);
+        } else if (aiResponse) {
+            // If it's a structured object from autofill/research, stringify it
+            responseString = JSON.stringify(aiResponse, null, 2);
+        }
+
+        res.json({ response: responseString });
     } catch (e) {
         console.error("[Vercel API] Chat Error:", e);
         res.status(500).json({ error: e.message });
