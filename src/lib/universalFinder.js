@@ -2,9 +2,9 @@
 import { supabase } from './supabase.js';
 import { chatWithGemini } from './geminiService.js';
 
-const GOOGLE_API = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_API_KEY : (process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || 'AIzaSyDIU2aSnmoWhZhFR2irbjA5zLW5ypYbQZk'));
+const GOOGLE_API = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
 const GOOGLE_CX = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_CX : (process.env.VITE_GOOGLE_CX || process.env.GOOGLE_CX || 'd6a6c15e9403b4a9d'));
-const GEOCODE_API = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_GEOCODE_KEY : (process.env.VITE_GOOGLE_GEOCODE_KEY || process.env.GOOGLE_GEOCODE_KEY || 'AIzaSyDIU2aSnmoWhZhFR2irbjA5zLW5ypYbQZk'));
+const GEOCODE_API = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
 
 const COUNTRY_CODES = {
     'Singapore': 'SG', 'Malaysia': 'MY', 'Indonesia': 'ID', 'Thailand': 'TH', 'Vietnam': 'VN',
@@ -92,7 +92,12 @@ export async function runUniversalSearch({
     let optimizedQuery = query;
     if (brand) optimizedQuery += ` brand:${brand}`;
     if (category) optimizedQuery += ` ${category}`;
-    if (country) optimizedQuery += ` in ${country}`;
+    if (country) {
+        optimizedQuery += ` ${country}`;
+        if (country.toLowerCase() === 'singapore') {
+            optimizedQuery += ' UEN Address website';
+        }
+    }
 
     // 3️⃣ Parallel Google Web & Image searches
     let webUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API}&cx=${GOOGLE_CX}&q=${encodeURIComponent(optimizedQuery)}`;
@@ -118,19 +123,31 @@ export async function runUniversalSearch({
     const webJson = await webRes.json().catch(() => ({ error: { message: "JSON Parse Error" } }));
     const imgJson = await imgRes.json().catch(() => ({}));
 
+    let finalWebJson = webJson;
     if (webJson.error) {
-        console.warn("[Finder] Google Web Search Error:", webJson.error);
+        if (webJson.error.message?.includes('API key not valid')) {
+            console.warn("[Finder] Web Search Key invalid. Retrying with hardcoded fallback...");
+            const hardcodedKey = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
+            const retryWebUrl = webUrl.split('key=')[0] + `key=${hardcodedKey}` + (webUrl.includes('&') ? '&' + webUrl.split('&').slice(1).join('&') : '');
+            const retryRes = await fetch(retryWebUrl);
+            finalWebJson = await retryRes.json().catch(() => ({ error: { message: "JSON Parse Error" } }));
+        }
+    }
+
+    if (finalWebJson.error) {
+        console.warn("[Finder] Google Web Search Error:", finalWebJson.error);
         
         // CHECK EMERGENCY FALLBACK
         const upperQuery = query.toUpperCase();
         const fallback = EMERGENCY_FALLBACK_CACHE[upperQuery];
         if (fallback) {
             console.log(`[Finder] Using emergency fallback for: ${query}`);
+            const enrichedSnippet = `${fallback.snippet} | UEN: ${fallback.uen} | Address: ${fallback.address}`;
             const insertResult = {
                 search_id: search.id,
                 title: fallback.supplier_name,
                 url: fallback.url,
-                snippet: fallback.snippet,
+                snippet: enrichedSnippet,
                 supplier_name: fallback.supplier_name,
                 supplier_location: fallback.location,
                 email: fallback.email,
@@ -148,10 +165,10 @@ export async function runUniversalSearch({
     if (imgJson.error) {
         console.warn("[Finder] Google Image Search Error:", imgJson.error.message);
     }
-    console.log(`[Finder] Results: ${webJson.items?.length || 0} web, ${imgJson.items?.length || 0} img`);
+    console.log(`[Finder] Results: ${finalWebJson.items?.length || 0} web, ${imgJson.items?.length || 0} img`);
 
     // 3.5️⃣ Deep AI Enrichment (LiteLLM-style analysis of snippets)
-    const initialRawResults = [...(webJson.items || []), ...(imgJson.items || [])].slice(0, 15);
+    const initialRawResults = [...(finalWebJson.items || []), ...(imgJson.items || [])].slice(0, 15);
 
     const extractionPrompt = `
     Analyze these ${initialRawResults.length} search results for the query "${optimizedQuery}".

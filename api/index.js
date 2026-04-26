@@ -138,58 +138,52 @@ async function insertMockResults(searchId, query) {
  * Direct AI Discovery Fallback.
  */
 async function generateAIResults(searchId, query) {
-    const API_KEY = process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || 'AIzaSyA5YW4mWUo__7hwGjvLor-DDsh-spg2r5M';
-    const GEMINI_MODEL = 'gemini-1.5-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${API_KEY}`;
+    const API_KEY = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
+    const MODELS = { FAST: 'gemini-flash-latest', SMART: 'gemini-pro-latest' };
 
-    const prompt = `Procurement expert for Celron Hub. 
-    User Query: "${query}" - Timestamp: ${Date.now()}. 
-    
-    You MUST generate a FRESH list of 8 REAL world suppliers (distributors, stockists, manufacturers) for this specific part. 
-    Focus on Singapore and global industrial hubs.
-    
-    Return a valid JSON array: [{"name": "...", "location": "...", "email": "...", "phone": "...", "address": "...", "notes": "...", "url": "..."}]`;
+    const prompt = ` PROCUREMENT EXPERT MODE. Query: "${query}". 
+    Identify if this is a specific Brand/Model (e.g. OMRON H3CR-A8).
+    Find 8 REAL WORLD distributors, stockists, or official manufacturers for this part.
+    Output ONLY a valid JSON array of objects: [{"name": "...", "location": "...", "email": "...", "phone": "...", "address": "...", "notes": "...", "url": "..."}]`;
 
-    try {
-        const body = {
-            contents: [{
-                parts: [{
-                    text: ` PROCUREMENT EXPERT MODE. Query: "${query}". 
-                    Identify if this is a specific Brand/Model (e.g. OMRON H3CR-A8).
-                    Find 8 REAL WORLD distributors, stockists, or official manufacturers for this part.
-                    Priority: 
-                    1. Authorized Distributors (e.g. RS Components, Element14, DigiKey, Mouser)
-                    2. Regional Stockists in Singapore, Europe, UAE.
-                    3. Official Brand Portals.
-                    
-                    Output ONLY a valid JSON array of objects: [{"name": "...", "location": "...", "email": "...", "phone": "...", "address": "...", "notes": "...", "url": "..."}]
-                    Include generic sales emails (e.g. sales@company.com) if specific ones aren't known.
-                    Include a relevant URL for the supplier.`
-                }]
-            }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
-        };
-
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-
-        const data = await response.json();
-        if (data.error) throw new Error("GEMINI_ERROR: " + data.error.message);
-        if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
-            throw new Error("EMPTY_RESPONSE: No content returned from AI");
+    async function runWithFallback(modelName, isRetry = false) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    generationConfig: { temperature: 0.1, maxOutputTokens: 2048 }
+                })
+            });
+            const data = await response.json();
+            if (data.error) {
+                if (!isRetry) return runWithFallback(MODELS.SMART, true);
+                throw new Error("GEMINI_ERROR: " + data.error.message);
+            }
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!text && !isRetry) return runWithFallback(MODELS.SMART, true);
+            const jsonMatch = text.match(/\[[\s\S]*\]/);
+            return jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+        } catch (err) {
+            if (!isRetry) return runWithFallback(MODELS.SMART, true);
+            throw err;
         }
+    }
 
-        const aiResponse = data.candidates[0].content.parts[0].text;
-        const jsonMatch = aiResponse.match(/\[[\s\S]*\]/);
+    let suppliers = [];
+    try {
+        suppliers = await runWithFallback(MODELS.FAST);
+        if (!suppliers || !Array.isArray(suppliers)) suppliers = [];
+    } catch (err) {
+        console.error("AI Discovery Error:", err);
+        throw err;
+    }
 
-        if (jsonMatch) {
-            const suppliers = JSON.parse(jsonMatch[0]);
-
-            // Map ONLY to confirmed existing columns
-            const finalResults = suppliers.map((item, idx) => ({
+    if (suppliers.length > 0) {
+        // Map ONLY to confirmed existing columns
+        const finalResults = suppliers.map((item, idx) => ({
                 search_id: searchId,
                 title: `${item.name} | Verified Live Source`,
                 url: item.url || "https://www.google.com/search?q=" + encodeURIComponent((item.name || 'supplier') + " Singapore"),

@@ -411,6 +411,19 @@ export const provisionPartnerStructure = async (accessToken, partnerName, parent
     // 2. Ensure Partner-specific folder exists under 'Partners'
     const partnerFolderId = await createFolderStructure(accessToken, partnerName, rootId);
 
+    // 3. Create sub-folders as requested in Image 2
+    const subFolders = [
+        '01. Inspection Forms',
+        '02. Credit Applications',
+        '03. Company Certificates',
+        '04. Agreements & Contracts',
+        '05. KYC Documents'
+    ];
+
+    for (const sub of subFolders) {
+        await getOrCreateFolder(accessToken, sub, partnerFolderId);
+    }
+
     return {
         id: partnerFolderId,
         link: `https://drive.google.com/drive/folders/${partnerFolderId}`

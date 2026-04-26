@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map, ExternalLink, Plus, Sparkles, Loader2, ChevronDown, Paperclip, FileCheck, Calculator, FileText } from 'lucide-react';
+import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map, ExternalLink, Plus, Sparkles, Loader2, ChevronDown, Paperclip, FileCheck, Calculator, FileText, Search, Check, RotateCcw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { savePartner } from '../../lib/store';
 import { saveJobExpense } from '../../lib/jobExpenseService';
@@ -128,6 +128,7 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
         city: '',
         pincode: '',
         brand: '',
+        activity_summary: '',
         notes: '',
         business_card_url: '',
         business_card_back_url: ''
@@ -157,13 +158,16 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                     .limit(5);
                 
                 if (results && results.length > 0) {
-                    searchContext = results.map(r => `[Web Data] ${r.title}: ${r.snippet}`).join('\n');
+                    searchContext = results.map(r => `[Web Data] ${r.title} (${r.url}): ${r.snippet}`).join('\n');
                 }
             } catch (searchErr) {
                 console.warn('[AI] Live search unavailable, using model intelligence only.');
             }
 
             // 2. Use the new Smart Search with the gathered context
+            console.log('[AI Research] Company:', formData.name);
+            console.log('[AI Research] Search Context Length:', searchContext?.length || 0);
+            
             const result = await smartSearchCompany(formData.name, formData.weblink, searchContext);
 
             if (result) {
@@ -177,15 +181,20 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                     phone1: result.phone || '',
                     website: result.website || '',
                     categories: result.categories || [],
+                    brands: result.brands || '',
+                    activity_summary: result.activity_summary || '',
                     confidence: result.confidence || 'low',
                     manual_verification_required: result.manual_verification_required,
-                    extraInfo: `Categories: ${result.categories?.join(', ') || 'N/A'}. Confidence: ${result.confidence || 'low'}.`
+                    extraInfo: `Categories: ${result.categories?.join(', ') || 'N/A'}. Brands: ${result.brands || 'N/A'}. Activity: ${result.activity_summary || 'N/A'}`
                 });
             }
         } catch (err) {
             console.error('AI Research Error:', err);
-            // Basic fallback
-            setFormData(prev => ({ ...prev, country: prev.country || 'Singapore' }));
+            setAiPreview({
+                error: err.message || 'Unknown Research Error',
+                confidence: 'none',
+                manual_verification_required: true
+            });
         } finally {
             setIsAiResearching(false);
         }
@@ -203,7 +212,9 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
             email1: aiPreview.email1 || prev.email1,
             phone1: aiPreview.phone1 || prev.phone1,
             weblink: aiPreview.website || prev.weblink,
-            notes: aiPreview.extraInfo ? `${prev.notes || ''}\n\n--- AI RESEARCH ---\n${aiPreview.extraInfo}` : (prev.notes || '')
+            brand: aiPreview.brands || prev.brand,
+            activity_summary: aiPreview.activity_summary || prev.activity_summary,
+            notes: aiPreview.activity_summary ? `${prev.notes || ''}\n\n--- AI ACTIVITY SUMMARY ---\n${aiPreview.activity_summary}` : (prev.notes || '')
         }));
         setAiPreview(null);
     };
@@ -263,274 +274,333 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {/* AI Research Banner */}
-            <div style={{ 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center', 
-                padding: '12px 20px', 
-                background: 'linear-gradient(90deg, #f5f3ff 0%, #ede9fe 100%)', 
-                borderRadius: '12px',
-                border: '1px solid #ddd6fe'
-            }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <Sparkles size={18} className={isAiResearching ? 'ai-pulse text-accent' : 'text-accent'} />
-                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: '#5b21b6' }}>
-                        {isAiResearching ? 'AI is researching HQ details...' : 'Intelligent Auto-fill'}
-                    </span>
+        <div style={{ padding: '24px', position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
+                <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #6366f1, #10b981)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }}>
+                    <Users size={20} />
                 </div>
-                <button 
-                    type="button" 
-                    onClick={handleAiAutofill}
-                    disabled={isAiResearching || !formData.name}
-                    style={{ 
-                        padding: '6px 12px', 
-                        borderRadius: '8px', 
-                        background: '#fff', 
-                        border: '1px solid #ddd6fe', 
-                        color: '#6366f1', 
-                        fontSize: '0.85rem', 
-                        fontWeight: 600, 
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                    }}
-                >
-                    {isAiResearching ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                    Research with AI
-                </button>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', fontFamily: "'Outfit', sans-serif", margin: 0 }}>Add New Customer</h2>
             </div>
 
-            {/* AI Preview Result Card (Message Box) */}
-            {aiPreview && (
-                <div style={{ 
-                    padding: '16px', 
-                    background: aiPreview.manual_verification_required ? '#fffbeb' : '#f0fdf4', 
-                    border: aiPreview.manual_verification_required ? '1px solid #fde68a' : '1px solid #bbf7d0', 
-                    borderRadius: '12px',
-                    animation: 'slideIn 0.3s ease-out',
-                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'
-                }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Sparkles size={16} color={aiPreview.manual_verification_required ? '#b45309' : '#15803d'} />
-                            <span style={{ fontWeight: 600, color: aiPreview.manual_verification_required ? '#b45309' : '#15803d', fontSize: '0.9rem' }}>
-                                AI Research Findings 
-                                <span style={{ 
-                                    marginLeft: '8px', 
-                                    padding: '2px 8px', 
-                                    borderRadius: '12px', 
-                                    fontSize: '0.7rem', 
-                                    background: aiPreview.confidence === 'high' ? '#dcfce7' : aiPreview.confidence === 'medium' ? '#fef3c7' : '#fee2e2',
-                                    color: aiPreview.confidence === 'high' ? '#166534' : aiPreview.confidence === 'medium' ? '#92400e' : '#991b1b',
-                                    textTransform: 'uppercase'
-                                }}>
-                                    {aiPreview.confidence} Confidence
-                                </span>
-                            </span>
+            {/* AI Research Section */}
+            <div className="glass-panel" style={{ marginBottom: '24px', padding: '16px', background: 'linear-gradient(to right, #f8fafc, #f1f5f9)', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ position: 'relative' }}>
+                            <Sparkles size={18} color="#6366f1" />
+                            {isAiResearching && <div className="ai-pulse" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: '50%' }} />}
                         </div>
-                        <button 
-                            onClick={() => setAiPreview(null)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}
-                        >
-                            <X size={16} />
-                        </button>
+                        <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#4338ca', letterSpacing: '0.02em' }}>Intelligent Auto-fill</span>
                     </div>
+                    <button
+                        onClick={handleAiAutofill}
+                        disabled={isAiResearching || !formData.name}
+                        className="btn"
+                        style={{
+                            background: isAiResearching ? '#f1f5f9' : 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                            color: 'white',
+                            padding: '8px 16px',
+                            borderRadius: '12px',
+                            fontSize: '0.85rem',
+                            fontWeight: 600,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            border: 'none',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            boxShadow: isAiResearching ? 'none' : '0 4px 12px rgba(99, 102, 241, 0.2)'
+                        }}
+                    >
+                        {isAiResearching ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
+                        {isAiResearching ? 'Agent Researching...' : 'Research with AI'}
+                    </button>
+                </div>
 
-                    {aiPreview.manual_verification_required && (
-                        <div style={{ marginBottom: '12px', padding: '8px', background: '#fff', borderRadius: '6px', border: '1px solid #fde68a', fontSize: '0.8rem', color: '#92400e', fontWeight: 500 }}>
-                            ⚠️ Accuracy is low. Please verify all details manually.
+                {/* AI Research Findings Card */}
+                {(aiPreview || isAiResearching) && (
+                    <div className="ai-card-premium animate-fade-in" style={{ padding: '20px', borderRadius: '16px', marginBottom: '20px' }}>
+                        {isAiResearching && <div className="ai-scanning-line" />}
+                        
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ padding: '4px 10px', background: aiPreview?.error ? '#fee2e2' : 'rgba(16, 185, 129, 0.1)', color: aiPreview?.error ? '#ef4444' : '#059669', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                    {aiPreview?.error ? 'Failure' : 'Research Findings'}
+                                </div>
+                                {aiPreview && !aiPreview.error && !isAiResearching && (
+                                    <div style={{ padding: '4px 10px', background: aiPreview.confidence === 'high' ? '#dcfce7' : '#fef3c7', color: aiPreview.confidence === 'high' ? '#15803d' : '#92400e', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        {aiPreview.confidence} Confidence
+                                    </div>
+                                )}
+                            </div>
+                            <button onClick={() => setAiPreview(null)} style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><X size={16} /></button>
                         </div>
-                    )}
-                    
-                    <div style={{ fontSize: '0.85rem', color: '#334155', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                        <div><strong>UEN:</strong> {aiPreview.uen || '-'}</div>
-                        <div><strong>Pincode:</strong> {aiPreview.pincode || '-'}</div>
-                        <div><strong>Email:</strong> {aiPreview.email1 || '-'}</div>
-                        <div><strong>Phone:</strong> {aiPreview.phone1 || '-'}</div>
-                        <div style={{ gridColumn: 'span 2' }}><strong>Address:</strong> {aiPreview.address || '-'}</div>
-                        <div style={{ gridColumn: 'span 2' }}><strong>Categories:</strong> {aiPreview.categories?.join(', ') || '-'}</div>
-                    </div>
 
-                    <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
-                        <button 
-                            onClick={() => setAiPreview(null)}
-                            style={{ 
-                                flex: 1,
-                                padding: '10px', 
-                                background: '#fff', 
-                                color: '#64748b', 
-                                border: '1px solid #e2e8f0', 
-                                borderRadius: '8px', 
-                                fontWeight: 600, 
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px'
-                            }}
-                        >
-                            <X size={14} />
-                            Reject & Reset
-                        </button>
-                        <button 
-                            onClick={applyAiResults}
-                            style={{ 
-                                flex: 2,
-                                padding: '10px', 
-                                background: aiPreview.manual_verification_required ? '#d97706' : '#16a34a', 
-                                color: '#fff', 
-                                border: 'none', 
-                                borderRadius: '8px', 
-                                fontWeight: 600, 
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px',
-                                transition: 'all 0.2s'
-                            }}
-                        >
-                            <Save size={14} />
-                            Apply Results to Form
-                        </button>
-                    </div>
-                </div>
-            )}
+                        {isAiResearching ? (
+                            <div style={{ textAlign: 'center', padding: '20px' }}>
+                                <div style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500, marginBottom: '8px' }}>Antigravity Research Agent is traversing data...</div>
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Identifying UEN, Address, and authorized brands.</div>
+                            </div>
+                        ) : aiPreview?.error ? (
+                            <div style={{ padding: '12px', background: '#fef2f2', borderRadius: '12px', border: '1px solid #fecaca', color: '#991b1b', fontSize: '0.85rem' }}>
+                                <strong>Research Loop Terminated:</strong><br/>
+                                {aiPreview.error}
+                                <div style={{ marginTop: '8px', fontSize: '0.75rem', color: '#b91c1c' }}>
+                                    Check your Google Cloud credentials or quota.
+                                </div>
+                            </div>
+                        ) : aiPreview && (
+                            <div style={{ fontSize: '0.85rem', color: '#334155', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>UEN:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.uen || '-'}</span></div>
+                                <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Pincode:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.pincode || '-'}</span></div>
+                                <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Email:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.email1 || '-'}</span></div>
+                                <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Phone:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.phone1 || '-'}</span></div>
+                                <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Website:</strong> <span style={{ color: '#4338ca', fontWeight: 600, textDecoration: 'underline' }}>{aiPreview.weblink || '-'}</span></div>
+                                <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Address:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.address || '-'}</span></div>
+                                <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Brands Represented:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.brands || '-'}</span></div>
+                                
+                                {aiPreview.activity_summary && (
+                                    <div style={{ gridColumn: 'span 2', background: 'linear-gradient(to right, #f5f3ff, #ede9fe)', padding: '14px', borderRadius: '12px', border: '1px dashed #c7d2fe' }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', marginBottom: '4px' }}>Business Activity Insight</div>
+                                        <span style={{ fontSize: '0.85rem', color: '#4338ca', fontStyle: 'italic', lineHeight: 1.6 }}>"{aiPreview.activity_summary}"</span>
+                                    </div>
+                                )}
 
-            {/* Website Section */}
-            <div style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '24px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc' }}>
-                <div style={{ width: '64px', height: '64px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Globe color="#6366f1" size={28} />
-                </div>
-                <div style={{ flex: 1 }}>
-                    <label style={{ fontWeight: 500, color: '#1e293b', display: 'block', marginBottom: '6px' }}>Company Website</label>
-                    <div style={{ position: 'relative' }}>
-                        <input
-                            placeholder="https://partner.com"
-                            name="weblink"
-                            value={formData.weblink}
-                            onChange={handleChange}
-                            style={{ width: '100%', padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }}
-                        />
-                        <button
-                            type="button"
-                            onClick={openWebsite}
-                            style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#6366f1', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}
-                        >
-                            <ExternalLink size={14} /> Visit
-                        </button>
+                                <div style={{ gridColumn: 'span 2', display: 'flex', gap: '10px', marginTop: '4px' }}>
+                                    <button onClick={applyAiResults} className="btn" style={{ flex: 1, background: '#10b981', color: 'white', fontWeight: 600 }}><Check size={16} /> Apply Results to Form</button>
+                                    <button onClick={() => setAiPreview(null)} className="btn" style={{ background: '#f1f5f9', color: '#64748b' }}><RotateCcw size={16} /> Reject</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ width: '48px', height: '48px', background: '#ffffff', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                        <Globe size={24} color="#6366f1" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.02em' }}>Company Website</div>
+                        <div style={{ position: 'relative' }}>
+                            <input
+                                type="text"
+                                className="premium-input"
+                                value={formData.weblink}
+                                onChange={(e) => setFormData({ ...formData, weblink: e.target.value })}
+                                placeholder="https://company.com"
+                                style={{ width: '100%', padding: '10px 14px', paddingRight: '60px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
+                            />
+                            {formData.weblink && (
+                                <a href={formData.weblink} target="_blank" rel="noopener noreferrer" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#6366f1', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                    Visit <ExternalLink size={12} />
+                                </a>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <div className="grid-2">
-                <div className="form-item">
-                    <label>Company Name *</label>
-                    <input className="form-input" name="name" value={formData.name} onChange={handleChange} placeholder="Partner company name" autoFocus />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+                <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Company Name *</label>
+                    <input
+                        type="text"
+                        className="premium-input"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleChange}
+                        placeholder="Enter full legal name"
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
+                        required
+                    />
                 </div>
-                <div className="form-item">
-                    <label>UEN / Registration No</label>
-                    <input className="form-input" name="uen" value={formData.uen} onChange={handleChange} placeholder="e.g. 201436227C" />
+                <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>UEN / Registration No</label>
+                    <input
+                        type="text"
+                        className="premium-input"
+                        name="uen"
+                        value={formData.uen}
+                        onChange={handleChange}
+                        placeholder="e.g. 201436227C"
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
+                    />
                 </div>
-                <div className="form-item">
-                    <label>Email *</label>
-                    <input className="form-input" name="email1" type="email" value={formData.email1} onChange={handleChange} placeholder="contact@partner.com" />
+                <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Email *</label>
+                    <input
+                        type="email"
+                        className="premium-input"
+                        name="email1"
+                        value={formData.email1}
+                        onChange={handleChange}
+                        placeholder="sales@company.com"
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
+                        required
+                    />
                 </div>
-                <div className="form-item">
-                    <label>Phone</label>
-                    <input className="form-input" name="phone1" value={formData.phone1} onChange={handleChange} placeholder="+1 234 567 8900" />
+                <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Phone</label>
+                    <input
+                        type="text"
+                        className="premium-input"
+                        name="phone1"
+                        value={formData.phone1}
+                        onChange={handleChange}
+                        placeholder="+65 6297 1011"
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
+                    />
                 </div>
-                <div className="form-item">
-                    <label>Country *</label>
-                    <select className="form-select" name="country" value={formData.country} onChange={handleChange}>
-                        <option value="" disabled>Select Country</option>
-                        {COUNTRIES.map(c => <option key={c} value={c}>{c}</option>)}
+                <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Country *</label>
+                    <select
+                        className="premium-input"
+                        name="country"
+                        value={formData.country}
+                        onChange={handleChange}
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
+                        required
+                    >
+                        <option value="">Select Country</option>
+                        <option value="Singapore">Singapore</option>
+                        <option value="Malaysia">Malaysia</option>
+                        <option value="United Arab Emirates">UAE</option>
+                        <option value="United Kingdom">UK</option>
+                        <option value="United States">USA</option>
                     </select>
                 </div>
-                <div className="form-item">
-                    <label>City</label>
-                    <input className="form-input" name="city" value={formData.city} onChange={handleChange} placeholder="City" />
+                <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>City</label>
+                    <input
+                        type="text"
+                        className="premium-input"
+                        name="city"
+                        value={formData.city}
+                        onChange={handleChange}
+                        placeholder="City name"
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
+                    />
                 </div>
-                <div className="form-item">
-                    <label>Pincode / Postal Code</label>
-                    <input className="form-input" name="pincode" value={formData.pincode} onChange={handleChange} placeholder="6-digit code" />
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Pincode / Postal Code</label>
+                    <input
+                        type="text"
+                        className="premium-input"
+                        name="postal_code"
+                        value={formData.postal_code}
+                        onChange={handleChange}
+                        placeholder="6-digit code"
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
+                    />
                 </div>
-                <div className="form-item full-width">
-                    <label>HQ Address</label>
-                    <input className="form-input" name="address" value={formData.address} onChange={handleChange} placeholder="Full primary address" />
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>HQ Address</label>
+                    <textarea
+                        className="premium-input"
+                        name="address"
+                        value={formData.address}
+                        onChange={handleChange}
+                        placeholder="Full primary address"
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none', height: '80px', resize: 'vertical' }}
+                    />
                 </div>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Categories</label>
+            <div style={{ marginBottom: '32px' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', marginBottom: '12px' }}>Categories</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {PARTNER_CATEGORIES.map(cat => (
+                    {['Partner', 'Spare Parts', 'Service', 'Calibration', 'Automation', 'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment', 'Industrial Supplies', 'Supplier', 'Customer', 'Freelancer', 'Service Company'].map(cat => (
                         <div
                             key={cat}
+                            className={`category-chip ${formData.types.includes(cat) ? 'active' : ''}`}
                             onClick={() => handleCategoryToggle(cat)}
-                            style={{ padding: '6px 14px', borderRadius: '24px', border: formData.types.includes(cat) ? '1px solid #6366f1' : '1px solid #e2e8f0', background: formData.types.includes(cat) ? '#e0e7ff' : '#fff', color: formData.types.includes(cat) ? '#6366f1' : '#475569', fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer' }}
                         >
                             {cat}
                         </div>
                     ))}
                 </div>
-                <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                    <input
-                        placeholder="Add custom category"
-                        value={customCategory}
-                        onChange={e => setCustomCategory(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleAddCustomCategory())}
-                        style={{ flex: 1, padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.85rem' }}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '20px', marginBottom: '24px' }}>
+                <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', marginBottom: '8px' }}>Company Services / Activity</label>
+                    <textarea
+                        className="premium-input"
+                        name="activity_summary"
+                        value={formData.activity_summary}
+                        onChange={handleChange}
+                        placeholder="Describe services provided by the company"
+                        style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1.5px solid #e2e8f0', outline: 'none', height: '100px', resize: 'vertical' }}
                     />
-                    <button type="button" onClick={handleAddCustomCategory} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '0.85rem' }}>Add</button>
+                </div>
+                <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', marginBottom: '8px' }}>Dealing Brands</label>
+                    <textarea
+                        className="premium-input"
+                        name="brand"
+                        value={formData.brand}
+                        onChange={handleChange}
+                        placeholder="List brands represented or handled"
+                        style={{ width: '100%', padding: '12px', borderRadius: '12px', border: '1.5px solid #e2e8f0', outline: 'none', height: '80px', resize: 'vertical' }}
+                    />
                 </div>
             </div>
 
-            <div className="form-item">
-                <label>Brands Supported</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <input className="form-input" name="brand" value={formData.brand} onChange={handleChange} placeholder="Brand names" />
-                    <button type="button" className="btn btn-secondary" style={{ padding: '0 12px' }}><Plus size={16} /></button>
+            {/* Conditional Credit Sections */}
+            {(formData.types.includes('Customer') || formData.types.includes('Supplier')) && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px', padding: '20px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                    {formData.types.includes('Customer') && (
+                        <>
+                            <div className="form-group">
+                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#4338ca' }}>Customer Credit Limit</label>
+                                <input className="premium-input" name="customerCredit" value={formData.customerCredit} onChange={handleChange} placeholder="e.g. 5000" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0' }} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#4338ca' }}>Customer Credit Term (Days)</label>
+                                <input className="premium-input" name="customerCreditTime" value={formData.customerCreditTime} onChange={handleChange} placeholder="e.g. 30" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0' }} />
+                            </div>
+                        </>
+                    )}
+                    {formData.types.includes('Supplier') && (
+                        <>
+                            <div className="form-group">
+                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#059669' }}>Supplier Credit Limit</label>
+                                <input className="premium-input" name="supplierCredit" value={formData.supplierCredit} onChange={handleChange} placeholder="e.g. 10000" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0' }} />
+                            </div>
+                            <div className="form-group">
+                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#059669' }}>Supplier Credit Term (Days)</label>
+                                <input className="premium-input" name="supplierCreditTime" value={formData.supplierCreditTime} onChange={handleChange} placeholder="e.g. 60" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0' }} />
+                            </div>
+                        </>
+                    )}
                 </div>
-            </div>
+            )}
 
-            <div className="grid-2">
-                <div className="form-item">
-                    <label>Customer Credit Limit</label>
-                    <input className="form-input" name="customerCredit" value={formData.customerCredit} onChange={handleChange} placeholder="e.g. 5000" />
-                </div>
-                <div className="form-item">
-                    <label>Customer Credit Time (Days)</label>
-                    <input className="form-input" name="customerCreditTime" value={formData.customerCreditTime} onChange={handleChange} placeholder="e.g. 30" />
-                </div>
-                <div className="form-item">
-                    <label>Supplier Credit Limit</label>
-                    <input className="form-input" name="supplierCredit" value={formData.supplierCredit} onChange={handleChange} placeholder="e.g. 10000" />
-                </div>
-                <div className="form-item">
-                    <label>Supplier Credit Time (Days)</label>
-                    <input className="form-input" name="supplierCreditTime" value={formData.supplierCreditTime} onChange={handleChange} placeholder="e.g. 60" />
-                </div>
-            </div>
-
-            <div style={{ padding: '20px', background: 'rgba(99, 102, 241, 0.05)', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.1)' }}>
+            <div style={{ marginBottom: '24px', padding: '20px', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                 <BusinessCardUpload
                     frontValue={formData.business_card_url}
                     backValue={formData.business_card_back_url}
                     onFrontChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
                     onBackChange={(url) => setFormData(prev => ({ ...prev, business_card_back_url: url }))}
-                    label="Business Card"
+                    label="Business Card Scan"
                 />
             </div>
 
-            <div className="quick-form-actions">
-                <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleSave} disabled={loading || !formData.name}>
-                    <Save size={18} /> {loading ? 'Saving...' : 'Save Partner'}
+            <div style={{ display: 'flex', gap: '12px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
+                <button
+                    onClick={handleSave}
+                    disabled={loading}
+                    className="btn btn-primary"
+                    style={{ flex: 1, height: '48px', borderRadius: '14px', fontSize: '1rem', fontWeight: 600, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none' }}
+                >
+                    {loading ? <Loader2 className="animate-spin" /> : 'Create Customer Profile'}
+                </button>
+                <button
+                    onClick={onCancel}
+                    className="btn"
+                    style={{ height: '48px', width: '48px', borderRadius: '14px', background: '#f1f5f9', color: '#64748b', padding: 0, border: 'none' }}
+                >
+                    <X size={20} />
                 </button>
             </div>
         </div>

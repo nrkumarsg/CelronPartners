@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 
-const API_KEY = 'AIzaSyA5YW4mWUo__7hwGjvLor-DDsh-spg2r5M';
+const API_KEY = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
 const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-pro'];
 const VERSIONS = ['v1', 'v1beta'];
 

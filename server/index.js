@@ -13,7 +13,7 @@ app.post('/api/universal-finder/search', async (req, res) => {
     const { query, userLat, userLng, userId, country, restrictToCountry } = req.body;
     console.log(`[Backend] Search Request for: "${query}" from user: ${userId} in country: ${country} (Local only: ${restrictToCountry})`);
 
-    const key = process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || 'AIzaSyA5YW4mWUo__7hwGjvLor-DDsh-spg2r5M';
+    const key = process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
     const cx = process.env.VITE_GOOGLE_CX || process.env.GOOGLE_CX || '259ae1101668d4071';
     const hasKeys = true; // Always try if we have fallbacks
 

@@ -804,3 +804,32 @@ export const recordExternalDocument = async (docData) => {
     return { data, error };
 };
 
+/**
+ * Convert Proforma Invoice to Tax Invoice
+ */
+export const convertProformaToTaxInvoice = async (proformaId) => {
+    // 1. Fetch source proforma with items
+    const { data: pro, error: proErr } = await getWorkflowDocumentById(proformaId);
+    if (proErr) throw proErr;
+
+    // 2. Generate Next Tax Invoice Number
+    const invNo = await generateDocNumber(pro.company_id, 'Tax Invoice');
+
+    // 3. Prepare New Tax Invoice Header
+    const { id, created_at, updated_at, document_no, document_type, ...cleanHeader } = pro;
+    const newInvData = {
+        ...cleanHeader,
+        document_type: 'Tax Invoice',
+        document_no: invNo,
+        status: 'Draft',
+        issue_date: new Date().toISOString().split('T')[0]
+    };
+
+    // 4. Save New Document
+    const { data: savedInv, error: saveError } = await saveWorkflowDocument(newInvData, pro.items);
+    if (saveError) throw saveError;
+
+    return savedInv;
+};
+
+

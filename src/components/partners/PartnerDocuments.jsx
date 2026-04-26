@@ -300,39 +300,46 @@ const PartnerDocuments = ({ partnerId, partnerName, initialFolderId, initialDriv
             ) : (
                 <div style={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                    gap: '20px'
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                    gap: '24px'
                 }}>
                     {files.map(file => (
-                        <div key={file.id} className="glass-panel" style={{ padding: '20px', borderRadius: '20px', border: '1px solid #e2e8f0', background: '#fff', transition: 'transform 0.2s' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                                    <div style={{ width: '56px', height: '56px', background: '#f8fafc', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                        {file.mimeType.includes('folder') ? <Folder size={28} color="#6366f1" /> : <File size={28} color="#64748b" />}
+                        <div key={file.id} className="glass-panel" style={{ padding: '24px', borderRadius: '24px', border: '1px solid #e2e8f0', background: '#fff', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05)', position: 'relative', overflow: 'hidden' }}>
+                            {/* Accent line for folders */}
+                            {file.mimeType.includes('folder') && <div style={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '100%', background: 'var(--ai-gradient)' }} />}
+                            
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                                    <div style={{ 
+                                        width: '52px', 
+                                        height: '52px', 
+                                        background: file.mimeType.includes('folder') ? '#eef2ff' : '#f8fafc', 
+                                        borderRadius: '16px', 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center',
+                                        boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                                    }}>
+                                        {file.mimeType.includes('folder') ? <Folder size={24} color="#6366f1" fill="#6366f1" fillOpacity={0.2} /> : <File size={24} color="#64748b" />}
                                     </div>
                                     <div style={{ overflow: 'hidden' }}>
-                                        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</h3>
-                                        <code style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{file.size ? `${(file.size / 1024).toFixed(1)} KB` : 'Folder'}</code>
+                                        <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: '#1e293b', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.name}</h3>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+                                            <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase' }}>{file.size ? `${(file.size / 1024).toFixed(1)} KB` : 'Collection'}</span>
+                                            {file.mimeType.includes('folder') && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#cbd5e1' }} />}
+                                            {file.mimeType.includes('folder') && <span style={{ fontSize: '0.7rem', color: '#6366f1', fontWeight: 600 }}>Active Directory</span>}
+                                        </div>
                                     </div>
                                 </div>
                                 <button 
                                     onClick={() => handleDelete(file.id, file.name)}
                                     disabled={deletingId === file.id}
-                                    style={{ background: '#fef2f2', border: 'none', color: '#ef4444', padding: '6px', borderRadius: '8px', cursor: 'pointer' }}
-                                    title="Delete File"
+                                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', padding: '6px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }}
+                                    className="hover-danger"
+                                    title="Delete Item"
                                 >
-                                    {deletingId === file.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                    {deletingId === file.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                                 </button>
-                            </div>
-
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <HardDrive size={14} color="#6366f1" />
-                                    <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Drive Location Linked</span>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Created: {new Date(file.createdTime).toLocaleDateString()}</span>
-                                </div>
                             </div>
 
                             <div style={{ display: 'flex', gap: '10px' }}>
@@ -341,9 +348,9 @@ const PartnerDocuments = ({ partnerId, partnerName, initialFolderId, initialDriv
                                     target="_blank" 
                                     rel="noreferrer" 
                                     className="btn btn-secondary"
-                                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.85rem', padding: '8px', textDecoration: 'none' }}
+                                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', fontSize: '0.85rem', padding: '10px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', fontWeight: 600 }}
                                 >
-                                    <ExternalLink size={16} /> View in Drive
+                                    <ExternalLink size={16} /> Open {file.mimeType.includes('folder') ? 'Folder' : 'File'}
                                 </a>
                             </div>
                         </div>

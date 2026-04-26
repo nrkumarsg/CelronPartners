@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getWorkflowDocuments, deleteWorkflowDocument, duplicateWorkflowDocument, convertQuotationToJob, revertJobToQuotation } from '../../lib/workflowV2Service';
+import { getWorkflowDocuments, deleteWorkflowDocument, duplicateWorkflowDocument, convertQuotationToJob, revertJobToQuotation, convertProformaToTaxInvoice } from '../../lib/workflowV2Service';
 import {
     FileText, Plus, Search, Filter,
     MoreVertical, Eye, Trash2, Printer, Copy,
@@ -160,6 +160,26 @@ export default function WorkflowV2Board() {
             setConversionLoading(false);
         }
     };
+
+    const handleConvertToTaxInvoice = async (docId) => {
+        if (!window.confirm('Are you sure you want to convert this Proforma Invoice to a Tax Invoice?')) return;
+        
+        setConversionLoading(true);
+        try {
+            const savedInv = await convertProformaToTaxInvoice(docId);
+            alert(`Tax Invoice ${savedInv.document_no} created successfully!`);
+            fetchDocs();
+            // Optional: navigate to Tax Invoice tab
+            navigate('/workflows?type=Tax+Invoice');
+            setActiveType('Tax Invoice');
+        } catch (error) {
+            console.error("Conversion failed:", error);
+            alert("Failed to convert to Tax Invoice: " + (error.message || "Unknown error"));
+        } finally {
+            setConversionLoading(false);
+        }
+    };
+
 
     const formatDate = (dateStr) => {
         if (!dateStr) return '-';
@@ -725,6 +745,36 @@ export default function WorkflowV2Board() {
                                                             <span>{doc.is_job ? 'Job' : 'Job'}</span>
                                                         </button>
                                                     )}
+    
+                                                    {doc.document_type === 'Proforma Invoice' && (
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-sm"
+                                                            style={{ 
+                                                                position: 'relative', 
+                                                                zIndex: 20, 
+                                                                cursor: 'pointer', 
+                                                                display: 'flex', 
+                                                                alignItems: 'center', 
+                                                                gap: '4px', 
+                                                                padding: '4px 10px', 
+                                                                background: '#ef4444',
+                                                                borderColor: '#ef4444',
+                                                                color: '#fff'
+                                                            }}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                handleConvertToTaxInvoice(doc.id);
+                                                            }}
+                                                            disabled={conversionLoading}
+                                                            title="Convert to Tax Invoice"
+                                                        >
+                                                            {conversionLoading ? <Loader2 size={12} className="animate-spin" /> : <FileText size={12} />} 
+                                                            <span>Convert T.Inv</span>
+                                                        </button>
+                                                    )}
+
 
                                                     <button
                                                         type="button"

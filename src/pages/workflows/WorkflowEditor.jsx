@@ -18,12 +18,14 @@ import {
     generateDocNumber,
     createDocumentRevision,
     convertQuotationToJob,
+    convertProformaToTaxInvoice,
     getGDriveFolderIdForStage
 } from '../../lib/workflowV2Service';
 import { getPartners, getContacts, getDocumentSettings } from '../../lib/store';
 import { getCatalogItems } from '../../lib/catalogService';
 import { supabase } from '../../lib/supabase';
 import { getJobExpenses, saveJobExpense, deleteJobExpense } from '../../lib/jobExpenseService';
+import { getJobPayments, saveCustomerPayment, saveSupplierPayment, deletePayment } from '../../lib/paymentService';
 import {
     Modal,
     QuickPartnerAdd,
@@ -64,6 +66,14 @@ export default function WorkflowEditor() {
     const [expenseModal, setExpenseModal] = useState({ isOpen: false, data: null });
     const [galleryFiles, setGalleryFiles] = useState([]);
     const [loadingGallery, setLoadingGallery] = useState(false);
+    const [galleryUploadProgress, setGalleryUploadProgress] = useState(0);
+    const [galleryUploadSuccess, setGalleryUploadSuccess] = useState(false);
+
+    // Payments State
+    const [customerPayments, setCustomerPayments] = useState([]);
+    const [supplierPayments, setSupplierPayments] = useState([]);
+    const [loadingPayments, setLoadingPayments] = useState(false);
+    const [paymentModal, setPaymentModal] = useState({ isOpen: false, type: null, data: null }); // type: 'customer' | 'supplier'
 
     // Explorer State
     const [explorerFiles, setExplorerFiles] = useState([]);
@@ -74,6 +84,7 @@ export default function WorkflowEditor() {
     const [explorerError, setExplorerError] = useState(null);
     const [uploadingExplorer, setUploadingExplorer] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [paymentQuarter, setPaymentQuarter] = useState('All'); // 'All' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
 
     const [settings, setSettings] = useState(null);
     const [logoBase64, setLogoBase64] = useState('');
@@ -198,7 +209,7 @@ export default function WorkflowEditor() {
         connectGoogleAPI(`job_${id}`);
     };
 
-    const fetchExplorerFiles = async (folderId = null) => {
+    const fetchExplorerFiles = async (folderId = null, forceRoot = false) => {
         const targetId = folderId || explorerFolderId;
         if (!targetId) return;
 
@@ -206,7 +217,38 @@ export default function WorkflowEditor() {
         setExplorerError(null);
         try {
             const token = getStoredToken();
-            const files = await listFolderContent(token, targetId);
+            let files = await listFolderContent(token, targetId);
+
+            // Filter logic: Only show 8 major SOP folders at the root level
+            const isAtRoot = forceRoot || explorerPath.length <= 1;
+
+            if (isAtRoot && targetId) {
+                const sopFolders = [
+                    '1. Enquiries & Quotations',
+                    '2. Supplier Bids & POs',
+                    '3. Operations & Logistics',
+                    '4. Finance & Invoices',
+                    '5. Expenses & Payments',
+                    '6. Job Gallery & Photos',
+                    '7. Correspondence & Admin',
+                    '8. Technical Documents'
+                ];
+                // Strict filter: only these 8 folders, or non-folder files
+                const seenFolders = new Set();
+                files = files.filter(f => {
+                    const isFolder = f.mimeType === 'application/vnd.google-apps.folder';
+                    if (isFolder) {
+                        const name = f.name.trim();
+                        if (sopFolders.includes(name)) {
+                            if (seenFolders.has(name)) return false; // Deduplicate
+                            seenFolders.add(name);
+                            return true;
+                        }
+                        return false; // Hide other folders
+                    }
+                    return true; // Show all files
+                });
+            }
             setExplorerFiles(files);
         } catch (err) {
             console.error('Error fetching explorer files:', err);
@@ -255,6 +297,8 @@ export default function WorkflowEditor() {
             fetchExpenses();
         } else if (activeTab === 'gallery' && !isNew) {
             fetchGallery();
+        } else if (activeTab === 'payments' && !isNew) {
+            fetchPayments();
         }
     }, [activeTab, formData.assigned_job_no]);
 
@@ -264,7 +308,7 @@ export default function WorkflowEditor() {
         try {
             const token = getStoredToken();
             const rootId = await ensureJobFolder();
-            const mediaFolderId = await getOrCreateFolder(token, rootId, '6. Media / Photos');
+            const mediaFolderId = await getOrCreateFolder(token, '6. Job Gallery & Photos', rootId);
             const files = await listFolderContent(token, mediaFolderId);
             setGalleryFiles(files.filter(f => f.mimeType.startsWith('image/')));
         } catch (err) {
@@ -277,17 +321,27 @@ export default function WorkflowEditor() {
     const handleGalleryUpload = async (file) => {
         if (!file) return;
         setLoadingGallery(true);
+        setGalleryUploadProgress(0);
+        setGalleryUploadSuccess(false);
         try {
             const token = getStoredToken();
             const rootId = await ensureJobFolder();
-            const mediaFolderId = await getOrCreateFolder(token, rootId, '6. Media / Photos');
-            await uploadFileToDrive(token, file, { folderId: mediaFolderId });
+            const mediaFolderId = await getOrCreateFolder(token, '6. Job Gallery & Photos', rootId);
+            
+            await uploadFileToDrive(token, file, { 
+                folderId: mediaFolderId,
+                onProgress: (pct) => setGalleryUploadProgress(pct)
+            });
+            
+            setGalleryUploadSuccess(true);
+            setTimeout(() => setGalleryUploadSuccess(false), 3000);
             fetchGallery();
         } catch (err) {
             console.error('Gallery upload failed:', err);
             alert('Upload failed: ' + err.message);
         } finally {
             setLoadingGallery(false);
+            setGalleryUploadProgress(0);
         }
     };
 
@@ -367,7 +421,7 @@ export default function WorkflowEditor() {
         try {
             const token = getStoredToken();
             const folderId = await ensureJobFolder(); // Get or create root
-            const financeFolder = await getOrCreateFolder(token, folderId, '5. Expenses & Payments');
+            const financeFolder = await getOrCreateFolder(token, '5. Expenses & Payments', folderId);
             
             const result = await uploadFileToDrive(token, file, { folderId: financeFolder });
             
@@ -389,118 +443,72 @@ export default function WorkflowEditor() {
         }
     };
 
+    const fetchPayments = async () => {
+        setLoadingPayments(true);
+        const { customerPayments: cp, supplierPayments: sp } = await getJobPayments(id);
+        setCustomerPayments(cp);
+        setSupplierPayments(sp);
+        setLoadingPayments(false);
+    };
+
+    const handleSavePayment = async (type, paymentData) => {
+        const saver = type === 'customer' ? saveCustomerPayment : saveSupplierPayment;
+        const { data, error } = await saver({ ...paymentData, company_id: profile?.company_id, job_id: id });
+        if (error) {
+            alert('Error saving payment: ' + error.message);
+        } else {
+            fetchPayments();
+            setPaymentModal({ isOpen: false, type: null, data: null });
+        }
+    };
+
+    const handleDeletePayment = async (type, paymentId) => {
+        if (!window.confirm('Delete this payment record?')) return;
+        const { error } = await deletePayment(type, paymentId);
+        if (error) alert('Error deleting: ' + error.message);
+        else fetchPayments();
+    };
+
+    const handlePaymentProofUpload = async (type, paymentId, file) => {
+        if (!file) return;
+        try {
+            const token = getStoredToken();
+            const rootId = await ensureJobFolder();
+            const folderName = type === 'customer' ? '4. Finance & Invoices' : '5. Expenses & Payments';
+            const targetFolder = await getOrCreateFolder(token, folderName, rootId);
+            const result = await uploadFileToDrive(token, file, { folderId: targetFolder });
+            const proofUrl = `https://drive.google.com/file/d/${result.id}/view`;
+            
+            const saver = type === 'customer' ? saveCustomerPayment : saveSupplierPayment;
+            await saver({ id: paymentId, proof_url: proofUrl });
+            fetchPayments();
+        } catch (err) {
+            console.error('Proof upload failed:', err);
+            alert('Proof upload failed: ' + err.message);
+        }
+    };
+
     const handleExplorerNavigate = (folder) => {
         setExplorerPath(prev => [...prev, { id: folder.id, name: folder.name }]);
         setExplorerFolderId(folder.id);
-        fetchExplorerFiles(folder.id);
+        fetchExplorerFiles(folder.id, false); // Not root anymore
     };
 
     const handleExplorerBack = (index) => {
         const newPath = explorerPath.slice(0, index + 1);
         const target = newPath[newPath.length - 1];
-        setExplorerPath(newPath);
+            setExplorerPath(newPath);
         setExplorerFolderId(target.id);
-        fetchExplorerFiles(target.id);
+        fetchExplorerFiles(target.id, newPath.length === 1); // Only root if path length is 1
     };
 
-    const handleExplorerUpload = async (e) => {
-        const selectedFiles = Array.from(e.target.files);
-        if (selectedFiles.length === 0) return;
-
-        setUploadingExplorer(true);
-        setUploadProgress(0);
+    const autoUploadPDF = async (docData) => {
         try {
             const token = getStoredToken();
-            for (const file of selectedFiles) {
-                await uploadFileToDrive(token, file, { 
-                    folderId: explorerFolderId,
-                    onProgress: (p) => setUploadProgress(p)
-                });
-            }
-            fetchExplorerFiles();
-        } catch (err) {
-            console.error('Error uploading explorer files:', err);
-            alert('Failed to upload files.');
-        } finally {
-            setUploadingExplorer(false);
-            setUploadProgress(0);
-            e.target.value = '';
-        }
-    };
-
-    const handleExplorerDelete = async (fileId, fileName) => {
-        if (!confirm(`Are you sure you want to delete "${fileName}"?`)) return;
-        try {
-            const token = getStoredToken();
-            await deleteFile(token, fileId);
-            setExplorerFiles(prev => prev.filter(f => f.id !== fileId));
-        } catch (err) {
-            console.error('Error deleting explorer file:', err);
-            alert('Failed to delete file.');
-        }
-    };
-
-    const handleOpenPartnerVault = async () => {
-        if (!formData.partner_id) return;
-        
-        const partner = partners.find(p => p.id === formData.partner_id);
-        if (!partner) return;
-
-        if (partner.google_drive_link) {
-            window.open(partner.google_drive_link, '_blank');
-            return;
-        }
-
-        // Provision if missing
-        if (!confirm(`No Vault found for "${partner.name}". Would you like to create one now in Google Drive?`)) return;
-
-        setLoadingExplorer(true);
-        try {
-            const token = getStoredToken();
-            const result = await provisionPartnerStructure(
-                token, 
-                partner.name, 
-                settings?.gdrive_celron_root_id
-            );
-            
-            // Save to database
-            const { error } = await supabase
-                .from('partners')
-                .update({ 
-                    google_drive_link: result.link,
-                    gdrive_folder_id: result.id
-                })
-                .eq('id', partner.id);
-
-            if (error) throw error;
-
-            // Update local state so we don't fetch again
-            setPartners(prev => prev.map(p => p.id === partner.id ? { ...p, google_drive_link: result.link, gdrive_folder_id: result.id } : p));
-            
-            window.open(result.link, '_blank');
-        } catch (err) {
-            console.error('Error provisioning partner vault:', err);
-            alert('Failed to create partner vault: ' + err.message);
-        } finally {
-            setLoadingExplorer(false);
-        }
-    };
-
-    const triggerAutoPdfUpload = async (docData) => {
-        // Only auto-upload for confirmed quotations or any job-linked documents
-        if (docData.document_type === 'Quotation' && docData.status !== 'Confirmed') return;
-        if (!docData.assigned_job_no) return;
-
-        try {
-            const token = getStoredToken();
-            if (!token) return;
-
-            // Generate Blob
             const pdfBlob = await generateSleekPDF({
                 ...docData,
                 items: lineItems,
                 partners: partners.find(p => p.id === docData.partner_id),
-                contacts: contacts.find(c => c.id === docData.contact_id),
                 vessels: vessels.find(v => v.id === docData.vessel_id),
                 work_locations: workLocations.find(wl => wl.id === docData.work_location_id)
             }, settings, 'blob');
@@ -958,6 +966,24 @@ export default function WorkflowEditor() {
         }
     };
 
+    const handleConvertToTaxInvoice = async () => {
+        if (isNew) return;
+        if (!window.confirm('Convert this Proforma Invoice to a Tax Invoice?')) return;
+        
+        setSaving(true);
+        try {
+            const savedInv = await convertProformaToTaxInvoice(id);
+            alert(`Tax Invoice ${savedInv.document_no} created successfully!`);
+            navigate(`/workflows/editor/tax-invoice/${savedInv.id}`);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to convert to Tax Invoice: ' + (err.message || 'Unknown error'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+
     const handlePrint = async () => {
         if (isNew) {
             alert('Please Save the document first to preview and print.');
@@ -1171,6 +1197,23 @@ export default function WorkflowEditor() {
                             {formData.is_job ? 'Already Job' : (saving ? 'Processing...' : 'Convert to Job')}
                         </button>
                     )}
+                    {!isNew && formData.document_type === 'Proforma Invoice' && (
+                        <button 
+                            className="btn-vibrant" 
+                            onClick={handleConvertToTaxInvoice} 
+                            disabled={saving} 
+                            style={{ 
+                                background: '#ef4444', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '8px', 
+                                opacity: saving ? 0.7 : 1
+                            }}
+                        >
+                            <FileText size={18} /> {saving ? 'Converting...' : 'Convert to Tax Invoice'}
+                        </button>
+                    )}
+
                     <button className="icon-btn" onClick={() => navigate('/workflows')}>
                         <X size={20} />
                     </button>
@@ -1362,11 +1405,12 @@ export default function WorkflowEditor() {
                 <div className="tab-container">
                     <button className={`tab ${activeTab === 'items' ? 'active' : ''}`} onClick={() => setActiveTab('items')}>Order Lines</button>
                     <button className={`tab ${activeTab === 'other' ? 'active' : ''}`} onClick={() => setActiveTab('other')}>Other Info</button>
-                    {formData.assigned_job_no && (
+                            {formData.assigned_job_no && (
                         <div style={{ display: 'flex', gap: '4px' }}>
                             <button className={`tab ${activeTab === 'workflow' ? 'active' : ''}`} onClick={() => setActiveTab('workflow')}>Workflow Suite</button>
-                            <button className={`tab ${activeTab === 'po' ? 'active' : ''}`} onClick={() => setActiveTab('po')}>PO Details</button>
+                             <button className={`tab ${activeTab === 'po' ? 'active' : ''}`} onClick={() => setActiveTab('po')}>PO Details</button>
                             <button className={`tab ${activeTab === 'costing' ? 'active' : ''}`} onClick={() => setActiveTab('costing')}>Project Costing</button>
+                            <button className={`tab ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => setActiveTab('payments')}>Payments & GST</button>
                             <button className={`tab ${activeTab === 'gallery' ? 'active' : ''}`} onClick={() => setActiveTab('gallery')}>Job Gallery</button>
                             <button className={`tab ${activeTab === 'explorer' ? 'active' : ''}`} onClick={() => setActiveTab('explorer')}>Explorer</button>
                         </div>
@@ -1374,24 +1418,61 @@ export default function WorkflowEditor() {
                 </div>
 
                 {activeTab === 'gallery' && (
-                    <div className="glass-panel job-gallery">
+                    <div className="glass-panel job-gallery animate-fade-in">
                         <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <Ship size={20} className="text-accent" />
                                 <h3 style={{ margin: 0 }}>Job Photos & Media</h3>
                             </div>
-                            <label className="btn btn-primary" style={{ cursor: 'pointer' }}>
-                                <Upload size={16} /> Upload Photo
-                                <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => {
-                                    Array.from(e.target.files).forEach(handleGalleryUpload);
-                                }} />
-                            </label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                {loadingGallery && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                        <div style={{ width: '120px', height: '6px', background: '#e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                                            <div style={{ width: `${galleryUploadProgress}%`, height: '100%', background: 'var(--accent)', transition: 'width 0.3s ease' }} />
+                                        </div>
+                                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--accent)' }}>{galleryUploadProgress}%</span>
+                                    </div>
+                                )}
+                                {galleryUploadSuccess && (
+                                    <div className="animate-bounce" style={{ color: '#22c55e', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.9rem', fontWeight: 600 }}>
+                                        <FileCheck size={18} /> Upload Success!
+                                    </div>
+                                )}
+                                <label className="btn btn-primary" style={{ cursor: 'pointer', position: 'relative', overflow: 'hidden' }}>
+                                    <Upload size={16} /> Upload Photo
+                                    {loadingGallery && <div className="btn-loading-overlay" />}
+                                    <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => {
+                                        const files = Array.from(e.target.files);
+                                        // For simplicity, we handle one by one or we could implement a queue
+                                        // Here we'll just process them sequentially to show progress for each
+                                        const uploadSequence = async () => {
+                                            for (const f of files) {
+                                                await handleGalleryUpload(f);
+                                            }
+                                        };
+                                        uploadSequence();
+                                    }} />
+                                </label>
+                            </div>
                         </div>
 
-                        {loadingGallery ? (
+                        {loadingGallery && galleryFiles.length === 0 ? (
                             <div style={{ padding: '80px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                                <Loader2 size={40} className="animate-spin" style={{ margin: '0 auto 16px' }} />
-                                <p>Loading gallery from Google Drive...</p>
+                                <div className="upload-animation-ring">
+                                    <div />
+                                    <div />
+                                    <div />
+                                    <div />
+                                </div>
+                                <p style={{ marginTop: '24px', fontWeight: 600 }}>Uploading to Drive...</p>
+                                <style>{`
+                                    .upload-animation-ring { display: inline-block; position: relative; width: 80px; height: 80px; }
+                                    .upload-animation-ring div { box-sizing: border-box; display: block; position: absolute; width: 64px; height: 64px; margin: 8px; border: 8px solid var(--accent); border-radius: 50%; animation: upload-ring 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite; border-color: var(--accent) transparent transparent transparent; }
+                                    .upload-animation-ring div:nth-child(1) { animation-delay: -0.45s; }
+                                    .upload-animation-ring div:nth-child(2) { animation-delay: -0.3s; }
+                                    .upload-animation-ring div:nth-child(3) { animation-delay: -0.15s; }
+                                    @keyframes upload-ring { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                                `}</style>
                             </div>
                         ) : galleryFiles.length === 0 ? (
                             <div style={{ padding: '80px', textAlign: 'center', background: '#f8fafc', borderRadius: '16px', border: '2px dashed #cbd5e1' }}>
@@ -1411,7 +1492,6 @@ export default function WorkflowEditor() {
                                         <div className="gallery-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', opacity: 0, transition: 'opacity 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
                                             <a href={file.webViewLink} target="_blank" rel="noreferrer" style={{ color: '#fff', padding: '8px', background: 'rgba(255,255,255,0.2)', borderRadius: '50%' }}><ExternalLink size={20} /></a>
                                         </div>
-                                        <style>{`.gallery-item:hover .gallery-overlay { opacity: 1; } .gallery-item:hover { transform: translateY(-4px); }`}</style>
                                         <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '8px', background: 'linear-gradient(transparent, rgba(0,0,0,0.7))', color: '#fff', fontSize: '0.7rem', fontWeight: 600 }}>
                                             {file.name}
                                         </div>
@@ -1419,6 +1499,12 @@ export default function WorkflowEditor() {
                                 ))}
                             </div>
                         )}
+                        <style>{`
+                            .gallery-item:hover .gallery-overlay { opacity: 1; } 
+                            .gallery-item:hover { transform: translateY(-4px); }
+                            .btn-loading-overlay { position: absolute; inset: 0; background: rgba(255,255,255,0.3); animation: pulse 1.5s infinite; }
+                            @keyframes pulse { 0% { opacity: 0.2; } 50% { opacity: 0.5; } 100% { opacity: 0.2; } }
+                        `}</style>
                     </div>
                 )}
 
@@ -2185,6 +2271,184 @@ export default function WorkflowEditor() {
                         </div>
                     </div>
                 )}
+
+                {activeTab === 'payments' && (
+                    <div className="glass-panel job-payments">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#1e293b' }}>Payments & GST Dashboard</h2>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>Reporting Period:</label>
+                                <select 
+                                    className="form-select" 
+                                    value={paymentQuarter} 
+                                    onChange={(e) => setPaymentQuarter(e.target.value)}
+                                    style={{ width: '150px', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                                >
+                                    <option value="All">Full Project</option>
+                                    <option value="Q1">Q1 (Jan - Mar)</option>
+                                    <option value="Q2">Q2 (Apr - Jun)</option>
+                                    <option value="Q3">Q3 (Jul - Sep)</option>
+                                    <option value="Q4">Q4 (Oct - Dec)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* GST & Financial Summary */}
+                        {(() => {
+                            const getQuarter = (dateStr) => {
+                                const month = new Date(dateStr).getMonth();
+                                if (month <= 2) return 'Q1';
+                                if (month <= 5) return 'Q2';
+                                if (month <= 8) return 'Q3';
+                                return 'Q4';
+                            };
+
+                            const fCust = paymentQuarter === 'All' ? customerPayments : customerPayments.filter(p => getQuarter(p.payment_date) === paymentQuarter);
+                            const fSupp = paymentQuarter === 'All' ? supplierPayments : supplierPayments.filter(p => getQuarter(p.payment_date) === paymentQuarter);
+                            
+                            const outGst = fCust.reduce((acc, p) => acc + (parseFloat(p.gst_amount) || 0), 0);
+                            const inGst = fSupp.reduce((acc, p) => acc + (parseFloat(p.gst_amount) || 0), 0);
+                            const netGst = outGst - inGst;
+
+                            return (
+                                <>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '32px' }}>
+                                    <div className="summary-card" style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', padding: '20px', borderRadius: '16px', border: '1px solid #bfdbfe' }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1e40af', textTransform: 'uppercase', marginBottom: '8px' }}>Output GST (Collected)</div>
+                                        <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#1e3a8a' }}>
+                                            {formData.currency} {outGst.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: '#60a5fa', marginTop: '4px' }}>From {fCust.length} receipts</div>
+                                    </div>
+                                    <div className="summary-card" style={{ background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', padding: '20px', borderRadius: '16px', border: '1px solid #fed7aa' }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#9a3412', textTransform: 'uppercase', marginBottom: '8px' }}>Input GST (Paid)</div>
+                                        <div style={{ fontSize: '1.75rem', fontWeight: 900, color: '#7c2d12' }}>
+                                            {formData.currency} {inGst.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: '#fb923c', marginTop: '4px' }}>From {fSupp.length} invoices</div>
+                                    </div>
+                                    <div className="summary-card" style={{ background: `linear-gradient(135deg, ${netGst >= 0 ? '#f0fdf4 0%, #dcfce7 100%' : '#fef2f2 0%, #fee2e2 100%'})`, padding: '20px', borderRadius: '16px', border: `1px solid ${netGst >= 0 ? '#bbf7d0' : '#fecaca'}` }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 800, color: netGst >= 0 ? '#166534' : '#991b1b', textTransform: 'uppercase', marginBottom: '8px' }}>Net GST Position</div>
+                                        <div style={{ fontSize: '1.75rem', fontWeight: 900, color: netGst >= 0 ? '#14532d' : '#7f1d1d' }}>
+                                            {formData.currency} {netGst.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: netGst >= 0 ? '#4ade80' : '#f87171', marginTop: '4px' }}>{netGst >= 0 ? 'Payable to Govt' : 'Claimable Refund'}</div>
+                                    </div>
+                                </div>
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+                                    {/* Customer Payments (Incoming) */}
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}><CreditCard size={20} className="text-accent" /> Customer Ledger</h3>
+                                            <button className="btn btn-sm btn-primary" onClick={() => setPaymentModal({ isOpen: true, type: 'customer', data: null })}>+ Add Payment</button>
+                                        </div>
+                                        <div className="table-container" style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                <thead style={{ background: '#f8fafc' }}>
+                                                    <tr>
+                                                        <th style={{ padding: '12px', textAlign: 'left' }}>Inv No</th>
+                                                        <th style={{ padding: '12px', textAlign: 'left' }}>Date</th>
+                                                        <th style={{ padding: '12px', textAlign: 'right' }}>GST</th>
+                                                        <th style={{ padding: '12px', textAlign: 'right' }}>Total</th>
+                                                        <th style={{ padding: '12px', textAlign: 'center' }}>Proof</th>
+                                                        <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {fCust.length === 0 ? (
+                                                        <tr><td colSpan="6" style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>No {paymentQuarter === 'All' ? '' : paymentQuarter} payments recorded.</td></tr>
+                                                    ) : (
+                                                        fCust.map(p => (
+                                                            <tr key={p.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                                                <td style={{ padding: '12px' }}>{p.invoice_no}</td>
+                                                                <td style={{ padding: '12px' }}>{new Date(p.payment_date).toLocaleDateString()}</td>
+                                                                <td style={{ padding: '12px', textAlign: 'right', color: '#64748b' }}>{p.gst_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{p.amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                                <td style={{ padding: '12px', textAlign: 'center' }}>
+                                                                    {p.proof_url ? (
+                                                                        <a href={p.proof_url} target="_blank" rel="noreferrer" style={{ color: '#10b981' }}><FileCheck size={16} /></a>
+                                                                    ) : (
+                                                                        <label style={{ cursor: 'pointer', color: '#94a3b8' }}>
+                                                                            <Upload size={16} />
+                                                                            <input type="file" hidden onChange={(e) => handlePaymentProofUpload('customer', p.id, e.target.files[0])} />
+                                                                        </label>
+                                                                    )}
+                                                                </td>
+                                                                <td style={{ padding: '12px', textAlign: 'right' }}>
+                                                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                                        <button onClick={() => setPaymentModal({ isOpen: true, type: 'customer', data: p })} style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}><FileText size={14} /></button>
+                                                                        <button onClick={() => handleDeletePayment('customer', p.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={14} /></button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+
+                                    {/* Supplier Payments (Outgoing) */}
+                                    <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                                            <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}><Users size={20} className="text-accent" /> Supplier Ledger</h3>
+                                            <button className="btn btn-sm btn-primary" onClick={() => setPaymentModal({ isOpen: true, type: 'supplier', data: null })}>+ Add Record</button>
+                                        </div>
+                                        <div className="table-container" style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+                                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                                                <thead style={{ background: '#f8fafc' }}>
+                                                    <tr>
+                                                        <th style={{ padding: '12px', textAlign: 'left' }}>Supplier / Inv No</th>
+                                                        <th style={{ padding: '12px', textAlign: 'left' }}>Date</th>
+                                                        <th style={{ padding: '12px', textAlign: 'right' }}>GST</th>
+                                                        <th style={{ padding: '12px', textAlign: 'right' }}>Total</th>
+                                                        <th style={{ padding: '12px', textAlign: 'center' }}>Proof</th>
+                                                        <th style={{ padding: '12px', textAlign: 'right' }}>Actions</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {fSupp.length === 0 ? (
+                                                        <tr><td colSpan="6" style={{ padding: '32px', textAlign: 'center', color: '#94a3b8' }}>No {paymentQuarter === 'All' ? '' : paymentQuarter} records found.</td></tr>
+                                                    ) : (
+                                                        fSupp.map(p => (
+                                                            <tr key={p.id} style={{ borderTop: '1px solid #f1f5f9' }}>
+                                                                <td style={{ padding: '12px' }}>
+                                                                    <div style={{ fontWeight: 600 }}>{partners.find(part => part.id === p.supplier_id)?.name || 'Unknown'}</div>
+                                                                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{p.invoice_no}</div>
+                                                                </td>
+                                                                <td style={{ padding: '12px' }}>{new Date(p.payment_date).toLocaleDateString()}</td>
+                                                                <td style={{ padding: '12px', textAlign: 'right', color: '#64748b' }}>{p.gst_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                                <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700 }}>{p.amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                                <td style={{ padding: '12px', textAlign: 'center' }}>
+                                                                    {p.proof_url ? (
+                                                                        <a href={p.proof_url} target="_blank" rel="noreferrer" style={{ color: '#10b981' }}><FileCheck size={16} /></a>
+                                                                    ) : (
+                                                                        <label style={{ cursor: 'pointer', color: '#94a3b8' }}>
+                                                                            <Upload size={16} />
+                                                                            <input type="file" hidden onChange={(e) => handlePaymentProofUpload('supplier', p.id, e.target.files[0])} />
+                                                                        </label>
+                                                                    )}
+                                                                </td>
+                                                                <td style={{ padding: '12px', textAlign: 'right' }}>
+                                                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                                        <button onClick={() => setPaymentModal({ isOpen: true, type: 'supplier', data: p })} style={{ color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}><FileText size={14} /></button>
+                                                                        <button onClick={() => handleDeletePayment('supplier', p.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}><Trash2 size={14} /></button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                                </>
+                            );
+                        })()}
+                    </div>
+                )}
             </div>
 
             {/* Quick Add Modal */}
@@ -2792,12 +3056,86 @@ export default function WorkflowEditor() {
                         onUploadBill={async (file) => {
                             const token = getStoredToken();
                             const folderId = await ensureJobFolder();
-                            const financeFolder = await getOrCreateFolder(token, folderId, '5. Expenses & Payments');
+                            const financeFolder = await getOrCreateFolder(token, '5. Expenses & Payments', folderId);
                             const result = await uploadFileToDrive(token, file, { folderId: financeFolder });
                             return `https://drive.google.com/file/d/${result.id}/view`;
                         }}
                     />
                 </Modal>
+            )}
+
+            {paymentModal.isOpen && (
+                <div className="modal-backdrop">
+                    <div className="modal-content" style={{ maxWidth: '500px', width: '90%', padding: '24px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ margin: 0 }}>{paymentModal.data ? 'Edit' : 'Add'} {paymentModal.type === 'customer' ? 'Customer Payment' : 'Supplier Payment'}</h3>
+                            <button onClick={() => setPaymentModal({ isOpen: false, type: null, data: null })} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+                        </div>
+                        <form onSubmit={(e) => {
+                            e.preventDefault();
+                            const f = new FormData(e.target);
+                            handleSavePayment(paymentModal.type, {
+                                id: paymentModal.data?.id,
+                                invoice_no: f.get('invoice_no'),
+                                payment_date: f.get('payment_date'),
+                                amount: f.get('amount'),
+                                gst_amount: f.get('gst_amount'),
+                                supplier_id: f.get('supplier_id'),
+                                payment_term: f.get('payment_term'),
+                                status: f.get('status')
+                            });
+                        }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                {paymentModal.type === 'supplier' && (
+                                    <div className="form-item">
+                                        <label>Supplier</label>
+                                        <select name="supplier_id" defaultValue={paymentModal.data?.supplier_id} className="form-select" required>
+                                            <option value="">-- Select Supplier --</option>
+                                            {partners.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+                                <div className="form-item">
+                                    <label>Invoice No</label>
+                                    <input type="text" name="invoice_no" defaultValue={paymentModal.data?.invoice_no} className="form-input" required />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div className="form-item">
+                                        <label>Date</label>
+                                        <input type="date" name="payment_date" defaultValue={paymentModal.data?.payment_date || new Date().toISOString().split('T')[0]} className="form-input" required />
+                                    </div>
+                                    <div className="form-item">
+                                        <label>Status</label>
+                                        <select name="status" defaultValue={paymentModal.data?.status || 'Open'} className="form-select">
+                                            <option value="Open">Open</option>
+                                            <option value="Closed">Closed</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div className="form-item">
+                                        <label>Amount ({formData.currency})</label>
+                                        <input type="number" step="0.01" name="amount" defaultValue={paymentModal.data?.amount} className="form-input" required />
+                                    </div>
+                                    <div className="form-item">
+                                        <label>GST Amount</label>
+                                        <input type="number" step="0.01" name="gst_amount" defaultValue={paymentModal.data?.gst_amount} className="form-input" required />
+                                    </div>
+                                </div>
+                                {paymentModal.type === 'supplier' && (
+                                    <div className="form-item">
+                                        <label>Payment Terms</label>
+                                        <input type="text" name="payment_term" defaultValue={paymentModal.data?.payment_term} className="form-input" placeholder="e.g. 30 Days" />
+                                    </div>
+                                )}
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+                                <button type="button" onClick={() => setPaymentModal({ isOpen: false, type: null, data: null })} className="btn btn-secondary">Cancel</button>
+                                <button type="submit" className="btn btn-primary">Save Payment</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             )}
         </div>
     );
