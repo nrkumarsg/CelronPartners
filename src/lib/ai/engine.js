@@ -1,4 +1,4 @@
-const API_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY) || (typeof process !== 'undefined' && process.env?.VITE_GOOGLE_API_KEY) || 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
+const API_KEY = (typeof process !== 'undefined' && process.env?.VITE_GOOGLE_API_KEY) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY) || 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
 
 // -----------------------------
 // CONFIG (2026 Stable Models)

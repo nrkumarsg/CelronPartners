@@ -2,9 +2,9 @@
 import { supabase } from './supabase.js';
 import { chatWithGemini } from './geminiService.js';
 
-const GOOGLE_API = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY) || 'AIzaSyBupqkwGeIb3VWSbhQarSKtP9cRTcklWks';
-const GOOGLE_CX = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_CX : (process.env.VITE_GOOGLE_CX || process.env.GOOGLE_CX || 'd6a6c15e9403b4a9d'));
-const GEOCODE_API = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_GEOCODE_KEY) || 'AIzaSyBupqkwGeIb3VWSbhQarSKtP9cRTcklWks';
+const GOOGLE_API = (typeof process !== 'undefined' && process.env?.VITE_GOOGLE_API_KEY) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY) || 'AIzaSyBupqkwGeIb3VWSbhQarSKtP9cRTcklWks';
+const GOOGLE_CX = (typeof process !== 'undefined' && (process.env.VITE_GOOGLE_CX || process.env.GOOGLE_CX)) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_CX) || 'd6a6c15e9403b4a9d';
+const GEOCODE_API = (typeof process !== 'undefined' && process.env?.VITE_GOOGLE_GEOCODE_KEY) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_GEOCODE_KEY) || 'AIzaSyBupqkwGeIb3VWSbhQarSKtP9cRTcklWks';
 
 const COUNTRY_CODES = {
     'Singapore': 'SG', 'Malaysia': 'MY', 'Indonesia': 'ID', 'Thailand': 'TH', 'Vietnam': 'VN',

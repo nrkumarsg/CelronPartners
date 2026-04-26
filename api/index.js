@@ -3,11 +3,12 @@ import express from 'express';
 import cors from 'cors';
 import { runUniversalSearch } from '../src/lib/universalFinder.js';
 import { supabase } from '../src/lib/supabase.js';
+import { chatWithGemini } from '../src/lib/geminiService.js';
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Independent health check
 app.get('/health', (req, res) => res.json({ status: 'up', source: 'root' }));
@@ -138,7 +139,7 @@ async function insertMockResults(searchId, query) {
  * Direct AI Discovery Fallback.
  */
 async function generateAIResults(searchId, query) {
-    const API_KEY = process.env.VITE_GOOGLE_API_KEY;
+    const API_KEY = process.env.VITE_GOOGLE_API_KEY || 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
     const MODELS = { FAST: 'gemini-flash-latest', SMART: 'gemini-pro-latest' };
 
     const prompt = ` PROCUREMENT EXPERT MODE. Query: "${query}". 
@@ -176,14 +177,10 @@ async function generateAIResults(searchId, query) {
     try {
         suppliers = await runWithFallback(MODELS.FAST);
         if (!suppliers || !Array.isArray(suppliers)) suppliers = [];
-    } catch (err) {
-        console.error("AI Discovery Error:", err);
-        throw err;
-    }
-
-    if (suppliers.length > 0) {
-        // Map ONLY to confirmed existing columns
-        const finalResults = suppliers.map((item, idx) => ({
+        
+        if (suppliers.length > 0) {
+            // Map ONLY to confirmed existing columns
+            const finalResults = suppliers.map((item, idx) => ({
                 search_id: searchId,
                 title: `${item.name} | Verified Live Source`,
                 url: item.url || "https://www.google.com/search?q=" + encodeURIComponent((item.name || 'supplier') + " Singapore"),
@@ -294,7 +291,6 @@ app.post('/api/universal-finder/chat', async (req, res) => {
         ${searchResultsRes.data?.map(r => `- ${r.supplier_name} in ${r.supplier_location || 'Worldwide'}: ${r.snippet} (Link: ${r.url})`).join('\n') || 'No live results found yet.'}
         `;
 
-        const { chatWithGemini } = await import('../src/lib/geminiService.js');
         const finalPrompt = req.body.system_prompt ? `${req.body.system_prompt}\n\n${context}\n\nUser Question: ${prompt}` : `${context}\n\nUser Question: ${prompt}`;
         const aiResponse = await chatWithGemini(finalPrompt, req.body.image, history);
 
