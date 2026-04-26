@@ -2,9 +2,9 @@
 import { supabase } from './supabase.js';
 import { chatWithGemini } from './geminiService.js';
 
-const GOOGLE_API = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
+const GOOGLE_API = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY) || 'AIzaSyBupqkwGeIb3VWSbhQarSKtP9cRTcklWks';
 const GOOGLE_CX = (typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_GOOGLE_CX : (process.env.VITE_GOOGLE_CX || process.env.GOOGLE_CX || 'd6a6c15e9403b4a9d'));
-const GEOCODE_API = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
+const GEOCODE_API = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_GEOCODE_KEY) || 'AIzaSyBupqkwGeIb3VWSbhQarSKtP9cRTcklWks';
 
 const COUNTRY_CODES = {
     'Singapore': 'SG', 'Malaysia': 'MY', 'Indonesia': 'ID', 'Thailand': 'TH', 'Vietnam': 'VN',
@@ -127,7 +127,7 @@ export async function runUniversalSearch({
     if (webJson.error) {
         if (webJson.error.message?.includes('API key not valid')) {
             console.warn("[Finder] Web Search Key invalid. Retrying with hardcoded fallback...");
-            const hardcodedKey = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
+            const hardcodedKey = 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
             const retryWebUrl = webUrl.split('key=')[0] + `key=${hardcodedKey}` + (webUrl.includes('&') ? '&' + webUrl.split('&').slice(1).join('&') : '');
             const retryRes = await fetch(retryWebUrl);
             finalWebJson = await retryRes.json().catch(() => ({ error: { message: "JSON Parse Error" } }));

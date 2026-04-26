@@ -138,7 +138,7 @@ async function insertMockResults(searchId, query) {
  * Direct AI Discovery Fallback.
  */
 async function generateAIResults(searchId, query) {
-    const API_KEY = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
+    const API_KEY = process.env.VITE_GOOGLE_API_KEY;
     const MODELS = { FAST: 'gemini-flash-latest', SMART: 'gemini-pro-latest' };
 
     const prompt = ` PROCUREMENT EXPERT MODE. Query: "${query}". 
@@ -296,7 +296,7 @@ app.post('/api/universal-finder/chat', async (req, res) => {
 
         const { chatWithGemini } = await import('../src/lib/geminiService.js');
         const finalPrompt = req.body.system_prompt ? `${req.body.system_prompt}\n\n${context}\n\nUser Question: ${prompt}` : `${context}\n\nUser Question: ${prompt}`;
-        const aiResponse = await chatWithGemini(finalPrompt, null, history);
+        const aiResponse = await chatWithGemini(finalPrompt, req.body.image, history);
 
         res.json({ response: aiResponse });
     } catch (e) {

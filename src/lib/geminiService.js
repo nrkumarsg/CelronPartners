@@ -1,4 +1,4 @@
-import { runAI } from './ai/engine';
+import { runAI } from './ai/engine.js';
 
 /**
  * Sends a message to Gemini with optional image data and tools.
@@ -116,22 +116,43 @@ export async function researchContactWithGemini(name, companyName) {
 /**
  * Vessel Intelligence: Redirects to runAI('autofill')
  */
-export async function researchVesselWithGemini(vesselName) {
+export async function researchVesselWithGemini(vesselName, imoNumber = '', mmsi = '', searchContext = '') {
     const tools = [{ google_search: {} }];
     try {
-        const data = await runAI('autofill', { vessel_name: vesselName }, [], tools);
+        const data = await runAI('autofill', { 
+            vessel_name: vesselName, 
+            imo_number: imoNumber, 
+            mmsi: mmsi,
+            searchContext 
+        }, [], tools);
+        
         return {
             fields: {
-                imo_number: data.imo_number || data.imo || '',
-                mmsi: data.mmsi || '',
+                vessel_name: data.vessel_name || vesselName,
+                imo_number: data.imo_number || imoNumber || '',
+                mmsi: data.mmsi || mmsi || '',
                 vessel_type: data.vessel_type || '',
-                vessel_management: data.vessel_management || data.management || '',
-                vessel_owner: data.vessel_owner || data.owner || ''
-            }
+                vessel_management: data.vessel_management || '',
+                vessel_owner: data.vessel_owner || ''
+            },
+            confidence: data.confidence || 'medium',
+            manual_verification_required: data.manual_verification_required ?? true
         };
     } catch (err) {
         console.error('Gemini Vessel Error:', err);
-        throw new Error('Failed to source vessel data via AI.');
+        // Fallback to manual entry if AI fails (e.g. quota or key leak)
+        return {
+            fields: {
+                vessel_name: vesselName,
+                imo_number: imoNumber || '',
+                mmsi: mmsi || '',
+                vessel_type: '',
+                vessel_management: '',
+                vessel_owner: ''
+            },
+            confidence: 'none',
+            error: err.message || 'AI Research temporarily unavailable'
+        };
     }
 }
 

@@ -1,11 +1,11 @@
-const API_KEY = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
+const API_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY) || (typeof process !== 'undefined' && process.env?.VITE_GOOGLE_API_KEY) || 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
 
 // -----------------------------
 // CONFIG (2026 Stable Models)
 // -----------------------------
 const MODELS = {
-  FAST: "gemini-flash-latest", // Currently Gemini 3 Flash
-  SMART: "gemini-pro-latest",  // Currently Gemini 3 Pro
+  FAST: "gemini-flash-latest", 
+  SMART: "gemini-pro-latest",  
 };
 
 const API_VERSION = 'v1beta';
@@ -19,12 +19,28 @@ const DEFAULT_CONFIG = {
 // -----------------------------
 // CORE RUNNER (WITH FALLBACK)
 // -----------------------------
-async function runWithFallback(prompt, useSmart = false, history = [], tools = null) {
+async function runWithFallback(prompt, useSmart = false, history = [], tools = null, image = null) {
   const modelName = useSmart ? MODELS.SMART : MODELS.FAST;
   const url = `https://generativelanguage.googleapis.com/${API_VERSION}/models/${modelName}:generateContent?key=${API_KEY}`;
 
   const contents = [...history];
-  contents.push({ role: 'user', parts: [{ text: prompt }] });
+  const userPart = { text: prompt };
+  const parts = [userPart];
+
+  if (image) {
+    // Check if it's a base64 string with prefix
+    const base64Data = image.includes('base64,') ? image.split('base64,')[1] : image;
+    const mimeType = image.match(/data:([^;]+);/) ? image.match(/data:([^;]+);/)[1] : 'image/jpeg';
+    
+    parts.unshift({
+      inlineData: {
+        mimeType: mimeType,
+        data: base64Data
+      }
+    });
+  }
+
+  contents.push({ role: 'user', parts });
 
   try {
     const response = await fetch(url, {
@@ -47,7 +63,21 @@ async function runWithFallback(prompt, useSmart = false, history = [], tools = n
             console.warn(`[AI Engine] Search tool quota exceeded. Retrying without tools...`);
             return runWithFallback(prompt + " (Search tool unavailable, use internal knowledge)", useSmart, history, null);
          }
-         console.warn(`[AI Engine] ${modelName} failed (${data.error.status}), switching...`);
+         console.warn(`[AI Engine] ${modelName} quota exceeded. Retrying with fallback key...`);
+         const hardcodedKey = 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
+         if (!url.includes(hardcodedKey)) {
+             const newUrl = url.split('?')[0] + `?key=${hardcodedKey}`;
+             const retryRes = await fetch(newUrl, {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ contents, tools, generationConfig: DEFAULT_CONFIG })
+             });
+             const retryData = await retryRes.json();
+             if (!retryData.error) {
+                 const text = retryData.candidates?.[0]?.content?.parts?.[0]?.text;
+                 return safeJSONParse(text);
+             }
+         }
          if (!useSmart) return runWithFallback(prompt, true, history, tools);
       }
       if (data.error.status === 'NOT_FOUND') {
@@ -55,7 +85,7 @@ async function runWithFallback(prompt, useSmart = false, history = [], tools = n
          if (!useSmart) return runWithFallback(prompt, true, history, tools);
       }
       if (data.error.status === 'INVALID_ARGUMENT' && data.error.message.includes('API key not valid')) {
-          const hardcodedKey = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
+          const hardcodedKey = 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
           if (url.includes(hardcodedKey)) throw new Error("CRITICAL: Hardcoded API Key is also invalid.");
           console.warn(`[AI Engine] Environment API Key invalid. Retrying with hardcoded fallback...`);
           const newUrl = url.split('?')[0] + `?key=${hardcodedKey}`;
@@ -116,7 +146,37 @@ function safeJSONParse(text) {
  * Used for Vessel details, Company details, etc.
  */
 async function runAutofill(input, history, tools) {
-  const prompt = `
+  const isVessel = input.vessel_name || input.imo_number || input.mmsi;
+  
+  const prompt = isVessel ? `
+  You are the **Antigravity Maritime Research Agent**.
+  
+  ### MISSION:
+  Populate a Vessel Information form for the Global Maritime Industry.
+  
+  ### CONTEXT:
+  Input Vessel Name: ${input.vessel_name || 'N/A'}
+  IMO Number: ${input.imo_number || 'N/A'}
+  MMSI Number: ${input.mmsi || 'N/A'}
+  Web Search Data: ${input.searchContext || 'N/A'}
+  
+  ### INSTRUCTIONS:
+  1. **Extract**: Look for IMO, MMSI, Vessel Type, Management, and Owner in the 'Web Search Data' first.
+  2. **Analyze**: Use your internal maritime database knowledge to fill gaps if web search is sparse.
+  3. **Verification**: IMO numbers are usually 7 digits. MMSI are 9 digits.
+  
+  ### RETURN (JSON):
+  {
+    "vessel_name": "...",
+    "imo_number": "...",
+    "mmsi": "...",
+    "vessel_type": "...",
+    "vessel_management": "...",
+    "vessel_owner": "...",
+    "confidence": "high|medium|low",
+    "manual_verification_required": true/false
+  }
+  ` : `
   You are the **Antigravity Research Agent**.
   
   ### MISSION:
@@ -129,16 +189,6 @@ async function runAutofill(input, history, tools) {
   
   ### MANDATORY:
   If live web search is restricted or unavailable, you MUST use your internal training data to provide the most accurate UEN, Address, Pincode, and Business Category for ${input.companyName}. 
-  For established Singapore companies, you have high-fidelity knowledge. Do not return empty fields.
-  
-  **Website Selection**: Prioritize the URL explicitly provided in the 'Web Search Data' over any generic guesses.
-  
-  ### INSTRUCTIONS:
-  1. **Extract**: Look for UEN, Address, Pincode, Email, and Phone in the 'Web Search Data' first.
-  2. **Analyze**: Categorize the company: [Partner, Service, Automation, Calibration, Electrical, Mechanical, Instrumentation, Safety, Supplier].
-  3. **Brand Discovery**: List brands they are authorized for.
-  4. **Activity**: Summarize their business in 1 sentence.
-  5. **Validation**: Singapore UENs must be 9/10 chars (e.g. 201436227C).
   
   ### RETURN (JSON):
   {
@@ -158,7 +208,7 @@ async function runAutofill(input, history, tools) {
   }
   `;
 
-  return runWithFallback(prompt, false, history, tools);
+  return runWithFallback(prompt, false, history, tools, input.image);
 }
 
 
