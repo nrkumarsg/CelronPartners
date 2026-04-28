@@ -7,7 +7,7 @@ import {
     MoreHorizontal, Search, Settings,
     ChevronDown, CreditCard, User, Users, MapPin, Paperclip,
     FileCheck, Play, RefreshCw, AlertCircle, Loader2,
-    ExternalLink, Folder, File, HardDrive, Upload
+    ExternalLink, Folder, File, HardDrive, Upload, MessageSquare
 } from 'lucide-react';
 import { listFolderContent, uploadFileToDrive, deleteFile, getOrCreateFolder, provisionFullProjectStructure, provisionPartnerStructure } from '../../lib/driveService';
 import { validateToken, connectGoogleAPI, getStoredToken } from '../../lib/googleAuthService';
@@ -40,6 +40,7 @@ import { ITEM_UNITS } from '../../utils/units';
 import WorkflowDocumentLayout from '../../components/workflow/WorkflowDocumentLayout';
 import html2pdf from 'html2pdf.js';
 import { generateSleekPDF } from '../../lib/pdfGeneratorV2';
+import { WhatsAppShareModal } from '../../components/workflow/WhatsAppShareModal';
 
 export default function WorkflowEditor() {
     const { type, id } = useParams();
@@ -57,6 +58,7 @@ export default function WorkflowEditor() {
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState('items'); // 'items' | 'other'
     const [modal, setModal] = useState({ isOpen: false, type: null });
+    const [whatsappShareModal, setWhatsappShareModal] = useState({ isOpen: false });
     const [emailPreview, setEmailPreview] = useState(null);
     const [poModal, setPoModal] = useState({ isOpen: false });
     const [lineItems, setLineItems] = useState([]);
@@ -1032,6 +1034,43 @@ export default function WorkflowEditor() {
         setEmailPreview({ to: recipient, cc: '', bcc: '', subject, body, attachments: [] });
     };
 
+    const handleWhatsApp = async () => {
+        if (isNew) {
+            alert('Please Save the document first to share.');
+            return;
+        }
+        setWhatsappShareModal({ isOpen: true });
+    };
+
+    const performWhatsAppShare = async (customMessage) => {
+        if (navigator.share && navigator.canShare) {
+            setSaving(true);
+            try {
+                const element = printRef.current;
+                const opt = {
+                    margin: 10,
+                    filename: `${formData.document_type}_${formData.document_no || 'Draft'}.pdf`,
+                    image: { type: 'jpeg', quality: 0.98 },
+                    html2canvas: { scale: 2, useCORS: true, logging: false },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+                const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
+                const file = new File([pdfBlob], opt.filename, { type: 'application/pdf' });
+                if (navigator.canShare({ files: [file] })) {
+                    await navigator.share({ files: [file], title: opt.filename, text: customMessage || '' });
+                    setSaving(false);
+                    return;
+                }
+            } catch (err) {
+                console.error('[WhatsApp Share] Direct file share failed:', err);
+            } finally {
+                setSaving(false);
+            }
+        } else {
+            alert("Direct PDF sharing is only available on Mobile or modern browsers. Please use individual 'Chat Now' links for desktop.");
+        }
+    };
+
     const sendEmail = async () => {
         setSaving(true);
         try {
@@ -1173,6 +1212,9 @@ export default function WorkflowEditor() {
                     </button>
                     <button className="btn-vibrant-secondary" onClick={handleEmail}>
                         <Send size={18} /> Send by Email
+                    </button>
+                    <button className="btn-vibrant-secondary" style={{ background: '#25D366', color: '#fff', border: 'none' }} onClick={handleWhatsApp}>
+                        <MessageSquare size={18} /> Share via WhatsApp
                     </button>
                     {!isNew && (
                         <button className="btn-vibrant-secondary" onClick={handleRevision}>
@@ -3137,6 +3179,14 @@ export default function WorkflowEditor() {
                     </div>
                 </div>
             )}
+            <WhatsAppShareModal 
+                isOpen={whatsappShareModal.isOpen}
+                onClose={() => setWhatsappShareModal({ isOpen: false })}
+                contacts={contacts.filter(c => c.partnerId === formData.partner_id)}
+                partner={partners.find(p => p.id === formData.partner_id)}
+                documentData={formData}
+                onShareFile={performWhatsAppShare}
+            />
         </div>
     );
 }

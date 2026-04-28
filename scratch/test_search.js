@@ -1,26 +1,23 @@
-import { createClient } from '@supabase/supabase-js';
 import fetch from 'node-fetch';
-import dotenv from 'dotenv';
-dotenv.config();
 
-const GOOGLE_API = 'AIzaSyA5YW4mWUo__7hwGjvLor-DDsh-spg2r5M';
-const GOOGLE_CX = '259ae1101668d4071';
+const GOOGLE_API = 'AIzaSyDasTT2wm8TGbeBvwScbdVRIotE8IXWisA';
+const GOOGLE_CX = 'd6a6c15e9403b4a9d';
+const query = 'ROTA-MACH ELECTRICAL SERVICES';
 
-async function testSearch(query) {
+async function testSearch() {
     let webUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}`;
-    console.log('Searching:', webUrl);
+    console.log(`Searching: ${webUrl}`);
     
     try {
         const res = await fetch(webUrl);
         const json = await res.json();
         if (json.error) {
-            console.error('Google API Error:', json.error);
+            console.error('Google Search Error:', json.error);
         } else {
-            console.log('Results found:', json.items?.length || 0);
+            console.log('Results Found:', json.items?.length || 0);
             if (json.items) {
-                json.items.slice(0, 3).forEach((item, i) => {
+                json.items.forEach((item, i) => {
                     console.log(`[${i}] ${item.title}`);
-                    console.log(`    ${item.snippet}`);
                 });
             }
         }
@@ -29,4 +26,4 @@ async function testSearch(query) {
     }
 }
 
-testSearch('Powerhouse controls pte ltd');
+testSearch();

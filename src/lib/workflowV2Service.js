@@ -167,15 +167,12 @@ export const getWorkflowDocumentById = async (id) => {
     const { data: document, error: docError } = await supabase
         .from('workflow_documents')
         .select(`*, partners(*), vessels(*), contacts!contact_id(*), work_locations(*)`)
-        .eq('id', id);
+        .eq('id', id)
+        .single();
 
     if (docError) {
-        console.error('getWorkflowDocumentById Error:', docError);
+        console.error("Error fetching document:", docError);
         return { error: docError };
-    }
-
-    if (!document || document.length === 0) {
-        return { error: { message: "Document not found or access denied" } };
     }
 
     const { data: items, error: itemsError } = await supabase
@@ -205,15 +202,13 @@ export const getWorkflowDocumentById = async (id) => {
         }
     });
 
-    const doc = document[0];
-    
     // Unnest salesperson details from delivery_verification if they exist
-    if (doc.delivery_verification) {
-        if (doc.delivery_verification.salesperson_phone) doc.salesperson_phone = doc.delivery_verification.salesperson_phone;
-        if (doc.delivery_verification.salesperson_email) doc.salesperson_email = doc.delivery_verification.salesperson_email;
+    if (document.delivery_verification) {
+        if (document.delivery_verification.salesperson_phone) document.salesperson_phone = document.delivery_verification.salesperson_phone;
+        if (document.delivery_verification.salesperson_email) document.salesperson_email = document.delivery_verification.salesperson_email;
     }
 
-    return { data: { ...doc, items: uniqueItems }, error: itemsError };
+    return { data: { ...document, items: uniqueItems }, error: itemsError };
 };
 
 /**

@@ -1,11 +1,11 @@
-const API_KEY = (typeof process !== 'undefined' && process.env?.VITE_GOOGLE_API_KEY) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY) || 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
+const API_KEY = (typeof process !== 'undefined' && process.env?.VITE_GOOGLE_API_KEY) || (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY) || 'AIzaSyDasTT2wm8TGbeBvwScbdVRIotE8IXWisA';
 
 // -----------------------------
 // CONFIG (2026 Stable Models)
 // -----------------------------
 const MODELS = {
-  FAST: "gemini-flash-latest", 
-  SMART: "gemini-pro-latest",  
+  FAST: "gemini-2.5-flash", 
+  SMART: "gemini-2.5-flash",  
 };
 
 const API_VERSION = 'v1beta';
@@ -64,7 +64,7 @@ async function runWithFallback(prompt, useSmart = false, history = [], tools = n
             return runWithFallback(prompt + " (Search tool unavailable, use internal knowledge)", useSmart, history, null);
          }
          console.warn(`[AI Engine] ${modelName} quota exceeded. Retrying with fallback key...`);
-         const hardcodedKey = 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
+         const hardcodedKey = 'AIzaSyDasTT2wm8TGbeBvwScbdVRIotE8IXWisA';
          if (!url.includes(hardcodedKey)) {
              const newUrl = url.split('?')[0] + `?key=${hardcodedKey}`;
              const retryRes = await fetch(newUrl, {
@@ -85,7 +85,7 @@ async function runWithFallback(prompt, useSmart = false, history = [], tools = n
          if (!useSmart) return runWithFallback(prompt, true, history, tools);
       }
       if (data.error.status === 'INVALID_ARGUMENT' && data.error.message.includes('API key not valid')) {
-          const hardcodedKey = 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
+          const hardcodedKey = 'AIzaSyDasTT2wm8TGbeBvwScbdVRIotE8IXWisA';
           if (url.includes(hardcodedKey)) throw new Error("CRITICAL: Hardcoded API Key is also invalid.");
           console.warn(`[AI Engine] Environment API Key invalid. Retrying with hardcoded fallback...`);
           const newUrl = url.split('?')[0] + `?key=${hardcodedKey}`;
@@ -177,18 +177,22 @@ async function runAutofill(input, history, tools) {
     "manual_verification_required": true/false
   }
   ` : `
-  You are the **Antigravity Research Agent**.
+  You are the **Antigravity Research Agent**, specializing in the Marine and Industrial sectors.
   
   ### MISSION:
-  Populate a CRM form for the Marine Industry.
+  Populate a CRM form with highly accurate company intelligence.
   
   ### CONTEXT:
-  Input: ${input.companyName}
-  Website: ${input.website}
-  Web Search Data: ${input.searchContext || 'N/A'}
+  Input Company Name: ${input.companyName}
+  Target Website: ${input.website || 'N/A'}
+  Live Web Context: ${input.searchContext || 'N/A'}
   
-  ### MANDATORY:
-  If live web search is restricted or unavailable, you MUST use your internal training data to provide the most accurate UEN, Address, Pincode, and Business Category for ${input.companyName}. 
+  ### INSTRUCTIONS:
+  1. **Primary Search**: Analyze the 'Live Web Context' for UEN (Unique Entity Number), Address, Pincode, Email, and Phone.
+  2. **Singapore Logic**: If the company is in Singapore, UENs follow specific formats (e.g., 201436227C or T14LL0001A). Look for directories like SGPBusiness, Streetdirectory, or Opencorporates.
+  3. **Internal Knowledge**: If 'Live Web Context' is sparse or restricted, you MUST leverage your internal training data to estimate the most likely UEN, HQ Address, and Business Category for ${input.companyName}.
+  4. **Activity Summary**: Provide a concise 2-sentence summary of what this company does (e.g., "Specializes in marine electrical repairs and switchboard maintenance").
+  5. **Clean Data**: Do NOT return placeholder text like "Not found" or "N/A" if you can make an educated guess. If you are guessing, set confidence to "low".
   
   ### RETURN (JSON):
   {
@@ -200,11 +204,11 @@ async function runAutofill(input, history, tools) {
     "address": "...",
     "country": "...",
     "postal_code": "...",
-    "categories": [],
-    "brands": "...",
+    "categories": ["Supplier", "Service", "Partner", etc],
+    "brands": "comma, separated, list",
     "activity_summary": "...",
     "confidence": "high|medium|low",
-    "manual_verification_required": true/false
+    "manual_verification_required": true
   }
   `;
 

@@ -148,7 +148,8 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                 const { data: { user } } = await supabase.auth.getUser();
                 const searchId = await runUniversalSearch({ 
                     query: formData.name, 
-                    userId: user?.id || '00000000-0000-0000-0000-000000000000' 
+                    userId: user?.id || '00000000-0000-0000-0000-000000000000',
+                    skipAi: true
                 });
                 
                 const { data: results } = await supabase
@@ -355,7 +356,7 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                                 <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Pincode:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.pincode || '-'}</span></div>
                                 <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Email:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.email1 || '-'}</span></div>
                                 <div style={{ background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Phone:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.phone1 || '-'}</span></div>
-                                <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Website:</strong> <span style={{ color: '#4338ca', fontWeight: 600, textDecoration: 'underline' }}>{aiPreview.weblink || '-'}</span></div>
+                                <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Website:</strong> <span style={{ color: '#4338ca', fontWeight: 600, textDecoration: 'underline' }}>{aiPreview.website || '-'}</span></div>
                                 <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Address:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.address || '-'}</span></div>
                                 <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '10px', borderRadius: '12px' }}><strong>Brands Represented:</strong> <span style={{ color: '#0f172a', fontWeight: 600 }}>{aiPreview.brands || '-'}</span></div>
                                 
@@ -486,8 +487,8 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                     <input
                         type="text"
                         className="premium-input"
-                        name="postal_code"
-                        value={formData.postal_code}
+                        name="pincode"
+                        value={formData.pincode}
                         onChange={handleChange}
                         placeholder="6-digit code"
                         style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}

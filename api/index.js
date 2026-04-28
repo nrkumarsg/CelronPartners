@@ -139,8 +139,8 @@ async function insertMockResults(searchId, query) {
  * Direct AI Discovery Fallback.
  */
 async function generateAIResults(searchId, query) {
-    const API_KEY = process.env.VITE_GOOGLE_API_KEY || 'AIzaSyAA9BV8_mIBmZ58RU4HLAc-3GuFPqqXLKM';
-    const MODELS = { FAST: 'gemini-flash-latest', SMART: 'gemini-pro-latest' };
+    const API_KEY = process.env.VITE_GOOGLE_API_KEY || 'AIzaSyDasTT2wm8TGbeBvwScbdVRIotE8IXWisA';
+    const MODELS = { FAST: 'gemini-2.5-flash', SMART: 'gemini-2.5-flash' };
 
     const prompt = ` PROCUREMENT EXPERT MODE. Query: "${query}". 
     Identify if this is a specific Brand/Model (e.g. OMRON H3CR-A8).

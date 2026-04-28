@@ -52,7 +52,7 @@ export function useSupplierActions(companyId, enquiryId, initialEnquiry) {
                     phone: supplier.phone || '',
                     email: supplier.email1 || '',
                     attn_name: primaryContact?.name || '',
-                    attn_phone: primaryContact?.mobile || primaryContact?.phone || '',
+                    attn_phone: primaryContact?.handphone || primaryContact?.phone || '',
                     attn_email: primaryContact?.email || ''
                 }
             }));

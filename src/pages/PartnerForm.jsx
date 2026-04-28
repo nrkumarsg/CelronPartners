@@ -44,6 +44,7 @@ export default function PartnerForm() {
         business_card_back_url: '',
         gdrive_folder_id: '',
         google_drive_link: '',
+        activity_summary: '',
         is_shared: false
     });
 
@@ -143,6 +144,7 @@ export default function PartnerForm() {
             email1: aiPreview.email1 || prev.email1,
             phone1: aiPreview.phone1 || prev.phone1,
             weblink: aiPreview.website || prev.weblink,
+            activity_summary: aiPreview.activity_summary || prev.activity_summary,
             info: aiPreview.activity_summary ? `${prev.info || ''}<p><br></p><p><strong>[AI ACTIVITY SUMMARY]</strong></p><p>${aiPreview.activity_summary}</p>` : (prev.info || '')
         }));
         setAiPreview(null);

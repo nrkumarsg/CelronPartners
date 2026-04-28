@@ -6,7 +6,7 @@ import { convertEnquiryToV2Document } from '../../lib/workflowV2Service';
 
 import { getPartners, getDocumentSettings, saveVessel, saveWorkLocation } from '../../lib/store';
 import { getCatalogItems, createCatalogItem, updateCatalogItem } from '../../lib/catalogService';
-import { ArrowLeft, ArrowRight, Send, Ship, Mail, Phone, ExternalLink, Database, FolderPlus, ArrowRightLeft, FileText, CheckCircle2, Clock, DollarSign, BadgeDollarSign, ShieldCheck, Plus, Search, Trash, Save, Edit, AlertTriangle, Users, Eye, MailCheck, Download, Calendar, ChevronDown, PlusCircle, MapPin } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Send, Ship, Mail, Phone, ExternalLink, Database, FolderPlus, ArrowRightLeft, FileText, CheckCircle2, Clock, DollarSign, BadgeDollarSign, ShieldCheck, Plus, Search, Trash, Save, Edit, AlertTriangle, Users, Eye, MailCheck, Download, Calendar, ChevronDown, PlusCircle, MapPin, MessageSquare } from 'lucide-react';
 import UploadOverlay from '../../components/common/UploadOverlay';
 import SafeDriveLink from '../../components/common/SafeDriveLink';
 import EmailPreviewModal from '../../components/workflows/EmailPreviewModal';
@@ -18,6 +18,7 @@ import DocumentManager from '../../components/workflows/DocumentManager';
 import RichTextEditor from '../../components/common/RichTextEditor';
 import CommunicationWall from '../../components/common/CommunicationWall';
 import { ITEM_UNITS } from '../../utils/units';
+import { WhatsAppShareModal } from '../../components/workflow/WhatsAppShareModal';
 
 export default function EnquiryDetails() {
     const { id } = useParams();
@@ -75,6 +76,7 @@ export default function EnquiryDetails() {
     const [showNewLocationModal, setShowNewLocationModal] = useState(false);
     const [editingCatalogItem, setEditingCatalogItem] = useState(null);
     const [newItemForm, setNewItemForm] = useState({ name: '', specification: '' });
+    const [whatsappShareModal, setWhatsappShareModal] = useState({ isOpen: false });
 
     useEffect(() => {
         if (profile?.company_id) {
@@ -147,9 +149,17 @@ export default function EnquiryDetails() {
             ? `Dear ${recipientOverrides[selectedSuppliers[0].id]?.attn_name || 'Supplier'},\n\n`
             : `Dear Supplier,\n\n`;
 
-        const body = encodeURIComponent(`${greeting}We are pleased to invite you to quote for the following items:\n\n${itemRows}\n\n${enquiry.gdrive_file_link ? `You can view photos and additional attachments here: ${enquiry.gdrive_file_link}\n\n` : ''}Please revert with your best price and lead time at your earliest convenience.\n\nThank you,\nCELRON ENTERPRISES PTE LTD`);
+        const body = encodeURIComponent(`${greeting}We are pleased to invite you to quote for the following items:\n\n${itemRows}\n\n${enquiry.gdrive_file_link ? `You can view photos and additional attachments here: ${enquiry.gdrive_file_link}\n\n` : ''}Please revert with your best price and lead time at your earliest convenience.\n\nThank you,\nCEL-RON ENTERPRISES PTE LTD`);
 
         setEmailPreviewData({ emails, subject, body });
+    };
+
+    const handleWhatsApp = () => {
+        if (selectedSuppliers.length === 0) {
+            alert("Please select at least one supplier.");
+            return;
+        }
+        setWhatsappShareModal({ isOpen: true });
     };
 
     const confirmFloat = async () => {
@@ -299,6 +309,7 @@ export default function EnquiryDetails() {
                     </button>
                     <button onClick={() => window.open(`/workflows/enquiry/print/${id}`, '_blank')} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Download size={16} /> Print PDF</button>
                     <button onClick={handleFloatQuotation} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={16} /> Send by email</button>
+                    <button onClick={handleWhatsApp} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#25D366', color: '#fff', border: 'none' }}><MessageSquare size={16} /> WhatsApp Share</button>
                     <button onClick={handleConvertToV2} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#6366f1', borderColor: '#6366f1' }}><ArrowRightLeft size={16} /> Convert to Quote</button>
                     <button onClick={handleConvertToOrder} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#059669', borderColor: '#059669' }}><BadgeDollarSign size={16} /> Convert to Order</button>
                     <button className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Plus size={16} /> Create Revision</button>
@@ -1092,6 +1103,23 @@ export default function EnquiryDetails() {
                     </form>
                 </div>
             )}
+            <WhatsAppShareModal 
+                isOpen={whatsappShareModal.isOpen}
+                onClose={() => setWhatsappShareModal({ isOpen: false })}
+                contacts={supplierContacts[selectedSuppliers[0]?.id] || []}
+                partner={selectedSuppliers[0]}
+                documentData={{
+                    document_type: 'Enquiry',
+                    document_no: enquiry.enquiry_no,
+                    subject: enquiry.customer_ref,
+                    currency: 'SGD',
+                    total_amount: 0,
+                    salesperson_name: profile?.full_name || 'CEL-RON Team'
+                }}
+                onShareFile={(msg) => {
+                    alert("PDF Sharing for Enquiries: Please use the 'Print PDF' button to generate the file first, then use your phone's share feature. Alternatively, use 'Chat Now' to send the text message.");
+                }}
+            />
         </>
     );
 }

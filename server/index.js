@@ -10,7 +10,7 @@ app.use(express.json());
 
 // ---- 1️⃣ Search endpoint -------------------------------------------------
 app.post('/api/universal-finder/search', async (req, res) => {
-    const { query, userLat, userLng, userId, country, restrictToCountry } = req.body;
+    const { query, userLat, userLng, userId, country, restrictToCountry, skipAi } = req.body;
     console.log(`[Backend] Search Request for: "${query}" from user: ${userId} in country: ${country} (Local only: ${restrictToCountry})`);
 
     const key = process.env.VITE_GOOGLE_API_KEY || process.env.GOOGLE_API_KEY || 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
@@ -23,7 +23,7 @@ app.post('/api/universal-finder/search', async (req, res) => {
         if (hasKeys) {
             console.log(`[Backend] API Keys found. Running real search for query: "${query}"...`);
             try {
-                searchId = await runUniversalSearch({ query, userLat, userLng, userId, country, restrictToCountry });
+                searchId = await runUniversalSearch({ query, userLat, userLng, userId, country, restrictToCountry, skipAi });
 
                 // CHECK if real results were actually returned from Google
                 const { data: resultsCheck, error: checkError } = await supabase

@@ -58,6 +58,7 @@ export default function UniversalFinder() {
     const [isSimulated, setIsSimulated] = useState(false);
 
     const [activeTab, setActiveTab] = useState('chat'); // 'chat', 'search' or 'global'
+    const [skipAi, setSkipAi] = useState(false);
     const [popularSuppliers, setPopularSuppliers] = useState([]);
     const [customPlatforms, setCustomPlatforms] = useState(() => {
         const saved = localStorage.getItem('celron_custom_marketplaces');
@@ -227,7 +228,8 @@ export default function UniversalFinder() {
                     userLng: userLocation?.lng,
                     userId: profile?.id,
                     country: selectedCountry,
-                    restrictToCountry // Pass the restriction flag
+                    restrictToCountry,
+                    skipAi
                 })
             });
             const data = await resp.json();
@@ -522,10 +524,16 @@ export default function UniversalFinder() {
                                         onChange={(e) => setQuery(e.target.value)}
                                     />
                                 </div>
-                                <button type="submit" disabled={isSearching || (!query.trim() && !make && !model)} style={{ background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '8px', padding: '0 24px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }}>
-                                    {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Globe size={18} />}
-                                    {isSearching ? 'Searching...' : 'Search Web'}
-                                </button>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    <button type="submit" disabled={isSearching || (!query.trim() && !make && !model)} style={{ background: '#4f46e5', color: '#fff', border: 'none', borderRadius: '8px', padding: '12px 24px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }}>
+                                        {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Globe size={18} />}
+                                        {isSearching ? 'Searching...' : 'Search Web'}
+                                    </button>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: '#64748b', cursor: 'pointer' }}>
+                                        <input type="checkbox" checked={skipAi} onChange={(e) => setSkipAi(e.target.checked)} />
+                                        Skip AI Enrichment (Save Quota)
+                                    </label>
+                                </div>
                             </div>
 
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
