@@ -1034,6 +1034,94 @@ export default function WorkflowEditor() {
         setEmailPreview({ to: recipient, cc: '', bcc: '', subject, body, attachments: [] });
     };
 
+    const attachDocumentFromSuite = async (doc) => {
+        if (saving) return;
+        setSaving(true);
+        try {
+            const filename = `${doc.document_type}_${doc.document_no}.pdf`;
+            
+            // If already attached, skip
+            if (emailPreview.attachments?.find(a => a.name === filename)) {
+                alert('Already attached.');
+                return;
+            }
+
+            console.log(`Attaching ${doc.document_no} to email...`);
+            
+            // Check if we can fetch from Drive first (faster)
+            let fileBlob = null;
+            try {
+                const token = getStoredToken();
+                const rootId = await ensureJobFolder();
+                if (rootId) {
+                    const foldersToCheck = ['1. Enquiries & Quotations', '3. Operations & Logistics', '4. Finance & Invoices'];
+                    for (const folderName of foldersToCheck) {
+                        const folderId = await getOrCreateFolder(token, folderName, rootId);
+                        const folderFiles = await listFolderContent(token, folderId);
+                        const match = folderFiles.find(f => f.name === `${doc.document_no}.pdf` || f.name === filename);
+                        if (match) {
+                            const response = await fetch(`https://www.googleapis.com/drive/v3/files/${match.id}?alt=media`, {
+                                headers: { 'Authorization': `Bearer ${token}` }
+                            });
+                            fileBlob = await response.blob();
+                            break;
+                        }
+                    }
+                }
+            } catch (driveErr) {
+                console.warn('Drive fetch failed, falling back to on-the-fly generation:', driveErr);
+            }
+
+            // Fallback: Generate PDF on the fly
+            if (!fileBlob) {
+                const { data: fullDoc, error } = await getWorkflowDocumentById(doc.id);
+                if (error) throw error;
+                
+                fileBlob = await generateSleekPDF({
+                    ...fullDoc,
+                    partners: partners.find(p => p.id === fullDoc.partner_id),
+                    vessels: vessels.find(v => v.id === fullDoc.vessel_id),
+                    work_locations: workLocations.find(wl => wl.id === fullDoc.work_location_id)
+                }, settings, 'blob');
+            }
+
+            const file = new File([fileBlob], filename, { type: 'application/pdf' });
+            setEmailPreview(prev => ({
+                ...prev,
+                attachments: [...(prev.attachments || []), file]
+            }));
+            
+        } catch (err) {
+            console.error('Failed to attach document:', err);
+            alert('Failed to attach: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const attachGalleryFile = async (fileInfo) => {
+        if (saving) return;
+        setSaving(true);
+        try {
+            const token = getStoredToken();
+            const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileInfo.id}?alt=media`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const blob = await response.blob();
+            const file = new File([blob], fileInfo.name, { type: fileInfo.mimeType });
+            
+            setEmailPreview(prev => ({
+                ...prev,
+                attachments: [...(prev.attachments || []), file]
+            }));
+        } catch (err) {
+            console.error('Failed to attach gallery photo:', err);
+            alert('Failed to attach photo');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleWhatsApp = async () => {
         if (isNew) {
             alert('Please Save the document first to share.');
@@ -2699,6 +2787,82 @@ export default function WorkflowEditor() {
                                         <p style={{ fontSize: '11px', color: '#166534', margin: '2px 0 0 0', opacity: 0.9 }}>The {formData.document_type || 'Document'} PDF has been generated and is attached to this email.</p>
                                     </div>
                                 </div>
+
+                                {/* SUGGESTED ATTACHMENTS (Linked Documents) */}
+                                {workflowDocs.length > 1 && (
+                                    <div style={{ marginTop: '16px', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
+                                        <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '12px' }}>
+                                            Quick Attach Linked Documents (Job Suite)
+                                        </label>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                            {workflowDocs.filter(d => d.id !== id).map(doc => {
+                                                const isAttached = emailPreview.attachments?.some(a => a.name.includes(doc.document_no));
+                                                return (
+                                                    <button
+                                                        key={doc.id}
+                                                        type="button"
+                                                        onClick={() => attachDocumentFromSuite(doc)}
+                                                        disabled={saving || isAttached}
+                                                        style={{
+                                                            padding: '6px 12px',
+                                                            borderRadius: '6px',
+                                                            background: isAttached ? '#f1f5f9' : '#eff6ff',
+                                                            border: `1px solid ${isAttached ? '#e2e8f0' : '#bfdbfe'}`,
+                                                            fontSize: '0.75rem',
+                                                            fontWeight: 600,
+                                                            color: isAttached ? '#94a3b8' : '#2563eb',
+                                                            cursor: isAttached ? 'default' : 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '6px',
+                                                            transition: 'all 0.2s'
+                                                        }}
+                                                    >
+                                                        {isAttached ? <FileCheck size={12} /> : <Plus size={12} />} 
+                                                        {doc.document_type}: {doc.document_no}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* QUICK ATTACH GALLERY PHOTOS */}
+                                {galleryFiles.length > 0 && (
+                                    <div style={{ marginTop: '16px', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
+                                        <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '12px' }}>
+                                            Quick Attach Job Photos
+                                        </label>
+                                        <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '8px' }}>
+                                            {galleryFiles.map(file => {
+                                                const isAttached = emailPreview.attachments?.some(a => a.name === file.name);
+                                                return (
+                                                    <div 
+                                                        key={file.id} 
+                                                        onClick={() => !isAttached && attachGalleryFile(file)}
+                                                        style={{ 
+                                                            minWidth: '80px', 
+                                                            height: '60px', 
+                                                            borderRadius: '6px', 
+                                                            overflow: 'hidden', 
+                                                            position: 'relative', 
+                                                            cursor: isAttached ? 'default' : 'pointer',
+                                                            border: isAttached ? '2px solid #10b981' : '1px solid #e2e8f0',
+                                                            opacity: isAttached ? 0.6 : 1
+                                                        }}
+                                                    >
+                                                        <img src={file.thumbnailLink} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        {isAttached && (
+                                                            <div style={{ position: 'absolute', inset: 0, background: 'rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                <FileCheck size={16} color="#fff" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Custom Attachments Section */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
