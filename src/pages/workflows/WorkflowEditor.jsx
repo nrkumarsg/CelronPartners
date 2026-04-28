@@ -2557,7 +2557,7 @@ export default function WorkflowEditor() {
                                     <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>PO Issued By</label>
                                     <select required className="form-input" name="contact_id" defaultValue={formData.contact_id} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }}>
                                         <option value="">-- Select Contact --</option>
-                                        {contacts.filter(c => c.partner_id === formData.partner_id).map(c => (
+                                        {contacts.filter(c => c.partnerId === formData.partner_id).map(c => (
                                             <option key={c.id} value={c.id}>{c.name} {c.designation ? `(${c.designation})` : ''}</option>
                                         ))}
                                     </select>
