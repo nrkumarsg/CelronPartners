@@ -157,3 +157,27 @@ export async function researchVesselWithGemini(vesselName, imoNumber = '', mmsi 
 }
 
 
+/**
+ * Real-time Exchange Rate: Uses Gemini + Google Search to find current currency rates.
+ */
+export async function getExchangeRateWithGemini(fromCurrency, toCurrency = 'SGD') {
+    const tools = [{ google_search: {} }];
+    const prompt = `Find the current exchange rate for 1 ${fromCurrency} to ${toCurrency} for today ${new Date().toLocaleDateString()}. 
+    Return ONLY a JSON object with the "rate" (number) and "source" (string). Example: {"rate": 1.36, "source": "Google Search"}`;
+    
+    try {
+        const data = await runAI('research', prompt, [], tools);
+        // Sometimes Gemini returns a string instead of parsed JSON if the engine doesn't auto-parse research tasks
+        if (typeof data === 'string') {
+            const match = data.match(/\{.*\}/s);
+            if (match) return JSON.parse(match[0]);
+        }
+        return {
+            rate: data.rate || 1,
+            source: data.source || 'AI Estimate'
+        };
+    } catch (err) {
+        console.error('Gemini FX Error:', err);
+        return { rate: 1, error: 'Failed to fetch rate' };
+    }
+}

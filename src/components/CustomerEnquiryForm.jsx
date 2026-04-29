@@ -16,7 +16,9 @@ import { COUNTRIES } from '../lib/constants';
 import { isTokenValid, validateToken } from '../lib/googleAuthService';
 import { getCatalogItems, createCatalogItem, updateCatalogItem } from '../lib/catalogService';
 import GDriveConnectionModal from './common/GDriveConnectionModal';
-import { Search, Plus, Trash, Database, Edit } from 'lucide-react';
+import { Search, Plus, Trash, Database, Edit, Pencil } from 'lucide-react';
+import { QuickPartnerAdd, QuickContactAdd, QuickVesselAdd, QuickWorkLocationAdd } from './workflow/QuickAddForms';
+import { supabase } from '../lib/supabase';
 
 const ENQUIRY_SOURCES = [
     'Email',
@@ -137,6 +139,26 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
             setContacts([]);
         }
     }, [formData.customer_id]);
+
+    const [editModal, setEditModal] = useState({ isOpen: false, type: null, initialData: null });
+    const handleEditMaster = (type) => {
+        let initialData = null;
+        if (type === 'customer_id') initialData = customers.find(c => c.id === formData.customer_id);
+        else if (type === 'contact_id') initialData = contacts.find(c => c.id === formData.contact_id);
+        else if (type === 'vessel_id') initialData = vessels.find(v => v.id === formData.vessel_id);
+        else if (type === 'work_location_id') initialData = workLocations.find(l => l.id === formData.work_location_id);
+
+        if (!initialData) return alert('Please select a record to edit first.');
+        setEditModal({ isOpen: true, type, initialData });
+    };
+
+    const handleEditMasterSuccess = () => {
+        setEditModal({ isOpen: false, type: null, initialData: null });
+        loadCustomers();
+        fetchVessels();
+        fetchWorkLocations();
+        if (formData.customer_id) loadContacts(formData.customer_id);
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -586,7 +608,10 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                                     1. Customer Information
                                 </h3>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
-                                    <label className="form-label">Customer *</label>
+                                    <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span>Customer *</span>
+                                        {formData.customer_id && <Pencil size={14} style={{ cursor: 'pointer', color: 'var(--accent)' }} onClick={() => handleEditMaster('customer_id')} />}
+                                    </label>
                                     <select
                                         name="customer_id"
                                         value={formData.customer_id}
@@ -604,7 +629,10 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
 
                                 {/* Contact Dropdown - Always visible, disabled if no customer selected */}
                                 <div className="form-group" style={{ marginBottom: 0, marginTop: '20px' }}>
-                                    <label className="form-label">Contact</label>
+                                    <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span>Contact</span>
+                                        {formData.contact_id && <Pencil size={14} style={{ cursor: 'pointer', color: 'var(--accent)' }} onClick={() => handleEditMaster('contact_id')} />}
+                                    </label>
                                     <select
                                         name="contact_id"
                                         value={formData.contact_id || ''}
@@ -633,52 +661,62 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                                 </h3>
                                 <div className="grid-2" style={{ marginBottom: '20px' }}>
                                     <div className="form-group" style={{ marginBottom: 0, position: 'relative' }}>
-                                        <label className="form-label">Vessel</label>
-                                        <select
-                                            name="vessel_id"
-                                            value={formData.vessel_id || ''}
-                                            onChange={(e) => {
-                                                if (e.target.value === 'ADD_NEW') {
-                                                    setShowNewVesselModal(true);
-                                                } else {
-                                                    handleChange(e);
-                                                }
-                                            }}
-                                            className="form-select"
-                                            style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 36px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#10b981', fontWeight: 600 }}
-                                        >
-                                            <option value="">No Vessel</option>
-                                            {vessels.map(v => (
-                                                <option key={v.id} value={v.id}>{v.vessel_name}</option>
-                                            ))}
-                                            <option value="ADD_NEW" style={{ fontWeight: 700, color: '#10b981' }}>+ Add New Vessel</option>
-                                        </select>
-                                        <Ship size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#10b981' }} />
-                                        <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                                        <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span>Vessel</span>
+                                            {formData.vessel_id && <Pencil size={14} style={{ cursor: 'pointer', color: '#10b981' }} onClick={() => handleEditMaster('vessel_id')} />}
+                                        </label>
+                                        <div style={{ position: 'relative' }}>
+                                            <select
+                                                name="vessel_id"
+                                                value={formData.vessel_id || ''}
+                                                onChange={(e) => {
+                                                    if (e.target.value === 'ADD_NEW') {
+                                                        setShowNewVesselModal(true);
+                                                    } else {
+                                                        handleChange(e);
+                                                    }
+                                                }}
+                                                className="form-select"
+                                                style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 36px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#10b981', fontWeight: 600 }}
+                                            >
+                                                <option value="">No Vessel</option>
+                                                {vessels.map(v => (
+                                                    <option key={v.id} value={v.id}>{v.vessel_name}</option>
+                                                ))}
+                                                <option value="ADD_NEW" style={{ fontWeight: 700, color: '#10b981' }}>+ Add New Vessel</option>
+                                            </select>
+                                            <Ship size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#10b981' }} />
+                                            <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                                        </div>
                                     </div>
                                     <div className="form-group" style={{ marginBottom: 0, position: 'relative' }}>
-                                        <label className="form-label">Work Location</label>
-                                        <select
-                                            name="work_location_id"
-                                            value={formData.work_location_id || ''}
-                                            onChange={(e) => {
-                                                if (e.target.value === 'ADD_NEW') {
-                                                    setShowNewLocationModal(true);
-                                                } else {
-                                                    handleChange(e);
-                                                }
-                                            }}
-                                            className="form-select"
-                                            style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 32px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b' }}
-                                        >
-                                            <option value="">General / Local</option>
-                                            {workLocations.map(l => (
-                                                <option key={l.id} value={l.id}>{l.location_name}</option>
-                                            ))}
-                                            <option value="ADD_NEW" style={{ fontWeight: 700, color: '#64748b' }}>+ Add New Location</option>
-                                        </select>
-                                        <Database size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                                        <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                                        <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span>Work Location</span>
+                                            {formData.work_location_id && <Pencil size={14} style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => handleEditMaster('work_location_id')} />}
+                                        </label>
+                                        <div style={{ position: 'relative' }}>
+                                            <select
+                                                name="work_location_id"
+                                                value={formData.work_location_id || ''}
+                                                onChange={(e) => {
+                                                    if (e.target.value === 'ADD_NEW') {
+                                                        setShowNewLocationModal(true);
+                                                    } else {
+                                                        handleChange(e);
+                                                    }
+                                                }}
+                                                className="form-select"
+                                                style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 32px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b' }}
+                                            >
+                                                <option value="">General / Local</option>
+                                                {workLocations.map(l => (
+                                                    <option key={l.id} value={l.id}>{l.location_name}</option>
+                                                ))}
+                                                <option value="ADD_NEW" style={{ fontWeight: 700, color: '#64748b' }}>+ Add New Location</option>
+                                            </select>
+                                            <Database size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                                            <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="form-group" style={{ marginBottom: '20px' }}>
@@ -1081,16 +1119,10 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
             <GDriveConnectionModal 
                 isOpen={isGDriveModalOpen} 
                 onClose={() => setIsGDriveModalOpen(false)} 
-                state="enquiry_upload"
+                state="enquiry_form_upload"
             />
-
             <style>{`
-                .upload-dropzone:hover {
-                    border-color: var(--accent) !important;
-                    background: #f1f5f9 !important;
-                }
-                .quill-wrapper .ql-container {
-                    flex: 1;
+                .quill-wrapper {
                     display: flex;
                     flex-direction: column;
                     background: #ffffff;

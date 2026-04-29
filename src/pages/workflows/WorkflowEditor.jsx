@@ -5,10 +5,11 @@ import {
     Printer, Send, X, Package,
     FileText, Calculator, Ship,
     MoreHorizontal, Search, Settings,
-    ChevronDown, CreditCard, User, Users, MapPin, Paperclip,
+    ChevronDown, CreditCard, User, Users, MapPin, Paperclip, Pencil, Sparkles,
     FileCheck, Play, RefreshCw, AlertCircle, Loader2,
     ExternalLink, Folder, File, HardDrive, Upload, MessageSquare
 } from 'lucide-react';
+import { getExchangeRateWithGemini } from '../../lib/geminiService';
 import { listFolderContent, uploadFileToDrive, deleteFile, getOrCreateFolder, provisionFullProjectStructure, provisionPartnerStructure } from '../../lib/driveService';
 import { validateToken, connectGoogleAPI, getStoredToken } from '../../lib/googleAuthService';
 import { useAuth } from '../../contexts/AuthContext';
@@ -31,7 +32,7 @@ import {
     QuickPartnerAdd,
     QuickContactAdd,
     QuickVesselAdd,
-    QuickLocationAdd,
+    QuickWorkLocationAdd,
     QuickExpenseAdd
 } from '../../components/workflow/QuickAddForms';
 import FloatingControlHub from '../../components/FloatingControlHub';
@@ -119,8 +120,13 @@ export default function WorkflowEditor() {
     defaultExpiry.setDate(defaultExpiry.getDate() + 30);
 
     // Form Data
-    const [formData, setFormData] = useState({
-        document_type: (type || 'Enquiry').split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+    // Form Data
+    const [formData, setFormData] = useState(() => {
+        const docType = (type || 'Enquiry').split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        const isAnithaDoc = ['Tax Invoice', 'Purchase Order', 'Delivery Order', 'Proforma Invoice', 'Packing List'].includes(docType);
+        
+        return {
+        document_type: docType,
         document_no: '',
         job_id: '',
         enquiry_id: '',
@@ -130,12 +136,14 @@ export default function WorkflowEditor() {
         contact_id: '',
         vessel_id: '',
         work_location_id: '',
-        salesperson_name: profile?.full_name || 'N.R.KUMAR',
-        salesperson_phone: profile?.phone || '+6597685891',
-        salesperson_email: profile?.professional_email || 'kumar@celron.net',
+        salesperson_name: isAnithaDoc ? 'ANITHA' : (profile?.full_name || 'N.R.KUMAR'),
+        salesperson_phone: isAnithaDoc ? '+6591090347' : (profile?.phone || '+6597685891'),
+        salesperson_email: isAnithaDoc ? 'accounts@celron.net' : (profile?.professional_email || 'kumar@celron.net'),
         subject: '',
         customer_ref: 'WALK IN',
         currency: 'SGD',
+        exchange_rate: 1.0,
+        base_currency: 'SGD',
         status: 'Draft',
         notes: '',
         terms_conditions: '',
@@ -154,6 +162,7 @@ export default function WorkflowEditor() {
         revision_no: 0,
         attachment_urls: [],
         delivery_verification: {}
+    };
     });
 
     useEffect(() => {
@@ -504,6 +513,61 @@ export default function WorkflowEditor() {
         fetchExplorerFiles(target.id, newPath.length === 1); // Only root if path length is 1
     };
 
+    const handleExplorerDelete = async (fileId, fileName) => {
+        if (!window.confirm(`Are you sure you want to delete "${fileName}" from Google Drive?`)) return;
+        setLoadingExplorer(true);
+        try {
+            const token = getStoredToken();
+            await deleteFile(token, fileId);
+            fetchExplorerFiles();
+        } catch (err) {
+            console.error('Delete error:', err);
+            alert('Failed to delete file.');
+            setLoadingExplorer(false);
+        }
+    };
+
+    const handleOpenPartnerVault = async () => {
+        if (!formData.partner_id) {
+            alert("Please select a partner first.");
+            return;
+        }
+        setLoadingExplorer(true);
+        try {
+            const token = getStoredToken();
+            const partner = partners.find(p => p.id === formData.partner_id);
+            const partnerFolderId = await provisionPartnerStructure(token, settings?.gdrive_partners_root_id, partner.name);
+            window.open(`https://drive.google.com/drive/folders/${partnerFolderId}`, '_blank');
+        } catch (err) {
+            console.error('Partner Vault error:', err);
+            alert('Failed to open partner vault.');
+        } finally {
+            setLoadingExplorer(false);
+        }
+    };
+
+    const handleExplorerUpload = async (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        setUploadingExplorer(true);
+        setUploadProgress(0);
+        try {
+            const token = getStoredToken();
+            for (let i = 0; i < files.length; i++) {
+                await uploadFileToDrive(token, files[i], { folderId: explorerFolderId });
+                setUploadProgress(((i + 1) / files.length) * 100);
+            }
+            fetchExplorerFiles();
+        } catch (err) {
+            console.error('Upload error:', err);
+            alert('Failed to upload files.');
+        } finally {
+            setUploadingExplorer(false);
+            setUploadProgress(0);
+        }
+    };
+
     const autoUploadPDF = async (docData) => {
         try {
             const token = getStoredToken();
@@ -810,6 +874,35 @@ export default function WorkflowEditor() {
         setFormData(prev => ({ ...prev, [name]: content }));
     };
 
+    const [isFetchingRate, setIsFetchingRate] = useState(false);
+    const handleAiFetchExchangeRate = async () => {
+        if (formData.currency === 'SGD') return;
+        setIsFetchingRate(true);
+        try {
+            const data = await getExchangeRateWithGemini(formData.currency, 'SGD');
+            if (data.rate) {
+                setFormData(prev => ({ ...prev, exchange_rate: data.rate }));
+                alert(`AI found current rate: 1 ${formData.currency} = ${data.rate} SGD (Source: ${data.source || 'AI Search'})`);
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Failed to fetch rate via AI. Please enter manually.');
+        } finally {
+            setIsFetchingRate(false);
+        }
+    };
+
+    const handleEditMaster = (type) => {
+        let initialData = null;
+        if (type === 'partner_id') initialData = partners.find(p => p.id === formData.partner_id);
+        else if (type === 'contact_id') initialData = contacts.find(c => c.id === formData.contact_id);
+        else if (type === 'vessel_id') initialData = vessels.find(v => v.id === formData.vessel_id);
+        else if (type === 'work_location_id') initialData = workLocations.find(l => l.id === formData.work_location_id);
+
+        if (!initialData) return alert('Please select a record to edit first.');
+        setModal({ isOpen: true, type, initialData });
+    };
+
     const handleQuickAddSuccess = (newItem) => {
         const typeAdded = modal.type;
         setModal({ isOpen: false, type: null });
@@ -1029,7 +1122,8 @@ export default function WorkflowEditor() {
 
         const footer = `\n\nBest Regards,\n\n${formData.salesperson_name || 'CEL-RON Team'}\n${settings?.company_name || 'CEL-RON ENTERPRISES PTE LTD'}\n${settings?.address || ''}\nEmail: ${settings?.sales_email || 'sales@celron.net'} | Tel: ${settings?.phone || ''}`;
 
-        const body = `Dear ${contact?.name || 'Customer'},\n\nPlease find attached the ${formData.document_type} (${formData.document_no}) for your review.${itemsContent}${footer}`;
+        const effectiveType = (formData.document_type === 'Quotation' && (formData.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : formData.document_type;
+        const body = `Dear ${contact?.name || 'Customer'},\n\nPlease find attached the ${effectiveType} (${formData.document_no}) for your review.${itemsContent}${footer}`;
 
         setEmailPreview({ to: recipient, cc: '', bcc: '', subject, body, attachments: [] });
     };
@@ -1130,41 +1224,59 @@ export default function WorkflowEditor() {
         setWhatsappShareModal({ isOpen: true });
     };
 
-    const performWhatsAppShare = async (customMessage) => {
-        if (navigator.share && navigator.canShare) {
-            setSaving(true);
-            try {
-                // High Fidelity PDF Generation from the unified layout
-                console.log('Generating high-fidelity PDF from layout...');
-                const element = printRef.current;
-                const opt = {
-                    margin: [5, 5, 5, 5], // Reduced margin to avoid overflow
-                    filename: `${formData.document_type}_${formData.document_no || 'Draft'}.pdf`,
-                    image: { type: 'jpeg', quality: 0.92 }, // Balanced quality for memory efficiency
-                    html2canvas: { 
-                        scale: 2, 
-                        useCORS: true, 
-                        logging: false,
-                        scrollY: 0,
-                        windowWidth: 1000 // Force a consistent width for rendering
-                    },
-                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-                };
-                const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
+    const performWhatsAppShare = async (customMessage, phone = null) => {
+        setSaving(true);
+        try {
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            let popup = null;
+            // On desktop, we MUST open the popup immediately before any async await to avoid popup blockers
+            if (!isMobile && phone) {
+                const waUrl = `https://wa.me/${phone}?text=${encodeURIComponent(customMessage || '')}`;
+                popup = window.open(waUrl, '_blank');
+            }
+
+            // High Fidelity PDF Generation from the unified layout
+            console.log('Generating high-fidelity PDF from layout...');
+            const element = printRef.current;
+            const opt = {
+                margin: [5, 5, 5, 5],
+                filename: `${(formData.document_type === 'Quotation' && (formData.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : formData.document_type}_${(formData.document_no || 'Draft').replace(/[/\\?%*:|"<>]/g, '-')}.pdf`,
+                image: { type: 'jpeg', quality: 0.92 },
+                html2canvas: { 
+                    scale: 2, 
+                    useCORS: true, 
+                    logging: false,
+                    scrollY: 0,
+                    windowWidth: 1000 
+                },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+            };
+
+            if (isMobile && navigator.share && navigator.canShare && !phone) {
+                // Use native share on mobile when no specific phone is targeted
+                const pdfBlob = await html2pdf().set(opt).from(element).outputPdf('blob');
                 const file = new File([pdfBlob], opt.filename, { type: 'application/pdf' });
                 if (navigator.canShare({ files: [file] })) {
                     await navigator.share({ files: [file], title: opt.filename, text: customMessage || '' });
-                    setSaving(false);
-                    return;
+                } else {
+                    await html2pdf().set(opt).from(element).save();
+                    alert("PDF downloaded! Please attach it manually to your WhatsApp chat.");
                 }
-            } catch (err) {
-                console.error('[WhatsApp Share] Direct file share failed:', err);
-            } finally {
-                setSaving(false);
+            } else {
+                // On Desktop, or when targeting a specific phone: Download PDF directly using html2pdf's built-in save
+                await html2pdf().set(opt).from(element).save();
+
+                if (!phone) {
+                    alert("PDF downloaded! Please attach it manually to your WhatsApp chat.");
+                }
             }
-        } else {
-            alert("Direct PDF sharing is only available on Mobile or modern browsers. Please use individual 'Chat Now' links for desktop.");
+        } catch (err) {
+            console.error('[WhatsApp Share] Direct file share failed:', err);
+            alert(`Failed to share or download PDF. Error: ${err.message || err}`);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -1259,15 +1371,16 @@ export default function WorkflowEditor() {
     if (loading) return <div className="text-center py-20">Loading Document...</div>;
 
     const renderModalContent = () => {
+        const initialData = modal.initialData;
         switch (modal.type) {
             case 'partner_id':
-                return <QuickPartnerAdd company_id={profile.company_id} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
+                return <QuickPartnerAdd company_id={profile.company_id} initialData={initialData} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
             case 'contact_id':
-                return <QuickContactAdd company_id={profile.company_id} partner_id={formData.partner_id} partners={partners} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
+                return <QuickContactAdd company_id={profile.company_id} partner_id={formData.partner_id} partners={partners} initialData={initialData} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
             case 'vessel_id':
-                return <QuickVesselAdd company_id={profile.company_id} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
+                return <QuickVesselAdd company_id={profile.company_id} initialData={initialData} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
             case 'work_location_id':
-                return <QuickLocationAdd company_id={profile.company_id} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
+                return <QuickWorkLocationAdd company_id={profile.company_id} initialData={initialData} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
             default:
                 return null;
         }
@@ -1302,7 +1415,11 @@ export default function WorkflowEditor() {
                         <ArrowLeft size={20} />
                     </button>
                     <div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>{formData.document_type}</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>
+                            {formData.document_type === 'Enquiry' ? 'Enquiry to Supplier' : 
+                             (formData.document_type === 'Quotation' && (formData.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : 
+                             formData.document_type}
+                        </div>
                         <h1 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>{formData.document_no || 'Draft'}</h1>
                     </div>
                 </div>
@@ -1381,24 +1498,40 @@ export default function WorkflowEditor() {
                         <div className="col-left">
                             <div className="form-item">
                                 <label><User size={14} /> {formData.document_type === 'Purchase Order' ? 'Supplier' : 'Customer'}</label>
-                                <select className="form-select" name="partner_id" value={formData.partner_id} onChange={handleHeaderChange}>
-                                    <option value="">Choose {formData.document_type === 'Purchase Order' ? 'supplier' : 'partner'}...</option>
-                                    <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New {formData.document_type === 'Purchase Order' ? 'Supplier' : 'Customer'}</option>
-                                    {partners
-                                        .filter(p => formData.document_type !== 'Purchase Order' || p.category === 'Supplier')
-                                        .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                </select>
+                                <div style={{ position: 'relative' }}>
+                                    <select className="form-select" name="partner_id" value={formData.partner_id} onChange={handleHeaderChange} style={{ width: '100%' }}>
+                                        <option value="">Choose {formData.document_type === 'Purchase Order' ? 'supplier' : 'partner'}...</option>
+                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New {formData.document_type === 'Purchase Order' ? 'Supplier' : 'Customer'}</option>
+                                        {partners
+                                            .filter(p => formData.document_type !== 'Purchase Order' || p.category === 'Supplier')
+                                            .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                    </select>
+                                    {formData.partner_id && (
+                                        <button className="btn-edit-inline" onClick={() => handleEditMaster('partner_id')} title="Edit Customer">
+                                            <Pencil size={14} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                             <div className="form-item">
                                 <label><MoreHorizontal size={14} /> Contact Person</label>
-                                <select className="form-select" name="contact_id" value={formData.contact_id} onChange={handleHeaderChange}>
-                                    <option value="">Choose contact...</option>
-                                    <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Contact</option>
-                                    {contacts.map(c => {
-                                        const pName = partners.find(p => p.id === c.partnerId)?.name;
-                                        return <option key={c.id} value={c.id}>{c.name} {pName ? `(${pName})` : ''}</option>;
-                                    })}
-                                </select>
+                                <div style={{ position: 'relative' }}>
+                                    <select className="form-select" name="contact_id" value={formData.contact_id} onChange={handleHeaderChange} style={{ width: '100%' }}>
+                                        <option value="">Choose contact...</option>
+                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Contact</option>
+                                        {contacts
+                                            .filter(c => !formData.partner_id || c.partnerId === formData.partner_id)
+                                            .map(c => {
+                                                const pName = partners.find(p => p.id === c.partnerId)?.name;
+                                                return <option key={c.id} value={c.id}>{c.name} {pName ? `(${pName})` : ''}</option>;
+                                            })}
+                                    </select>
+                                    {formData.contact_id && (
+                                        <button className="btn-edit-inline" onClick={() => handleEditMaster('contact_id')} title="Edit Contact">
+                                            <Pencil size={14} />
+                                        </button>
+                                    )}
+                                </div>
                             </div>
                             <div className="form-item">
                                 <label><FileText size={14} /> Subject / Project Name</label>
@@ -1454,41 +1587,63 @@ export default function WorkflowEditor() {
                             </div>
                             <div className="form-item">
                                 <label><Ship size={14} /> Vessel / Service Location</label>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <select 
-                                        className="form-select" 
-                                        name="vessel_id" 
-                                        value={formData.vessel_id} 
-                                        onChange={(e) => {
-                                            if (e.target.value === 'ADD_NEW') {
-                                                setModal({ isOpen: true, type: 'vessel_id' });
-                                            } else {
-                                                handleHeaderChange(e);
-                                            }
-                                        }} 
-                                        style={{ flex: 1 }}
-                                    >
-                                        <option value="">[Vessel]</option>
-                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Vessel</option>
-                                        {vessels.map(v => <option key={v.id} value={v.id}>{v.vessel_name}</option>)}
-                                    </select>
-                                    <select 
-                                        className="form-select" 
-                                        name="work_location_id" 
-                                        value={formData.work_location_id} 
-                                        onChange={(e) => {
-                                            if (e.target.value === 'ADD_NEW') {
-                                                setModal({ isOpen: true, type: 'work_location_id' });
-                                            } else {
-                                                handleHeaderChange(e);
-                                            }
-                                        }} 
-                                        style={{ flex: 1 }}
-                                    >
-                                        <option value="">[Workplace]</option>
-                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Workplace</option>
-                                        {workLocations.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}
-                                    </select>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                    <div style={{ flex: 1, position: 'relative' }}>
+                                        <select 
+                                            className="form-select" 
+                                            name="vessel_id" 
+                                            value={formData.vessel_id} 
+                                            onChange={(e) => {
+                                                if (e.target.value === 'ADD_NEW') {
+                                                    setModal({ isOpen: true, type: 'vessel_id' });
+                                                } else {
+                                                    handleHeaderChange(e);
+                                                }
+                                            }} 
+                                            style={{ width: '100%' }}
+                                        >
+                                            <option value="">[Vessel]</option>
+                                            <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Vessel</option>
+                                            {vessels.map(v => <option key={v.id} value={v.id}>{v.vessel_name}</option>)}
+                                        </select>
+                                        {formData.vessel_id && (
+                                            <button 
+                                                className="btn-edit-inline"
+                                                onClick={() => handleEditMaster('vessel_id')}
+                                                title="Edit Vessel"
+                                            >
+                                                <Pencil size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div style={{ flex: 1, position: 'relative' }}>
+                                        <select 
+                                            className="form-select" 
+                                            name="work_location_id" 
+                                            value={formData.work_location_id} 
+                                            onChange={(e) => {
+                                                if (e.target.value === 'ADD_NEW') {
+                                                    setModal({ isOpen: true, type: 'work_location_id' });
+                                                } else {
+                                                    handleHeaderChange(e);
+                                                }
+                                            }} 
+                                            style={{ width: '100%' }}
+                                        >
+                                            <option value="">[Workplace]</option>
+                                            <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Workplace</option>
+                                            {workLocations.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+                                        </select>
+                                        {formData.work_location_id && (
+                                            <button 
+                                                className="btn-edit-inline"
+                                                onClick={() => handleEditMaster('work_location_id')}
+                                                title="Edit Workplace"
+                                            >
+                                                <Pencil size={14} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             
@@ -1518,30 +1673,70 @@ export default function WorkflowEditor() {
                                 </div>
                             )}
 
-                            <div className="form-item">
+                             <div className="form-item">
                                 <label>Currency</label>
-                                <select className="form-select" name="currency" value={formData.currency} onChange={handleHeaderChange}>
-                                    <option value="SGD">SGD - Singapore Dollar</option>
-                                    <option value="USD">USD - US Dollar</option>
-                                    <option value="EUR">EUR - Euro</option>
-                                    <option value="GBP">GBP - British Pound</option>
-                                    <option value="INR">INR - Indian Rupee</option>
-                                    <option value="MYR">MYR - Malaysian Ringgit</option>
-                                    <option value="JPY">JPY - Japanese Yen</option>
-                                    <option value="CHF">CHF - Swiss Franc</option>
-                                    <option value="CAD">CAD - Canadian Dollar</option>
-                                    <option value="AUD">AUD - Australian Dollar</option>
-                                    <option value="CNY">CNY - Chinese Yuan</option>
-                                    <option value="HKD">HKD - Hong Kong Dollar</option>
-                                    <option value="NZD">NZD - New Zealand Dollar</option>
-                                    <option value="KRW">KRW - South Korean Won</option>
-                                    <option value="AED">AED - UAE Dirham</option>
-                                    <option value="SAR">SAR - Saudi Riyal</option>
-                                    <option value="THB">THB - Thai Baht</option>
-                                    <option value="IDR">IDR - Indonesian Rupiah</option>
-                                    <option value="PHP">PHP - Philippine Peso</option>
-                                    <option value="VND">VND - Vietnamese Dong</option>
-                                </select>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <select className="form-select" name="currency" value={formData.currency} onChange={handleHeaderChange} style={{ flex: 1 }}>
+                                        <option value="SGD">SGD - Singapore Dollar</option>
+                                        <option value="USD">USD - US Dollar</option>
+                                        <option value="EUR">EUR - Euro</option>
+                                        <option value="GBP">GBP - British Pound</option>
+                                        <option value="INR">INR - Indian Rupee</option>
+                                        <option value="MYR">MYR - Malaysian Ringgit</option>
+                                        <option value="JPY">JPY - Japanese Yen</option>
+                                        <option value="CHF">CHF - Swiss Franc</option>
+                                        <option value="CAD">CAD - Canadian Dollar</option>
+                                        <option value="AUD">AUD - Australian Dollar</option>
+                                        <option value="CNY">CNY - Chinese Yuan</option>
+                                        <option value="HKD">HKD - Hong Kong Dollar</option>
+                                        <option value="NZD">NZD - New Zealand Dollar</option>
+                                        <option value="KRW">KRW - South Korean Won</option>
+                                        <option value="AED">AED - UAE Dirham</option>
+                                        <option value="SAR">SAR - Saudi Riyal</option>
+                                        <option value="THB">THB - Thai Baht</option>
+                                        <option value="IDR">IDR - Indonesian Rupiah</option>
+                                        <option value="PHP">PHP - Philippine Peso</option>
+                                        <option value="VND">VND - Vietnamese Dong</option>
+                                    </select>
+                                    {formData.currency !== 'SGD' && (
+                                        <div style={{ position: 'relative', width: '120px' }}>
+                                            <input 
+                                                type="number" 
+                                                className="form-input" 
+                                                name="exchange_rate" 
+                                                value={formData.exchange_rate} 
+                                                onChange={handleHeaderChange} 
+                                                placeholder="Rate" 
+                                                step="0.0001"
+                                                title="Exchange rate to SGD"
+                                            />
+                                            <button 
+                                                onClick={handleAiFetchExchangeRate} 
+                                                disabled={isFetchingRate}
+                                                style={{ 
+                                                    position: 'absolute', 
+                                                    right: '4px', 
+                                                    top: '50%', 
+                                                    transform: 'translateY(-50%)',
+                                                    background: 'none',
+                                                    border: 'none',
+                                                    color: 'var(--accent)',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    padding: '4px'
+                                                }}
+                                            >
+                                                {isFetchingRate ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                {formData.currency !== 'SGD' && (
+                                    <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', fontWeight: 600 }}>
+                                        1 {formData.currency} = {formData.exchange_rate} SGD
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -2482,7 +2677,7 @@ export default function WorkflowEditor() {
                                     </div>
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '32px' }}>
                                     {/* Customer Payments (Incoming) */}
                                     <div>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -3250,6 +3445,26 @@ export default function WorkflowEditor() {
                     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
                     position: relative;
                 }
+                .btn-edit-inline {
+                    position: absolute;
+                    right: 32px;
+                    top: 50%;
+                    transform: translateY(-50%);
+                    background: none;
+                    border: none;
+                    color: #6366f1;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    padding: 4px;
+                    opacity: 0.7;
+                    transition: all 0.2s;
+                    z-index: 10;
+                }
+                .btn-edit-inline:hover {
+                    opacity: 1;
+                    transform: translateY(-50%) scale(1.1);
+                }
                 `
             }} />
             {/* Quick Action Floating Hub */}
@@ -3263,6 +3478,7 @@ export default function WorkflowEditor() {
                     icon={Calculator}
                 >
                     <QuickExpenseAdd 
+                        company_id={profile?.company_id}
                         job_id={id}
                         partners={partners}
                         expense={expenseModal.data}

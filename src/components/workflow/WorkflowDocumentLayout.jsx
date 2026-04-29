@@ -72,10 +72,11 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
     const todayFormatted = formatDate(new Date());
     let itemCounter = 0;
 
-    const isQuotation = doc.document_type?.toUpperCase() === 'QUOTATION';
+    const isEffectiveORA = doc.document_type?.toUpperCase() === 'ORDER ACKNOWLEDGMENT' || (doc.document_type?.toUpperCase() === 'QUOTATION' && (doc.document_no || '').startsWith('ORA')) || doc.document_type === 'ORA';
+    const isQuotation = doc.document_type?.toUpperCase() === 'QUOTATION' && !isEffectiveORA;
     const isJob = doc.document_type?.toUpperCase() === 'JOB';
     const isDeliveryDoc = doc.document_type === 'Delivery Order' || doc.document_type === 'Packing List';
-    const isORA = doc.document_type?.toUpperCase() === 'ORDER ACKNOWLEDGMENT' || doc.document_type === 'ORA';
+    const isORA = isEffectiveORA;
     const isInvoice = doc.document_type?.toUpperCase() === 'TAX INVOICE' || doc.document_type?.toUpperCase() === 'INVOICE';
     const isProforma = doc.document_type?.toUpperCase() === 'PROFORMA INVOICE' || doc.document_type === 'PRO';
     const isFinancial = isInvoice || isProforma;
@@ -162,7 +163,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                 borderBottom: '2px solid #1e3a8a', paddingBottom: '8px', marginBottom: '20px' 
             }}>
                 <div style={{ ...styles.h3, width: '30%' }}>{docNoLabel}: {doc.document_no}</div>
-                <h1 style={{ ...styles.h1, textAlign: 'center', width: '40%', margin: 0 }}>{isJob ? 'JOB DETAIL' : doc.document_type?.toUpperCase()}</h1>
+                <h1 style={{ ...styles.h1, textAlign: 'center', width: '40%', margin: 0 }}>{isJob ? 'JOB DETAIL' : (isORA ? 'ORDER ACKNOWLEDGMENT' : doc.document_type?.toUpperCase())}</h1>
                 <div style={{ ...styles.h3, width: '30%', textAlign: 'right' }}>DATE: {todayFormatted}</div>
             </div>
 
@@ -266,8 +267,8 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                                 <tr key={idx} style={{ borderBottom: styles.border }}>
                                     <td style={{ padding: '8px 10px', ...styles.small, borderRight: styles.border, textAlign: 'center' }}>{itemCounter}</td>
                                     <td style={{ padding: '8px 10px', ...styles.body, borderRight: styles.border }}>
-                                        <div style={{ fontWeight: 800 }}>{item.description}</div>
-                                        {item.details && <div style={{ ...styles.small, marginTop: '2px' }}>{item.details}</div>}
+                                        <div style={{ fontWeight: 800, whiteSpace: 'pre-wrap' }}>{item.description}</div>
+                                        {item.details && <div style={{ ...styles.small, marginTop: '2px', whiteSpace: 'pre-wrap' }}>{item.details}</div>}
                                     </td>
                                     <td style={{ padding: '8px 10px', ...styles.bodyBold, borderRight: styles.border, textAlign: 'center' }}>{item.quantity} {item.uom || 'PC(S)'}</td>
                                     {!isDeliveryDoc && (
@@ -299,7 +300,9 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                                     </div>
                                     {doc.discount_amount > 0 && (
                                         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                            <span style={{ ...styles.h4, minWidth: '120px', color: '#ef4444' }}>DISCOUNT ({doc.discount_percent}%):</span>
+                                            <span style={{ ...styles.h4, minWidth: '120px', color: '#ef4444' }}>
+                                                DISCOUNT {parseFloat(doc.discount_percent) > 0 ? `(${doc.discount_percent}%)` : ''}:
+                                            </span>
                                             <span style={{ ...styles.bodyBold, color: '#ef4444' }}>- {(doc.discount_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                         </div>
                                     )}

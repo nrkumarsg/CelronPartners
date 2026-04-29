@@ -111,7 +111,11 @@ export const getWorkflowDocuments = async (companyId, type = null) => {
         .order('created_at', { ascending: false });
 
     if (type) {
-        query = query.eq('document_type', type);
+        if (Array.isArray(type)) {
+            query = query.in('document_type', type);
+        } else {
+            query = query.eq('document_type', type);
+        }
     }
 
     const { data, error } = await query;

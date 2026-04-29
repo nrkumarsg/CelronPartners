@@ -43,8 +43,8 @@ export const WhatsAppShareModal = ({ isOpen, onClose, contacts, partner, documen
     const handleShareIndividual = (num) => {
         const cleanedPhone = num.replace(/[^\d]/g, '');
         const finalPhone = cleanedPhone.startsWith('65') ? cleanedPhone : '65' + cleanedPhone;
-        const waUrl = `https://wa.me/${finalPhone}?text=${encodeURIComponent(message)}`;
-        window.open(waUrl, '_blank');
+        // Instead of just opening the waUrl, we pass the phone to onShareFile so it can download the PDF first
+        onShareFile(message, finalPhone);
     };
 
     const handleSharePDF = () => {
@@ -125,6 +125,34 @@ export const WhatsAppShareModal = ({ isOpen, onClose, contacts, partner, documen
                                     <div style={{ fontSize: '0.75rem', color: '#64748b' }}>+65 8196 2270</div>
                                 </div>
                             </label>
+                        </div>
+
+                        <div style={{ marginTop: '12px' }}>
+                            <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px', borderBottom: '1px solid #e2e8f0', paddingBottom: '4px' }}>Internal Approval</label>
+                            {[
+                                { name: 'N.R.Kumar', phone: '+6597685891' },
+                                { name: 'S.JebaRaj', phone: '+6596160873' },
+                                { name: 'ANITHA', phone: '+6591090347' }
+                            ].map((contact, idx) => (
+                                <label key={`internal-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '8px', borderRadius: '8px', cursor: 'pointer', transition: 'background 0.2s' }} className="contact-row">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={selectedNumbers.includes(contact.phone)} 
+                                        onChange={() => toggleNumber(contact.phone)}
+                                        style={{ width: '18px', height: '18px', accentColor: '#25D366' }}
+                                    />
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1e293b' }}>{contact.name}</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{contact.phone.replace('+65', '+65 ')}</div>
+                                    </div>
+                                    <button 
+                                        onClick={(e) => { e.preventDefault(); handleShareIndividual(contact.phone); }}
+                                        style={{ background: '#f1f5f9', border: 'none', padding: '6px 10px', borderRadius: '6px', color: '#475569', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer' }}
+                                    >
+                                        Chat
+                                    </button>
+                                </label>
+                            ))}
                         </div>
 
                         <div style={{ borderTop: '1px solid #e2e8f0', marginTop: '4px', paddingTop: '8px', display: 'flex', gap: '8px' }}>

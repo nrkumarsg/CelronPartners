@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map, ExternalLink, Plus, Sparkles, Loader2, ChevronDown, Paperclip, FileCheck, Calculator, FileText, Search, Check, RotateCcw } from 'lucide-react';
+import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map, ExternalLink, Plus, Sparkles, Loader2, RefreshCw, Upload, ChevronDown, Paperclip, FileCheck, Calculator, FileText, Search, Check, RotateCcw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { savePartner } from '../../lib/store';
 import { saveJobExpense } from '../../lib/jobExpenseService';
@@ -111,8 +111,8 @@ export const Modal = ({ isOpen, onClose, title, children, icon: Icon }) => {
 };
 
 // Quick Partner Add
-export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
-    const [formData, setFormData] = useState({
+export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel }) => {
+    const [formData, setFormData] = useState(initialData || {
         name: '',
         uen: '',
         types: ['Customer'],
@@ -259,11 +259,14 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
         if (!formData.name) return alert('Name is required');
         setLoading(true);
         try {
+            const isExisting = !!formData.id;
             const dataToSave = {
                 ...formData,
                 company_id
             };
-            const { data, error } = await supabase.from('partners').insert([dataToSave]).select();
+            const { data, error } = isExisting 
+                ? await supabase.from('partners').update(dataToSave).eq('id', formData.id).select()
+                : await supabase.from('partners').insert([dataToSave]).select();
             if (error) throw error;
             onSuccess(data[0]);
         } catch (err) {
@@ -280,7 +283,7 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                 <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #6366f1, #10b981)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }}>
                     <Users size={20} />
                 </div>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', fontFamily: "'Outfit', sans-serif", margin: 0 }}>Add New Customer</h2>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', fontFamily: "'Outfit', sans-serif", margin: 0 }}>{initialData ? 'Edit Customer Details' : 'Add New Customer'}</h2>
             </div>
 
             {/* AI Research Section */}
@@ -594,7 +597,7 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
                     className="btn btn-primary"
                     style={{ flex: 1, height: '48px', borderRadius: '14px', fontSize: '1rem', fontWeight: 600, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none' }}
                 >
-                    {loading ? <Loader2 className="animate-spin" /> : 'Create Customer Profile'}
+                    {loading ? <Loader2 className="animate-spin" /> : (initialData ? 'Update Customer Profile' : 'Create Customer Profile')}
                 </button>
                 <button
                     onClick={onCancel}
@@ -608,8 +611,8 @@ export const QuickPartnerAdd = ({ company_id, onSuccess, onCancel }) => {
     );
 };
 
-export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, onCancel }) => {
-    const [formData, setFormData] = useState({
+export const QuickContactAdd = ({ company_id, partner_id, partners, initialData, onSuccess, onCancel }) => {
+    const [formData, setFormData] = useState(initialData || {
         name: '',
         email: '',
         partnerId: partner_id || '',
@@ -665,10 +668,10 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, o
         if (!formData.name || !formData.partnerId) return alert('Name and Partner are required');
         setLoading(true);
         try {
-            const { data, error } = await supabase.from('contacts').insert([{
-                ...formData,
-                company_id
-            }]).select();
+            const isExisting = !!formData.id;
+            const { data, error } = isExisting
+                ? await supabase.from('contacts').update({ ...formData }).eq('id', formData.id).select()
+                : await supabase.from('contacts').insert([{ ...formData, company_id }]).select();
             if (error) throw error;
             onSuccess(data[0]);
         } catch (err) {
@@ -825,14 +828,15 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, onSuccess, o
     );
 };
 
-export const QuickVesselAdd = ({ company_id, onSuccess, onCancel }) => {
-    const [formData, setFormData] = useState({
+// Quick Vessel Add
+export const QuickVesselAdd = ({ company_id, initialData, onSuccess, onCancel }) => {
+    const [formData, setFormData] = useState(initialData || {
         vessel_name: '',
         imo_number: '',
-        mmsi: '',
         vessel_type: '',
         vessel_management: '',
-        vessel_owner: ''
+        vessel_owner: '',
+        mmsi: ''
     });
     const [loading, setLoading] = useState(false);
     const [isAiResearching, setIsAiResearching] = useState(false);
@@ -878,10 +882,22 @@ export const QuickVesselAdd = ({ company_id, onSuccess, onCancel }) => {
         if (!formData.vessel_name) return alert('Vessel Name is required');
         setLoading(true);
         try {
-            const { data, error } = await supabase.from('vessels').insert([{
-                ...formData,
-                company_id
-            }]).select();
+            const isExisting = !!formData.id;
+            
+            // Sanitize payload to only include valid columns
+            const payload = {
+                vessel_name: formData.vessel_name,
+                imo_number: formData.imo_number,
+                vessel_type: formData.vessel_type,
+                vessel_management: formData.vessel_management,
+                vessel_owner: formData.vessel_owner,
+                mmsi: formData.mmsi,
+                company_id: company_id
+            };
+
+            const { data, error } = isExisting
+                ? await supabase.from('vessels').update(payload).eq('id', formData.id).select()
+                : await supabase.from('vessels').insert([payload]).select();
             if (error) throw error;
             onSuccess(data[0]);
         } catch (err) {
@@ -1009,18 +1025,21 @@ export const QuickVesselAdd = ({ company_id, onSuccess, onCancel }) => {
     );
 };
 
-export const QuickLocationAdd = ({ company_id, onSuccess, onCancel }) => {
-    const [locationName, setLocationName] = useState('');
+export const QuickWorkLocationAdd = ({ company_id, initialData, onSuccess, onCancel }) => {
+    const [locationName, setLocationName] = useState(initialData?.location_name || '');
     const [loading, setLoading] = useState(false);
 
     const handleSave = async () => {
         if (!locationName) return alert('Location Name is required');
         setLoading(true);
         try {
-            const { data, error } = await supabase.from('work_locations').insert([{
-                location_name: locationName,
-                company_id
-            }]).select();
+            const isExisting = !!initialData?.id;
+            const { data, error } = isExisting
+                ? await supabase.from('work_locations').update({ location_name: locationName }).eq('id', initialData.id).select()
+                : await supabase.from('work_locations').insert([{
+                    location_name: locationName,
+                    company_id
+                }]).select();
             if (error) throw error;
             onSuccess(data[0]);
         } catch (err) {
@@ -1054,9 +1073,10 @@ export const QuickLocationAdd = ({ company_id, onSuccess, onCancel }) => {
 };
 
 // Quick Expense Add
-export const QuickExpenseAdd = ({ job_id, partners, expense, onSuccess, onCancel, onUploadBill }) => {
+export const QuickExpenseAdd = ({ job_id, partners, jobs, expense, onSuccess, onCancel, onUploadBill, company_id }) => {
     const [formData, setFormData] = useState(expense || {
-        job_id,
+        job_id: job_id || '',
+        job_no: '',
         supplier_id: '',
         invoice_no: '',
         invoice_date: new Date().toISOString().split('T')[0],
@@ -1068,6 +1088,19 @@ export const QuickExpenseAdd = ({ job_id, partners, expense, onSuccess, onCancel
         grand_total: 0,
         category: 'Material'
     });
+
+    // Initial job if editing or provided
+    React.useEffect(() => {
+        if (formData.job_id && jobs) {
+            const j = jobs.find(job => job.id === formData.job_id);
+            if (j) setFormData(prev => ({ ...prev, job_no: j.document_no }));
+        }
+    }, [formData.job_id, jobs]);
+
+    const handleSelectJob = (job) => {
+        setFormData(prev => ({ ...prev, job_id: job.id, job_no: job.document_no }));
+    };
+
     const [supplierSearch, setSupplierSearch] = useState('');
     const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -1095,6 +1128,20 @@ export const QuickExpenseAdd = ({ job_id, partners, expense, onSuccess, onCancel
         setFormData(prev => ({ ...prev, supplier_id: s.id }));
         setSupplierSearch(s.name);
         setShowSupplierDropdown(false);
+    };
+
+    const handleEditSupplier = () => {
+        if (!formData.supplier_id) return;
+        const s = partners.find(p => p.id === formData.supplier_id);
+        if (s) {
+            setEditModal({ isOpen: true, type: 'partner_id', initialData: s });
+        }
+    };
+
+    const [editModal, setEditModal] = useState({ isOpen: false, type: null, initialData: null });
+    const handleEditSuccess = (updated) => {
+        setEditModal({ isOpen: false, type: null, initialData: null });
+        onSuccess && typeof onSuccess === 'function' ? null : window.location.reload(); // Refresh to get new data if needed
     };
 
     const calculateTotals = (updated) => {
@@ -1157,7 +1204,17 @@ export const QuickExpenseAdd = ({ job_id, partners, expense, onSuccess, onCancel
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div className="grid-2">
                 <div className="form-item full-width" style={{ position: 'relative' }}>
-                    <label>Supplier *</label>
+                    <label style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>Supplier *</span>
+                        {formData.supplier_id && (
+                            <button 
+                                onClick={handleEditSupplier}
+                                style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.8rem', fontWeight: 600 }}
+                            >
+                                <Pencil size={12} /> Edit Supplier
+                            </button>
+                        )}
+                    </label>
                     <div style={{ display: 'flex', gap: '8px' }}>
                         <div style={{ flex: 1, position: 'relative' }}>
                             <input
@@ -1213,6 +1270,21 @@ export const QuickExpenseAdd = ({ job_id, partners, expense, onSuccess, onCancel
                             )}
                         </div>
                     </div>
+                </div>
+
+                <div className="form-item">
+                    <label>Job No (Optional)</label>
+                    <select 
+                        className="form-select"
+                        value={formData.job_id}
+                        onChange={(e) => {
+                            const selected = jobs?.find(j => j.id === e.target.value);
+                            handleSelectJob(selected || { id: '', document_no: '' });
+                        }}
+                    >
+                        <option value="">No Job Linked</option>
+                        {jobs?.map(j => <option key={j.id} value={j.id}>{j.document_no}</option>)}
+                    </select>
                 </div>
 
                 <div className="form-item">
@@ -1342,6 +1414,21 @@ export const QuickExpenseAdd = ({ job_id, partners, expense, onSuccess, onCancel
                     <Save size={18} /> {loading ? 'Saving Expense...' : (expense ? 'Update Expense Record' : 'Save Expense Record')}
                 </button>
             </div>
+
+            {/* Nested Modal for Editing Supplier */}
+            {editModal.isOpen && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', padding: '24px' }}>
+                    <div style={{ width: '100%', maxWidth: '1000px', maxHeight: '90vh', background: 'white', borderRadius: '16px', padding: '32px', overflowY: 'auto', position: 'relative' }}>
+                        <button onClick={() => setEditModal({ isOpen: false, type: null })} style={{ position: 'absolute', right: '20px', top: '20px', background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
+                        <QuickPartnerAdd 
+                            company_id={company_id} 
+                            initialData={editModal.initialData} 
+                            onSuccess={handleEditSuccess} 
+                            onCancel={() => setEditModal({ isOpen: false, type: null })} 
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

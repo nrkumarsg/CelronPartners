@@ -79,7 +79,8 @@ export default function WorkflowPrintPreview() {
         // Build descriptive filename: Type_No - Customer - Project/Vessel
         const customerName = doc.partners?.name || 'Customer';
         const projectOrVessel = doc.vessels?.name || doc.subject || 'Project';
-        const rawFilename = `${doc.document_type || 'Document'}_${doc.document_no || 'Draft'} - ${customerName} - ${projectOrVessel}`;
+        const effectiveType = (doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : (doc.document_type || 'Document');
+        const rawFilename = `${effectiveType}_${doc.document_no || 'Draft'} - ${customerName} - ${projectOrVessel}`;
         
         // Sanitize filename to remove invalid characters
         const safeFilename = rawFilename.replace(/[/\\?%*:|"<>]/g, '-').trim();

@@ -12,6 +12,9 @@ import {
     getInstruments, createInstrument, getPartners, updateInstrument, deleteInstrument,
     getInstrumentHistory
 } from '../lib/calibrationService';
+import { getWorkLocations } from '../lib/store';
+import { QuickPartnerAdd, QuickVesselAdd } from '../components/workflow/QuickAddForms';
+import { supabase } from '../lib/supabase';
 import { getJobs } from '../lib/workflowService';
 import { useVesselsStore } from '../lib/vesselsStore';
 import { provisionCalibrationStructure, uploadFileToDrive, provisionTemplateLibrary, listFolderContent, deleteFile, provisionInstrumentVault } from '../lib/driveService';
@@ -40,6 +43,7 @@ export default function CalibrationLab() {
     const [templateViewMode, setTemplateViewMode] = useState('grid'); // 'grid' | 'list'
     const [uploadProgress, setUploadProgress] = useState(0);
     const [uploadLink, setUploadLink] = useState(null);
+    const [editModal, setEditModal] = useState({ isOpen: false, type: null, initialData: null });
 
     // Instrument Library State
     const [instrumentSearchTerm, setInstrumentSearchTerm] = useState('');
@@ -368,6 +372,21 @@ export default function CalibrationLab() {
         setActiveTab('form');
     };
 
+    const handleEditMaster = (type) => {
+        let initialData = null;
+        if (type === 'vessel_id') initialData = vessels.find(v => v.id === formData.vessel_id);
+        else if (type === 'customer_id') initialData = partners.find(p => p.id === formData.customer_id);
+
+        if (!initialData) return alert('Please select a record to edit first.');
+        setEditModal({ isOpen: true, type, initialData });
+    };
+
+    const handleEditMasterSuccess = () => {
+        setEditModal({ isOpen: false, type: null, initialData: null });
+        fetchData();
+        fetchVessels();
+    };
+
     const handleDeleteRecord = async (id) => {
         if (window.confirm("Are you sure you want to delete this calibration record?")) {
             const { error } = await deleteCalibrationRecord(id);
@@ -669,8 +688,9 @@ export default function CalibrationLab() {
                             </div>
 
                             <div>
-                                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontWeight: 600, color: '#475569' }}>
-                                    <Ship size={16} /> Vessel
+                                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between', marginBottom: '8px', fontWeight: 600, color: '#475569' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><Ship size={16} /> Vessel</span>
+                                    {formData.vessel_id && <Pencil size={12} style={{ cursor: 'pointer', color: '#10b981' }} onClick={() => handleEditMaster('vessel_id')} />}
                                 </label>
                                 <select
                                     className="form-input"
@@ -687,8 +707,9 @@ export default function CalibrationLab() {
                             </div>
 
                             <div>
-                                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontWeight: 600, color: '#475569' }}>
-                                    <User size={16} /> Customer (Partners)
+                                <label className="form-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between', marginBottom: '8px', fontWeight: 600, color: '#475569' }}>
+                                    <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}><User size={16} /> Customer (Partners)</span>
+                                    {formData.customer_id && <Pencil size={12} style={{ cursor: 'pointer', color: '#10b981' }} onClick={() => handleEditMaster('customer_id')} />}
                                 </label>
                                 <select
                                     className="form-input"
@@ -1773,6 +1794,36 @@ export default function CalibrationLab() {
                     setUploadLink(null);
                 }}
             />
+
+            <GDriveConnectionModal 
+                isOpen={isAuthModalOpen} 
+                onClose={() => setIsAuthModalOpen(false)} 
+                state="calibration_template_upload"
+            />
+
+            {/* Master Data Edit Modal */}
+            {editModal.isOpen && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', padding: '24px' }}>
+                    <div style={{ width: '100%', maxWidth: '1000px', maxHeight: '90vh', background: 'white', borderRadius: '16px', padding: '32px', overflowY: 'auto', position: 'relative' }}>
+                        <button onClick={() => setEditModal({ isOpen: false, type: null })} style={{ position: 'absolute', right: '20px', top: '20px', background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
+                        {editModal.type === 'vessel_id' ? (
+                            <QuickVesselAdd 
+                                company_id={partners[0]?.company_id} // Fallback to first partner's company_id
+                                initialData={editModal.initialData} 
+                                onSuccess={handleEditMasterSuccess} 
+                                onCancel={() => setEditModal({ isOpen: false, type: null })} 
+                            />
+                        ) : (
+                            <QuickPartnerAdd 
+                                company_id={partners[0]?.company_id} 
+                                initialData={editModal.initialData} 
+                                onSuccess={handleEditMasterSuccess} 
+                                onCancel={() => setEditModal({ isOpen: false, type: null })} 
+                            />
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

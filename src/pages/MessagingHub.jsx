@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, MessageSquare, Share2, Plus, Search, ExternalLink, RefreshCw, Send, Paperclip, MoreVertical, Star, Inbox, Trash2, Globe, Youtube, Instagram, Twitter, Linkedin, Facebook, X } from 'lucide-react';
+import { Mail, MessageSquare, Share2, Plus, Search, ExternalLink, RefreshCw, Send, Paperclip, MoreVertical, Star, Inbox, Trash2, Globe, Youtube, Instagram, Twitter, Linkedin, Facebook, X, BookOpen, Calendar, Cloud, Rss, Users, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getCommunicationAccounts, getUnreadCounts } from '../lib/communicationService';
 import { fetchGmailThreads } from '../lib/googleAuthService';
 
@@ -16,6 +16,16 @@ export default function MessagingHub() {
     const [selectedMessage, setSelectedMessage] = useState(null);
     const [isUnified, setIsUnified] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
+    const [showEvents, setShowEvents] = useState(true);
+
+    const THUNDERBIRD_ACCOUNTS = [
+        { id: 'tb-1', account_label: 'sales@celron.net', provider: 'gmail', platform: 'email', unread: 1292 },
+        { id: 'tb-2', account_label: 'kumar@celron.net', provider: 'gmail', platform: 'email', unread: 1732 },
+        { id: 'tb-3', account_label: 'accounts@celron.net', provider: 'gmail', platform: 'email', unread: 681 },
+        { id: 'tb-4', account_label: 'celron.simlim0305@gmail.com', provider: 'gmail', platform: 'email', unread: 33 },
+        { id: 'tb-5', account_label: 'acct.celron.sg@gmail.com', provider: 'gmail', platform: 'email', unread: 3178 },
+        { id: 'tb-6', account_label: 'celron.sg@gmail.com', provider: 'gmail', platform: 'email', unread: 1061 },
+    ];
 
     // Mock messages for UI demonstration (used as fallback)
     const [mockMessages, setMockMessages] = useState([
@@ -144,8 +154,16 @@ export default function MessagingHub() {
                     setSelectedAccount(gmailAccount);
                     setIsUnified(false);
                 } else {
-                    setSelectedAccount(data[0]);
+                    // Fallback to Thunderbird accounts for demo if no real ones
+                    setAccounts(THUNDERBIRD_ACCOUNTS);
+                    setUnreadCounts(THUNDERBIRD_ACCOUNTS.reduce((acc, a) => ({ ...acc, [a.id]: a.unread }), {}));
+                    setSelectedAccount(THUNDERBIRD_ACCOUNTS[0]);
                 }
+            } else {
+                // If data is empty
+                setAccounts(THUNDERBIRD_ACCOUNTS);
+                setUnreadCounts(THUNDERBIRD_ACCOUNTS.reduce((acc, a) => ({ ...acc, [a.id]: a.unread }), {}));
+                setSelectedAccount(THUNDERBIRD_ACCOUNTS[0]);
             }
         } catch (e) { console.error(e); }
         setLoading(false);
@@ -256,8 +274,17 @@ export default function MessagingHub() {
                                         {getIcon(account.provider)}
                                     </div>
                                     <div style={{ flex: 1, overflow: 'hidden' }}>
-                                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{account.account_label}</div>
-                                        <div style={{ fontSize: '0.7rem', color: '#64748b' }}>{unreadCounts[account.id] || 0} Notifications</div>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: isActive ? '#1e293b' : '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{account.account_label}</div>
+                                    </div>
+                                    <div style={{ 
+                                        fontSize: '0.75rem', 
+                                        color: isActive ? '#fff' : '#64748b', 
+                                        background: isActive ? '#6366f1' : 'rgba(148, 163, 184, 0.1)',
+                                        padding: '2px 8px',
+                                        borderRadius: '10px',
+                                        fontWeight: 700
+                                    }}>
+                                        {unreadCounts[account.id] || 0}
                                     </div>
                                 </div>
                             );
@@ -325,7 +352,7 @@ export default function MessagingHub() {
                             <ExternalLink size={18} /> {selectedAccount.provider === 'gmail' ? 'Connect Google' : `Open ${selectedAccount.account_label}`}
                         </button>
                     </div>
-                ) : selectedMessage ? (
+                                ) : selectedMessage ? (
                     <div style={{ maxWidth: '800px', margin: '0 auto' }}>
                         <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '24px' }}>{selectedMessage.subject || '(No Subject)'}</h1>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '32px' }}>
@@ -337,7 +364,75 @@ export default function MessagingHub() {
                         </div>
                         <div dangerouslySetInnerHTML={{ __html: selectedMessage.body || selectedMessage.excerpt }}></div>
                     </div>
-                ) : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94a3b8' }}><Inbox size={48} /><p>{statusMessage || 'Select a message to read.'}</p></div>}
+                ) : (
+                    <div style={{ height: '100%', overflowY: 'auto', padding: '20px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', borderBottom: '1px solid #e2e8f0', paddingBottom: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <Mail size={24} color="#6366f1" />
+                                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0 }}>{selectedAccount?.account_label || 'Celron Messaging'}</h2>
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button style={{ padding: '8px 16px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>Account Settings</button>
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: '48px' }}>
+                            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '20px', color: '#1e293b' }}>Set Up Another Account</h3>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '16px' }}>
+                                {[
+                                    { icon: <Mail size={20} />, label: 'Email' },
+                                    { icon: <BookOpen size={20} />, label: 'Address Book' },
+                                    { icon: <Calendar size={20} />, label: 'Calendar' },
+                                    { icon: <MessageSquare size={20} />, label: 'Chat' },
+                                    { icon: <Cloud size={20} />, label: 'Filelink' },
+                                    { icon: <Rss size={20} />, label: 'Feeds' },
+                                    { icon: <Users size={20} />, label: 'Newsgroups' },
+                                ].map((item, i) => (
+                                    <div key={i} style={{ 
+                                        padding: '20px 10px', 
+                                        background: '#fff', 
+                                        border: '1px solid #e2e8f0', 
+                                        borderRadius: '12px', 
+                                        display: 'flex', 
+                                        flexDirection: 'column', 
+                                        alignItems: 'center', 
+                                        gap: '12px', 
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                                    }} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
+                                        <div style={{ color: '#6366f1' }}>{item.icon}</div>
+                                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>{item.label}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div style={{ marginBottom: '48px' }}>
+                            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '16px', color: '#1e293b' }}>Import from Another Program</h3>
+                            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '20px', lineHeight: 1.6 }}>
+                                Celron Hub lets you import mail messages, address book entries, feed subscriptions, settings, and/or filters from other mail programs and common address book formats.
+                            </p>
+                            <button style={{ padding: '10px 24px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Share2 size={16} /> Import
+                            </button>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', padding: '32px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                            <div>
+                                <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '12px' }}>About Celron Messaging</h3>
+                                <p style={{ fontSize: '0.85rem', color: '#64748b', lineHeight: 1.6 }}>
+                                    Celron Messaging is the leading open source, cross-platform email and calendaring client, free for business and personal use. We want it to stay secure and become even better. A donation will allow us to hire developers, pay for infrastructure, and continue to improve.
+                                </p>
+                            </div>
+                            <div>
+                                <p style={{ fontSize: '0.85rem', color: '#64748b', lineHeight: 1.6 }}>
+                                    Celron is funded by users like you! If you like Celron Hub, please consider making a donation. The best way for you to ensure Celron remains available is to make a donation.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -369,6 +464,61 @@ export default function MessagingHub() {
                     <>
                         {renderMessageList()}
                         {renderReadingPane()}
+                        
+                        {/* Events Panel (Right) */}
+                        {showEvents && (
+                            <div style={{ width: '300px', borderLeft: '1px solid #e2e8f0', background: '#fff', display: 'flex', flexDirection: 'column' }}>
+                                <div style={{ padding: '16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Calendar size={18} color="#6366f1" />
+                                        <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>Events</h3>
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <ChevronLeft size={16} color="#64748b" style={{ cursor: 'pointer' }} />
+                                        <ChevronRight size={16} color="#64748b" style={{ cursor: 'pointer' }} />
+                                    </div>
+                                </div>
+                                
+                                <div style={{ padding: '24px', textAlign: 'center', borderBottom: '1px solid #e2e8f0' }}>
+                                    <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>29 Wed</div>
+                                    <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Apr 2026 CW 18</div>
+                                    <button style={{ marginTop: '16px', width: '100%', padding: '8px', background: 'transparent', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                        <Plus size={14} /> New Event
+                                    </button>
+                                </div>
+
+                                <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
+                                    <div style={{ marginBottom: '24px' }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '12px' }}>Friday, 1 May</div>
+                                        <div style={{ background: '#22c55e', color: '#fff', padding: '10px 14px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600 }}>
+                                            Labour Day
+                                        </div>
+                                    </div>
+                                    <div style={{ marginBottom: '24px' }}>
+                                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '12px' }}>Sunday, 10 May</div>
+                                        <div style={{ background: '#22c55e', color: '#fff', padding: '10px 14px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 600 }}>
+                                            Mother's Day
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style={{ padding: '16px', borderTop: '1px solid #e2e8f0', textAlign: 'center' }}>
+                                    <button onClick={() => setShowEvents(false)} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', margin: '0 auto' }}>
+                                        Hide Today Pane <ChevronRight size={14} />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {!showEvents && (
+                            <div 
+                                onClick={() => setShowEvents(true)}
+                                style={{ width: '40px', borderLeft: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: '20px', cursor: 'pointer' }}
+                            >
+                                <ChevronLeft size={18} color="#64748b" />
+                                <div style={{ writingMode: 'vertical-rl', textOrientation: 'mixed', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', marginTop: '20px', letterSpacing: '0.1em' }}>TODAY PANE</div>
+                            </div>
+                        )}
                     </>
                 ) : renderSocialDashboard()}
             </div>

@@ -85,7 +85,11 @@ export default function WorkflowV2Board() {
     const fetchDocs = async () => {
         setLoading(true);
         // If activeType is "Job", we fetch ALL documents for the company and filter by is_job
-        const typeFilter = (activeType === 'All' || activeType === 'Job') ? null : activeType;
+        let typeFilter = (activeType === 'All' || activeType === 'Job') ? null : activeType;
+        // Fetch both Quotation and Order Acknowledgment when either is selected to handle crossover
+        if (activeType === 'Quotation' || activeType === 'Order Acknowledgment') {
+            typeFilter = ['Quotation', 'Order Acknowledgment'];
+        }
         const { data, error } = await getWorkflowDocuments(profile.company_id, typeFilter);
         
         if (data) {
@@ -213,9 +217,9 @@ export default function WorkflowV2Board() {
         if (activeType === 'Job') {
             matchesType = doc.document_type === 'Job';
         }
-        // Special logic for Order Acknowledgment vs Quotation
+        // Special logic for Order Acknowledgment vs Quotation (Handling ORA-prefixed Quotations)
         else if (activeType === 'Order Acknowledgment') {
-            matchesType = doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA');
+            matchesType = doc.document_type === 'Order Acknowledgment' || (doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA'));
         } else if (activeType === 'Quotation') {
             matchesType = doc.document_type === 'Quotation' && !(doc.document_no || '').startsWith('ORA');
         }
@@ -634,10 +638,15 @@ export default function WorkflowV2Board() {
                                                     gap: '6px',
                                                     fontSize: '0.75rem',
                                                     fontWeight: 600,
-                                                    color: getTypeColor(doc.document_type),
+                                                    color: getTypeColor((doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : doc.document_type),
                                                     textTransform: 'uppercase'
                                                 }}>
-                                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: getTypeColor(doc.document_type) }} />
+                                                    <div style={{ 
+                                                        width: '6px', 
+                                                        height: '6px', 
+                                                        borderRadius: '50%', 
+                                                        background: getTypeColor((doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : doc.document_type) 
+                                                    }} />
                                                     {doc.document_type === 'Enquiry' ? 'Enquiry to Supplier' : 
                                                      (doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : 
                                                      doc.document_type}

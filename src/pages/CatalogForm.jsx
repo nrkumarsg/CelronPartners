@@ -1,25 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-    Save,
-    X,
-    Trash2,
-    ArrowLeft,
-    Plus,
-    Search as SearchIcon,
-    Globe,
-    Camera,
-    UploadCloud,
-    Image as ImageIcon,
-    Loader,
-    Cloud,
-    QrCode,
-    CheckCircle2,
-    AlertCircle,
-    Link,
-    RefreshCw,
-    ExternalLink
+import { 
+    X, Plus, Search, Filter, ArrowLeft, Save, Trash, FileText, 
+    MoreHorizontal, ChevronDown, Package, Database, Edit, Ship, 
+    Link, ArrowRight, Cloud, ImageIcon, Pencil
 } from 'lucide-react';
+import { Modal, QuickPartnerAdd } from '../components/workflow/QuickAddForms';
+import { supabase } from '../lib/supabase';
 import ScannerModal from '../components/ScannerModal';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
@@ -37,7 +24,6 @@ import {
     deletePurchaseHistory
 } from '../lib/purchaseHistoryService';
 import { getDocumentSettings } from '../lib/store';
-import { supabase } from '../lib/supabase';
 
 import { uploadFile } from '../lib/store';
 import { uploadFileToDrive, getOrCreateFolder, makeFilePublic, getDirectImageUrl, checkFileExists } from '../lib/driveService';
@@ -55,7 +41,9 @@ const CatalogForm = () => {
     const [loading, setLoading] = useState(!isNewItem);
     const [saving, setSaving] = useState(false);
     const [activeTab, setActiveTab] = useState('details'); // 'details', 'purchaseHistory', or 'photos'
-    const [uploadingPhotos, setUploadingPhotos] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [editModal, setEditModal] = useState({ isOpen: false, type: null, initialData: null });
     const [showScanner, setShowScanner] = useState(false);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [driveFolderId, setDriveFolderId] = useState(null);
@@ -287,6 +275,19 @@ const CatalogForm = () => {
     const handlePurchaseInputChange = (e) => {
         const { name, value } = e.target;
         setPurchaseFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleEditMaster = (type) => {
+        let initialData = null;
+        if (type === 'supplier_id') initialData = partners.find(p => p.id === purchaseFormData.supplier_id);
+
+        if (!initialData) return alert('Please select a supplier to edit first.');
+        setEditModal({ isOpen: true, type, initialData });
+    };
+
+    const handleEditMasterSuccess = () => {
+        setEditModal({ isOpen: false, type: null, initialData: null });
+        fetchData(); // This should reload partners
     };
 
     const handlePurchaseDetailsChange = (content) => {
@@ -1090,7 +1091,10 @@ const CatalogForm = () => {
                                 <form id="purchaseForm" onSubmit={handleSavePurchase}>
                                     <div className="grid-2">
                                         <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                                            <label className="form-label">Supplier *</label>
+                                            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <span>Supplier *</span>
+                                                {purchaseFormData.supplier_id && <Pencil size={14} style={{ cursor: 'pointer', color: 'var(--accent)' }} onClick={() => handleEditMaster('supplier_id')} />}
+                                            </label>
                                             <select
                                                 className="form-select"
                                                 name="supplier_id"
@@ -1176,6 +1180,23 @@ const CatalogForm = () => {
                 onClose={() => setIsAuthModalOpen(false)} 
                 state="catalog_photo_upload"
             />
+
+            {editModal.isOpen && (
+                <Modal 
+                    isOpen={editModal.isOpen} 
+                    onClose={() => setEditModal({ isOpen: false, type: null, initialData: null })}
+                    title={`Edit ${editModal.type === 'supplier_id' ? 'Supplier' : 'Master'}`}
+                >
+                    {editModal.type === 'supplier_id' && (
+                        <QuickPartnerAdd 
+                            company_id={profile?.company_id}
+                            initialData={editModal.initialData}
+                            onSuccess={handleEditMasterSuccess}
+                            onCancel={() => setEditModal({ isOpen: false, type: null, initialData: null })}
+                        />
+                    )}
+                </Modal>
+            )}
         </div >
     );
 };
