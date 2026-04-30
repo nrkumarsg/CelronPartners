@@ -7,7 +7,7 @@ import {
     MoreHorizontal, Search, Settings,
     ChevronDown, CreditCard, User, Users, MapPin, Paperclip, Pencil, Sparkles,
     FileCheck, Play, RefreshCw, AlertCircle, Loader2,
-    ExternalLink, Folder, File, HardDrive, Upload, MessageSquare
+    ExternalLink, Folder, File as FileIcon, HardDrive, Upload, MessageSquare
 } from 'lucide-react';
 import { getExchangeRateWithGemini } from '../../lib/geminiService';
 import { listFolderContent, uploadFileToDrive, deleteFile, getOrCreateFolder, provisionFullProjectStructure, provisionPartnerStructure } from '../../lib/driveService';
@@ -31,6 +31,7 @@ import {
     Modal,
     QuickPartnerAdd,
     QuickContactAdd,
+    QuickPartnerContactDualAdd,
     QuickVesselAdd,
     QuickWorkLocationAdd,
     QuickExpenseAdd
@@ -903,17 +904,27 @@ export default function WorkflowEditor() {
         setModal({ isOpen: true, type, initialData });
     };
 
-    const handleQuickAddSuccess = (newItem) => {
+    const handleQuickAddSuccess = (data) => {
         const typeAdded = modal.type;
         setModal({ isOpen: false, type: null });
 
-        // Refresh master data to include the new item
+        // Refresh master data to include the new item(s)
         fetchMasterData();
 
-        // Select the new item
+        // Handle dual data from QuickPartnerContactDualAdd
+        if (data && data.partner) {
+            setFormData(prev => ({ 
+                ...prev, 
+                partner_id: data.partner.id, 
+                contact_id: data.contact?.id || '' 
+            }));
+            return;
+        }
+
+        // Select the new item for single-add cases
+        const newItem = data;
         if (typeAdded === 'partner_id') {
             setFormData(prev => ({ ...prev, partner_id: newItem.id, contact_id: '' }));
-            // Master data refresh will handle contacts
         } else if (typeAdded === 'contact_id') {
             setFormData(prev => ({ ...prev, contact_id: newItem.id }));
         } else if (typeAdded === 'vessel_id') {
@@ -1125,7 +1136,7 @@ export default function WorkflowEditor() {
         const effectiveType = (formData.document_type === 'Quotation' && (formData.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : formData.document_type;
         const body = `Dear ${contact?.name || 'Customer'},\n\nPlease find attached the ${effectiveType} (${formData.document_no}) for your review.${itemsContent}${footer}`;
 
-        setEmailPreview({ to: recipient, cc: '', bcc: '', subject, body, attachments: [] });
+        setEmailPreview({ to: recipient, cc: '', bcc: 'celron.simlim0305@gmail.com; accounts@celron.net', subject, body, attachments: [] });
     };
 
     const attachDocumentFromSuite = async (doc) => {
@@ -1170,9 +1181,11 @@ export default function WorkflowEditor() {
             if (!fileBlob) {
                 const { data: fullDoc, error } = await getWorkflowDocumentById(doc.id);
                 if (error) throw error;
+                if (!fullDoc) throw new Error("Document data not found in database.");
                 
                 fileBlob = await generateSleekPDF({
                     ...fullDoc,
+                    items: fullDoc.items || [],
                     partners: partners.find(p => p.id === fullDoc.partner_id),
                     vessels: vessels.find(v => v.id === fullDoc.vessel_id),
                     work_locations: workLocations.find(wl => wl.id === fullDoc.work_location_id)
@@ -1374,9 +1387,21 @@ export default function WorkflowEditor() {
         const initialData = modal.initialData;
         switch (modal.type) {
             case 'partner_id':
-                return <QuickPartnerAdd company_id={profile.company_id} initialData={initialData} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
             case 'contact_id':
-                return <QuickContactAdd company_id={profile.company_id} partner_id={formData.partner_id} partners={partners} initialData={initialData} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
+                // For either partner or contact, we now show both side-by-side
+                const partner = partners.find(p => p.id === formData.partner_id) || (modal.type === 'partner_id' ? initialData : null);
+                const contact = contacts.find(c => c.id === formData.contact_id) || (modal.type === 'contact_id' ? initialData : null);
+                
+                return (
+                    <QuickPartnerContactDualAdd 
+                        company_id={profile.company_id} 
+                        initialPartner={partner}
+                        initialContact={contact}
+                        partners={partners}
+                        onSuccess={handleQuickAddSuccess} 
+                        onCancel={() => setModal({ isOpen: false, type: null })} 
+                    />
+                );
             case 'vessel_id':
                 return <QuickVesselAdd company_id={profile.company_id} initialData={initialData} onSuccess={handleQuickAddSuccess} onCancel={() => setModal({ isOpen: false, type: null })} />;
             case 'work_location_id':
@@ -1388,8 +1413,8 @@ export default function WorkflowEditor() {
 
     const getModalTitle = () => {
         switch (modal.type) {
-            case 'partner_id': return 'Add New Customer';
-            case 'contact_id': return 'Add New Contact';
+            case 'partner_id': 
+            case 'contact_id': return 'Customer & Contact Management';
             case 'vessel_id': return 'Add New Vessel';
             case 'work_location_id': return 'Add New Location';
             default: return '';
@@ -2564,7 +2589,7 @@ export default function WorkflowEditor() {
                                                 style={{ display: 'flex', gap: '10px', alignItems: 'center', cursor: file.mimeType.includes('folder') ? 'pointer' : 'default', flex: 1, overflow: 'hidden' }}
                                                 onClick={() => file.mimeType.includes('folder') && handleExplorerNavigate(file)}
                                             >
-                                                {file.mimeType.includes('folder') ? <Folder size={24} color="#6366f1" /> : <File size={24} color="#64748b" />}
+                                                {file.mimeType.includes('folder') ? <Folder size={24} color="#6366f1" /> : <FileIcon size={24} color="#64748b" />}
                                                 <div style={{ overflow: 'hidden' }}>
                                                     <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={file.name}>
                                                         {file.name}
@@ -2798,6 +2823,7 @@ export default function WorkflowEditor() {
                 onClose={() => setModal({ isOpen: false, type: null })}
                 title={getModalTitle()}
                 icon={getModalIcon()}
+                size={(modal.type === 'partner_id' || modal.type === 'contact_id') ? 'xl' : 'md'}
             >
                 {renderModalContent()}
             </Modal>
@@ -3006,7 +3032,14 @@ export default function WorkflowEditor() {
                                             Quick Attach Linked Documents (Job Suite)
                                         </label>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                            {workflowDocs.filter(d => d.id !== id).map(doc => {
+                                            {workflowDocs.filter(d => {
+                                                if (d.id === id) return false;
+                                                // If current doc is an Invoice, only show Delivery Order
+                                                if (formData.document_type?.includes('Invoice')) {
+                                                    return d.document_type === 'Delivery Order';
+                                                }
+                                                return true;
+                                            }).map(doc => {
                                                 const isAttached = emailPreview.attachments?.some(a => a.name.includes(doc.document_no));
                                                 return (
                                                     <button

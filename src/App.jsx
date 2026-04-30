@@ -67,6 +67,8 @@ import StaffDirectory from './pages/StaffDirectory';
 import OAuthCallback from './pages/auth/OAuthCallback';
 import Unauthorized from './pages/auth/Unauthorized';
 
+import GstReporting from './pages/GstReporting';
+
 // App Layout wrapper to only show sidebar when logged in
 const AppLayout = ({ children }) => {
   const { user } = useAuth();
@@ -182,6 +184,7 @@ function App() {
 
               {/* Reports */}
               <Route path="/reports" element={<ProtectedRoute requiredModule="reports"><Reports /></ProtectedRoute>} />
+              <Route path="/gst-reporting" element={<ProtectedRoute><GstReporting /></ProtectedRoute>} />
 
               <Route path="/todo" element={<ProtectedRoute><TodoList /></ProtectedRoute>} />
 

@@ -421,7 +421,19 @@ export default function PartnerForm() {
                                     <Building2 color="#6366f1" size={32} />
                                 </div>
                                 <div style={{ flex: 1 }}>
-                                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: '#64748b', marginBottom: '8px' }}>Company Name *</label>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 800, textTransform: 'uppercase', color: '#64748b', margin: 0 }}>Company Name *</label>
+                                        {formData.name && (
+                                            <a 
+                                                href={`https://www.google.com/search?q=${encodeURIComponent(formData.name)}`} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                style={{ color: '#6366f1', fontSize: '0.75rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
+                                            >
+                                                Search <Search size={12} />
+                                            </a>
+                                        )}
+                                    </div>
                                     <CompanyAutocomplete
                                         value={formData.name || ''}
                                         onChange={(val) => setFormData(prev => ({ ...prev, name: val }))}
@@ -498,7 +510,17 @@ export default function PartnerForm() {
                                 </div>
 
                                 <div className="form-group">
-                                    <label className="form-label">Company Website</label>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <label className="form-label" style={{ margin: 0 }}>Company Website</label>
+                                        <a 
+                                            href={`https://www.google.com/search?q=${encodeURIComponent(formData.weblink || formData.name || '')}`} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            style={{ color: '#6366f1', fontSize: '0.85rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                                        >
+                                            Search <Search size={14} />
+                                        </a>
+                                    </div>
                                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                                         <input
                                             placeholder="https://company.com"

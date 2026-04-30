@@ -9,11 +9,13 @@ import { smartSearchCompany, researchContactWithGemini, researchVesselWithGemini
 import { runUniversalSearch } from '../../lib/universalFinder';
 
 // Generic Modal Base
-export const Modal = ({ isOpen, onClose, title, children, icon: Icon }) => {
+export const Modal = ({ isOpen, onClose, title, children, icon: Icon, size = 'md' }) => {
     if (!isOpen) return null;
+    const maxWidth = size === 'xl' ? '1300px' : size === 'lg' ? '1000px' : '700px';
+
     return (
         <div className="quick-modal-overlay">
-            <div className="quick-modal-content">
+            <div className="quick-modal-content" style={{ maxWidth }}>
                 <div className="quick-modal-header">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         {Icon && <Icon size={20} className="text-accent" />}
@@ -44,7 +46,6 @@ export const Modal = ({ isOpen, onClose, title, children, icon: Icon }) => {
                 .quick-modal-content {
                     background: #fff;
                     width: 100%;
-                    max-width: 700px;
                     max-height: 90vh;
                     border-radius: 12px;
                     box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
@@ -111,7 +112,7 @@ export const Modal = ({ isOpen, onClose, title, children, icon: Icon }) => {
 };
 
 // Quick Partner Add
-export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel }) => {
+export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, hideActions = false, onDataChange }) => {
     const [formData, setFormData] = useState(initialData || {
         name: '',
         uen: '',
@@ -252,7 +253,9 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel }
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const updated = { ...formData, [name]: value };
+        setFormData(updated);
+        if (onDataChange) onDataChange(updated);
     };
 
     const handleSave = async () => {
@@ -384,7 +387,17 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel }
                         <Globe size={24} color="#6366f1" />
                     </div>
                     <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.02em' }}>Company Website</div>
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.02em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span>Company Website</span>
+                            <a 
+                                href={`https://www.google.com/search?q=${encodeURIComponent(formData.weblink || formData.name || '')}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                style={{ color: '#6366f1', textTransform: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                                Search <Search size={12} />
+                            </a>
+                        </div>
                         <div style={{ position: 'relative' }}>
                             <input
                                 type="text"
@@ -406,7 +419,19 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel }
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
                 <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Company Name *</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                        <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', margin: 0 }}>Company Name *</label>
+                        {formData.name && (
+                            <a 
+                                href={`https://www.google.com/search?q=${encodeURIComponent(formData.name)}`} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                style={{ color: '#6366f1', fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                                Search <Search size={12} />
+                            </a>
+                        )}
+                    </div>
                     <input
                         type="text"
                         className="premium-input"
@@ -466,11 +491,9 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel }
                         required
                     >
                         <option value="">Select Country</option>
-                        <option value="Singapore">Singapore</option>
-                        <option value="Malaysia">Malaysia</option>
-                        <option value="United Arab Emirates">UAE</option>
-                        <option value="United Kingdom">UK</option>
-                        <option value="United States">USA</option>
+                        {COUNTRIES.map(country => (
+                            <option key={country} value={country}>{country}</option>
+                        ))}
                     </select>
                 </div>
                 <div className="form-group">
@@ -590,28 +613,30 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel }
                 />
             </div>
 
-            <div style={{ display: 'flex', gap: '12px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-                <button
-                    onClick={handleSave}
-                    disabled={loading}
-                    className="btn btn-primary"
-                    style={{ flex: 1, height: '48px', borderRadius: '14px', fontSize: '1rem', fontWeight: 600, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none' }}
-                >
-                    {loading ? <Loader2 className="animate-spin" /> : (initialData ? 'Update Customer Profile' : 'Create Customer Profile')}
-                </button>
-                <button
-                    onClick={onCancel}
-                    className="btn"
-                    style={{ height: '48px', width: '48px', borderRadius: '14px', background: '#f1f5f9', color: '#64748b', padding: 0, border: 'none' }}
-                >
-                    <X size={20} />
-                </button>
-            </div>
+            {!hideActions && (
+                <div style={{ display: 'flex', gap: '12px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
+                    <button
+                        onClick={handleSave}
+                        disabled={loading}
+                        className="btn btn-primary"
+                        style={{ flex: 1, height: '48px', borderRadius: '14px', fontSize: '1rem', fontWeight: 600, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none' }}
+                    >
+                        {loading ? <Loader2 className="animate-spin" /> : (initialData ? 'Update Customer Profile' : 'Create Customer Profile')}
+                    </button>
+                    <button
+                        onClick={onCancel}
+                        className="btn"
+                        style={{ height: '48px', width: '48px', borderRadius: '14px', background: '#f1f5f9', color: '#64748b', padding: 0, border: 'none' }}
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
 
-export const QuickContactAdd = ({ company_id, partner_id, partners, initialData, onSuccess, onCancel }) => {
+export const QuickContactAdd = ({ company_id, partner_id, partners, initialData, onSuccess, onCancel, hideActions = false, onDataChange }) => {
     const [formData, setFormData] = useState(initialData || {
         name: '',
         email: '',
@@ -661,7 +686,9 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const updated = { ...formData, [name]: value };
+        setFormData(updated);
+        if (onDataChange) onDataChange(updated);
     };
 
     const handleSave = async () => {
@@ -818,10 +845,124 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
                 />
             </div>
 
-            <div className="quick-form-actions">
-                <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-                <button className="btn btn-primary" onClick={handleSave} disabled={loading || !formData.name || !formData.partnerId}>
-                    <Save size={18} /> {loading ? 'Saving...' : 'Save Contact'}
+            {!hideActions && (
+                <div className="quick-form-actions">
+                    <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+                    <button className="btn btn-primary" onClick={handleSave} disabled={loading || !formData.name || !formData.partnerId}>
+                        <Save size={18} /> {loading ? 'Saving...' : 'Save Contact'}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// NEW: Combined Partner & Contact Dual Add
+export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initialContact, partners, onSuccess, onCancel }) => {
+    const [partnerData, setPartnerData] = useState(initialPartner || {
+        name: '', email1: '', phone1: '', country: '', types: ['Customer']
+    });
+    const [contactData, setContactData] = useState(initialContact || {
+        name: '', email: '', handphone: '', type: 'Main'
+    });
+    const [loading, setLoading] = useState(false);
+
+    const handleSaveAll = async () => {
+        if (!partnerData.name) return alert('Partner Name is required');
+        setLoading(true);
+        try {
+            // 1. Save Partner
+            const isPartnerExisting = !!partnerData.id;
+            const { data: pData, error: pError } = isPartnerExisting 
+                ? await supabase.from('partners').update({ ...partnerData, company_id }).eq('id', partnerData.id).select()
+                : await supabase.from('partners').insert([{ ...partnerData, company_id }]).select();
+            
+            if (pError) throw pError;
+            const savedPartner = pData[0];
+
+            // 2. Save Contact if name is provided
+            let savedContact = null;
+            if (contactData.name) {
+                const isContactExisting = !!contactData.id;
+                const { data: cData, error: cError } = isContactExisting
+                    ? await supabase.from('contacts').update({ ...contactData, partnerId: savedPartner.id }).eq('id', contactData.id).select()
+                    : await supabase.from('contacts').insert([{ ...contactData, partnerId: savedPartner.id, company_id }]).select();
+                
+                if (cError) throw cError;
+                savedContact = cData[0];
+            }
+
+            onSuccess({ partner: savedPartner, contact: savedContact });
+        } catch (err) {
+            console.error('Dual Save Error:', err);
+            alert(`Failed to save: ${err.message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: '1.2fr 1fr', 
+                gap: '32px', 
+                alignItems: 'start'
+            }}>
+                <div style={{ borderRight: '1px solid #e2e8f0', paddingRight: '32px' }}>
+                    <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#6366f1' }}>
+                        <Users size={18} />
+                        <span style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Company Details</span>
+                    </div>
+                    <QuickPartnerAdd 
+                        company_id={company_id} 
+                        initialData={partnerData} 
+                        hideActions={true} 
+                        onDataChange={setPartnerData} 
+                    />
+                </div>
+                <div>
+                    <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981' }}>
+                        <User size={18} />
+                        <span style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Primary Contact Details</span>
+                    </div>
+                    <QuickContactAdd 
+                        company_id={company_id} 
+                        partner_id={partnerData.id} 
+                        partners={partners} 
+                        initialData={contactData} 
+                        hideActions={true} 
+                        onDataChange={setContactData} 
+                    />
+                </div>
+            </div>
+
+            <div style={{ 
+                display: 'flex', 
+                justifyContent: 'flex-end', 
+                gap: '12px', 
+                paddingTop: '24px', 
+                borderTop: '2px solid #f1f5f9',
+                background: '#fff',
+                position: 'sticky',
+                bottom: 0,
+                zIndex: 20
+            }}>
+                <button className="btn btn-secondary" onClick={onCancel} style={{ padding: '12px 24px' }}>Cancel</button>
+                <button 
+                    className="btn btn-primary" 
+                    onClick={handleSaveAll} 
+                    disabled={loading || !partnerData.name}
+                    style={{ 
+                        padding: '12px 32px', 
+                        background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+                        boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+                        border: 'none',
+                        fontWeight: 700
+                    }}
+                >
+                    {loading ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+                    {loading ? 'Saving Everything...' : (partnerData.id ? 'Update Both' : 'Save Partner & Contact')}
                 </button>
             </div>
         </div>

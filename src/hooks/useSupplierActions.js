@@ -150,7 +150,8 @@ export function useSupplierActions(companyId, enquiryId, initialEnquiry) {
 
             const body = encodeURIComponent(`${greeting}We are pleased to invite you to quote for the following items:\n\n${itemRows}\n\n${enquiryData.gdrive_file_link ? `You can view photos and additional attachments here: ${enquiryData.gdrive_file_link}\n\n` : ''}Please revert with your best price and lead time at your earliest convenience.\n\nThank you,\nCELRON ENTERPRISES PTE LTD`);
 
-            window.open(`mailto:?bcc=${emails}&subject=${subject}&body=${body}`, '_blank');
+            const defaultBcc = 'celron.simlim0305@gmail.com,accounts@celron.net';
+            window.open(`mailto:?bcc=${emails}${emails ? ',' : ''}${defaultBcc}&subject=${subject}&body=${body}`, '_blank');
 
             await updateEnquiry(enquiryId, { status: 'RFQ Floated' });
             return true;

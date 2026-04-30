@@ -136,7 +136,7 @@ export default function EnquiryDetails() {
         const emails = selectedSuppliers.map(s => {
             const override = recipientOverrides[s.id];
             return override?.email || s.email1;
-        }).filter(e => e).join(',');
+        }).filter(e => e).join(',') + (selectedSuppliers.length > 0 ? ';' : '') + 'celron.simlim0305@gmail.com; accounts@celron.net';
         
         const subject = encodeURIComponent(`Request for Quotation: ${enquiry?.enquiry_no} - CELRON ENTERPRISES`);
 

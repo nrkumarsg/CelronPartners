@@ -2,8 +2,8 @@ import html2pdf from 'html2pdf.js';
 
 export const generateSleekPDF = async (documentData, settings, action = 'download') => {
     const {
-        document_type,
-        document_no,
+        document_type = 'Workflow',
+        document_no = 'Draft',
         issue_date,
         expiry_date,
         partners,
@@ -12,11 +12,11 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
         work_locations,
         subject,
         salesperson_name,
-        currency,
-        items,
-        subtotal,
-        tax_amount,
-        total_amount,
+        currency = 'SGD',
+        items = [],
+        subtotal = 0,
+        tax_amount = 0,
+        total_amount = 0,
         notes,
         terms_conditions
     } = documentData;
@@ -27,9 +27,12 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
     const companyUen = settings?.gst_uen || '201436227C';
 
     const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-';
+    
+    // Check if we should hide prices (for DO and PKL)
+    const isDeliveryDoc = document_type?.toUpperCase().includes('DELIVERY') || document_type?.toUpperCase().includes('PACKING');
 
     const htmlContent = `
-        <div style="padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; width: 210mm; min-height: 297mm; background: #fff; position: relative; padding-bottom: 100px;">
+        <div style="padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; width: 210mm; min-height: 297mm; background: #fff; position: relative; padding-bottom: 100px; box-sizing: border-box;">
             <style>
                 p { margin: 0 0 4px 0; }
                 b, strong { font-weight: 700; color: #1e293b; }
@@ -87,26 +90,30 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
                 <table style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;">
                     <thead>
                         <tr style="background: #1e3a8a; color: #fff;">
-                            <th style="padding: 10px 15px; text-align: left; font-size: 12px; font-weight: 600; width: 55%;">Description</th>
+                            <th style="padding: 10px 15px; text-align: left; font-size: 12px; font-weight: 600; width: ${isDeliveryDoc ? '80%' : '55%'};">Description</th>
                             <th style="padding: 10px 15px; text-align: center; font-size: 12px; font-weight: 600;">Quantity</th>
-                            <th style="padding: 10px 15px; text-align: right; font-size: 12px; font-weight: 600;">Unit Price</th>
-                            <th style="padding: 10px 15px; text-align: right; font-size: 12px; font-weight: 600;">Amount</th>
+                            ${!isDeliveryDoc ? `
+                                <th style="padding: 10px 15px; text-align: right; font-size: 12px; font-weight: 600;">Unit Price</th>
+                                <th style="padding: 10px 15px; text-align: right; font-size: 12px; font-weight: 600;">Amount</th>
+                            ` : ''}
                         </tr>
                     </thead>
                     <tbody>
-                        ${items.map((item) => {
+                        ${items.length > 0 ? items.map((item) => {
         if (item.is_section) {
             return `
                                     <tr style="background: #f1f5f9;">
-                                        <td colspan="3" style="padding: 8px 15px; font-size: 12px; font-weight: 700; color: #1e3a8a; border-bottom: 1px solid #cbd5e1;">${item.description}</td>
-                                        <td style="padding: 8px 15px; text-align: right; font-size: 12px; font-weight: 700; color: #1e3a8a; border-bottom: 1px solid #cbd5e1;">${item.amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        <td colspan="${isDeliveryDoc ? '2' : '3'}" style="padding: 8px 15px; font-size: 12px; font-weight: 700; color: #1e3a8a; border-bottom: 1px solid #cbd5e1;">${item.description}</td>
+                                        ${!isDeliveryDoc ? `
+                                            <td style="padding: 8px 15px; text-align: right; font-size: 12px; font-weight: 700; color: #1e3a8a; border-bottom: 1px solid #cbd5e1;">${(item.amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        ` : ''}
                                     </tr>
                                 `;
         }
         if (item.is_note) {
             return `
                                     <tr>
-                                        <td colspan="4" style="padding: 6px 15px; font-size: 11px; color: #64748b; font-style: italic; border-bottom: 1px solid #cbd5e1;">${item.description}</td>
+                                        <td colspan="${isDeliveryDoc ? '2' : '4'}" style="padding: 6px 15px; font-size: 11px; color: #64748b; font-style: italic; border-bottom: 1px solid #cbd5e1;">${item.description}</td>
                                     </tr>
                                 `;
         }
@@ -116,28 +123,36 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
                                         <div style="font-weight: 500;">${item.description}</div>
                                         ${item.details ? `<div style="font-size: 11px; color: #64748b; margin-top: 3px; line-height: 1.4;">${item.details}</div>` : ''}
                                     </td>
-                                    <td style="padding: 12px 15px; text-align: center; font-size: 12px; color: #475569; border: 1px solid #cbd5e1; border-top: none; border-bottom: 1px solid #cbd5e1;">${item.quantity?.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${item.uom || 'Units'}</td>
-                                    <td style="padding: 12px 15px; text-align: right; font-size: 12px; color: #475569; border: 1px solid #cbd5e1; border-top: none; border-bottom: 1px solid #cbd5e1;">${item.unit_price?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                    <td style="padding: 12px 15px; text-align: right; font-size: 12px; font-weight: 600; color: #1e293b; border-bottom: 1px solid #cbd5e1;">${currency === 'SGD' ? 'SGD ' : (currency || '$') + ' '}${item.amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td style="padding: 12px 15px; text-align: center; font-size: 12px; color: #475569; border: 1px solid #cbd5e1; border-top: none; border-bottom: 1px solid #cbd5e1;">${(item.quantity ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} ${item.uom || 'Units'}</td>
+                                    ${!isDeliveryDoc ? `
+                                        <td style="padding: 12px 15px; text-align: right; font-size: 12px; color: #475569; border: 1px solid #cbd5e1; border-top: none; border-bottom: 1px solid #cbd5e1;">${(item.unit_price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                        <td style="padding: 12px 15px; text-align: right; font-size: 12px; font-weight: 600; color: #1e293b; border-bottom: 1px solid #cbd5e1;">${currency === 'SGD' ? 'SGD ' : (currency || '$') + ' '}${(item.amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    ` : ''}
                                 </tr>
                             `;
-    }).join('')}
+    }).join('') : `
+                            <tr>
+                                <td colspan="${isDeliveryDoc ? '2' : '4'}" style="padding: 40px; text-align: center; color: #94a3b8; font-style: italic; border-bottom: 1px solid #cbd5e1;">No items listed in this document</td>
+                            </tr>
+                        `}
                     </tbody>
                 </table>
 
                 <!-- Totals Badge -->
-                <div style="display: flex; justify-content: flex-end; margin-top: -1px;">
-                    <div style="background: #1e3a8a; color: #fff; padding: 10px 20px; border-radius: 0 0 8px 8px; min-width: 150px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 700;">
-                        <span>Total</span>
-                        <span style="margin-left: 20px;">${currency === 'USD' ? '$' : currency === 'SGD' ? 'SGD' : currency} ${total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                ${!isDeliveryDoc ? `
+                    <div style="display: flex; justify-content: flex-end; margin-top: -1px;">
+                        <div style="background: #1e3a8a; color: #fff; padding: 10px 20px; border-radius: 0 0 8px 8px; min-width: 150px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 700;">
+                            <span>Total</span>
+                            <span style="margin-left: 20px;">${currency === 'USD' ? '$' : currency === 'SGD' ? 'SGD' : currency} ${(total_amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        </div>
                     </div>
-                </div>
+                ` : ''}
             </div>
 
             <!-- Notes & Terms -->
             <div style="padding: 10px 50px;">
                 <div style="font-size: 11px; color: #1e293b; font-weight: 500; line-height: 1.6;">
-                    ${notes ? `<div style="margin-bottom: 10px;">${notes}</div>` : ''}
+                    ${notes ? `<div style="margin-bottom: 10px; white-space: pre-wrap;">${notes}</div>` : ''}
                     ${terms_conditions ? `<div style="margin-top: 10px;">Payment terms: ${terms_conditions}</div>` : ''}
                 </div>
             </div>
@@ -145,7 +160,7 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
             <!-- Bottom Content: Signatures & Checkout -->
             <div style="margin-top: 40px; padding: 0 50px; display: flex; gap: 40px; align-items: flex-end;">
                  <div style="flex: 1;">
-                     ${settings?.paynow_url ? `
+                     ${(!isDeliveryDoc && settings?.paynow_url) ? `
                          <div style="text-align: center; border: 1px solid #f1f5f9; padding: 10px; border-radius: 8px; display: inline-block;">
                              <div style="font-size: 10px; font-weight: 700; color: #1e3a8a; margin-bottom: 5px;">PAYNOW</div>
                              <img src="${settings.paynow_url}" crossorigin="anonymous" style="width: 110px; height: 110px; object-fit: contain;" />
@@ -171,29 +186,24 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
     `;
 
     const container = document.createElement('div');
+    container.id = `pdf-render-container-${Date.now()}`;
     container.innerHTML = htmlContent;
 
     // THE "SAFE POSITION" - Fixed, top left, invisible but rendered
+    // Using opacity 1 but way off-screen to ensure html2canvas captures it correctly
     Object.assign(container.style, {
         position: 'fixed',
-        left: '0',
+        left: '-5000px',
         top: '0',
         width: '210mm',
         backgroundColor: '#ffffff',
-        zIndex: '-10000',
-        opacity: '0.01',
+        zIndex: '99999',
+        opacity: '1',
         pointerEvents: 'none',
         display: 'block'
     });
 
     document.body.appendChild(container);
-
-    // Fallback: Add a hidden text inside that MUST be captured 
-    const debugTag = document.createElement('div');
-    debugTag.textContent = `RENDER_CHECK_${Date.now()}`;
-    debugTag.style.fontSize = '1px';
-    debugTag.style.color = 'transparent';
-    container.appendChild(debugTag);
 
     const opt = {
         margin: [0, 0, 0, 0],
@@ -207,7 +217,7 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
             logging: true,
             scrollX: 0,
             scrollY: 0,
-            windowWidth: 794, // Force A4 width in pixels for capture
+            windowWidth: 794,
         },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
     };
@@ -215,12 +225,10 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
     try {
         console.log("PDF: Initializing capture for", document_no);
 
-        // 1. Wait for fonts
         if (document.fonts) {
             await document.fonts.ready;
         }
 
-        // 2. Wait for images (Recursive check)
         const waitForImages = () => {
             const imgs = container.getElementsByTagName('img');
             return Promise.all(Array.from(imgs).map(img => {
@@ -233,12 +241,9 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
         };
         await waitForImages();
 
-        // 3. Additional stabilization delay
-        await new Promise(r => setTimeout(r, 500));
+        // Extra stabilization delay
+        await new Promise(r => setTimeout(r, 800));
 
-        console.log("PDF: Rendering canvas...");
-
-        // Use the standard html2pdf promise chain
         const pdfBlob = await html2pdf()
             .set(opt)
             .from(container)
@@ -268,10 +273,6 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
 
     } catch (err) {
         console.error("CRITICAL PDF ERROR:", err);
-        // Fallback to simple download if print fails
-        if (action === 'print') {
-            alert("PDF generation took too long or failed. Please check your internet and try again.");
-        }
         throw err;
     } finally {
         if (document.body.contains(container)) {

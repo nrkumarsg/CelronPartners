@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { Search, Image as ImageIcon, X, Loader2 } from 'lucide-react';
 import { extractTermsFromImage } from '../../lib/geminiService';
+import { COUNTRIES } from '../../lib/constants';
 
 export default function SearchBar({ onSearch, advancedMode = false }) {
     const [term, setTerm] = useState('');
@@ -139,15 +140,9 @@ export default function SearchBar({ onSearch, advancedMode = false }) {
                         onChange={(e) => setCountry(e.target.value)}
                     >
                         <option value="">All Countries</option>
-                        <option value="Singapore">Singapore</option>
-                        <option value="Malaysia">Malaysia</option>
-                        <option value="United Arab Emirates">UAE</option>
-                        <option value="Saudi Arabia">Saudi Arabia</option>
-                        <option value="United Kingdom">United Kingdom</option>
-                        <option value="United States">USA</option>
-                        <option value="Germany">Germany</option>
-                        <option value="China">China</option>
-                        <option value="India">India</option>
+                        {COUNTRIES.map(country => (
+                            <option key={country} value={country}>{country}</option>
+                        ))}
                     </select>
                     <select
                         className="w-full p-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm bg-white text-gray-600"

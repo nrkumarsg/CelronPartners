@@ -341,6 +341,11 @@ export default function Sidebar() {
                     <span className="nav-text">SOA list</span>
                 </NavLink>
 
+                <NavLink to="/gst-reporting" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="GST Reporting">
+                    <Calculator size={20} color="#10b981" />
+                    <span className="nav-text">GST Reporting</span>
+                </NavLink>
+
                 <div className="nav-separator" />
                 <span className="nav-group-header">File Management</span>
                 <NavLink to="/storage" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Storage Directory">

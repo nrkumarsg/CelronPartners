@@ -5,11 +5,12 @@ import {
     Calculator, Calendar, Download, Filter, 
     ArrowUpRight, ArrowDownLeft, Receipt, 
     FileText, Search, ChevronRight, Briefcase,
-    Plus, Upload, ExternalLink, X, FileCheck, Check, Loader2
+    Plus, Upload, ExternalLink, X, FileCheck, Check, Loader2, Info
 } from 'lucide-react';
-import { getPartners, uploadFile } from '../lib/store';
+import { getPartners, uploadFile, getDocumentSettings } from '../lib/store';
 import { Modal, QuickExpenseAdd } from '../components/workflow/QuickAddForms';
 import { saveJobExpense } from '../lib/jobExpenseService';
+import GstF5Form from '../components/workflow/GstF5Form';
 
 export default function GstReporting() {
     const { profile } = useAuth();
@@ -20,6 +21,7 @@ export default function GstReporting() {
     const [partners, setPartners] = useState([]);
     const [jobMap, setJobMap] = useState({}); // mapping of job_no -> doc_id
     const [jobs, setJobs] = useState([]);
+    const [settings, setSettings] = useState(null);
     
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
     const [selectedQuarter, setSelectedQuarter] = useState(() => {
@@ -38,8 +40,14 @@ export default function GstReporting() {
         if (profile?.company_id) {
             fetchGstData();
             fetchPartners();
+            fetchSettings();
         }
     }, [profile, selectedYear, selectedQuarter]);
+
+    const fetchSettings = async () => {
+        const data = await getDocumentSettings(profile.company_id);
+        if (data) setSettings(data);
+    };
 
     const fetchPartners = async () => {
         const { data } = await getPartners(profile.company_id);
@@ -158,6 +166,33 @@ export default function GstReporting() {
     const outputGst = salesDocs.reduce((sum, d) => sum + (parseFloat(d.tax_amount) || 0), 0);
     const inputGst = purchaseDocs.reduce((sum, d) => sum + (parseFloat(d.tax) || 0), 0);
     const netPayable = outputGst - inputGst;
+
+    // IRAS F5 Form Calculations
+    const box1 = salesDocs.filter(d => (parseFloat(d.tax_amount) || 0) > 0).reduce((sum, d) => sum + (parseFloat(d.subtotal) || 0), 0);
+    const box2 = salesDocs.filter(d => (parseFloat(d.tax_amount) || 0) === 0).reduce((sum, d) => sum + (parseFloat(d.subtotal) || 0), 0);
+    const box3 = 0; // Assume 0 for exempt unless specified
+    const box4 = box1 + box2 + box3;
+    const box5 = purchaseDocs.reduce((sum, d) => sum + (parseFloat(d.subtotal) || 0), 0);
+    const box6 = outputGst;
+    const box7 = inputGst;
+    const box8 = netPayable;
+    const box13 = box4;
+
+    const irasCalculations = {
+        box1, box2, box3, box4, box5, box6, box7, box8, box9: 0, box13
+    };
+
+    const getDueDate = (year, quarter) => {
+        const dueDates = [null, 'Apr 30', 'Jul 31', 'Oct 31', 'Jan 31'];
+        const dueYear = quarter === 4 ? year + 1 : year;
+        return `${dueDates[quarter]}, ${dueYear}`;
+    };
+
+    const irasPeriodData = {
+        start: range.start,
+        end: range.end,
+        dueDate: getDueDate(selectedYear, selectedQuarter)
+    };
 
     const handleBillUpload = async (file) => {
         try {
@@ -381,11 +416,14 @@ export default function GstReporting() {
                 </div>
 
                 {activeTab === 'filing' ? (
-                    <div style={{ textAlign: 'center', padding: '80px', color: '#64748b' }}>
-                        <FileText size={48} style={{ margin: '0 auto 20px', opacity: 0.2 }} />
-                        <h3>Filing Form Preview</h3>
-                        <p>This section will allow you to generate the official IRAS GST F5 return form based on the data above.</p>
-                        <button className="btn btn-secondary" disabled style={{ marginTop: '20px' }}>Coming Soon...</button>
+                    <div className="animate-fade-in" style={{ padding: '20px 0' }}>
+                        <GstF5Form 
+                            companyData={settings}
+                            periodData={irasPeriodData}
+                            calculations={irasCalculations}
+                            onSave={() => alert('Filing draft saved successfully.')}
+                            onSubmit={() => alert('Filing submitted to simulation. In production this would connect to IRAS CorpPass API.')}
+                        />
                     </div>
                 ) : (
                     <div className="table-container">
