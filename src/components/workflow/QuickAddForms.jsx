@@ -139,6 +139,7 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
     const [customCategory, setCustomCategory] = useState('');
     const [isAiResearching, setIsAiResearching] = useState(false);
     const [aiPreview, setAiPreview] = useState(null);
+    const [aiStatus, setAiStatus] = useState('');
 
     const handleOCR = async (text) => {
         if (!text) return;
@@ -169,8 +170,9 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
         if (!formData.name) return alert('Please enter a Company Name first.');
         
         setIsAiResearching(true);
+        setAiStatus('🔍 Searching official registries...');
         try {
-            // 1. Gather live context using Google Custom Search (Separate quota, more reliable for free tier)
+            // 1. Gather live context using Google Custom Search
             let searchContext = '';
             try {
                 const { data: { user } } = await supabase.auth.getUser();
@@ -190,14 +192,19 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                     searchContext = results.map(r => `[Web Data] ${r.title} (${r.url}): ${r.snippet}`).join('\n');
                 }
             } catch (searchErr) {
-                console.warn('[AI] Live search unavailable, using model intelligence only.');
+                console.warn('[AI] Live search unavailable.');
             }
 
-            // 2. Use the new Smart Search with the gathered context
-            console.log('[AI Research] Company:', formData.name);
-            console.log('[AI Research] Search Context Length:', searchContext?.length || 0);
+            setAiStatus('📊 Extracting company intelligence...');
             
+            // 2. Use the new Smart Search with the gathered context
             const result = await smartSearchCompany(formData.name, formData.weblink, searchContext);
+
+            if (result.confidence < 70) {
+                setAiStatus('🛡️ Low confidence detected. Deep verifying...');
+                // Stage 2: Verification (Internal in smartSearchCompany already handles this logic if we pass needsVerification)
+                // Actually smartSearchCompany already does Stage 2 internally now.
+            }
 
             if (result) {
                 setAiPreview({
@@ -212,20 +219,21 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                     categories: result.categories || [],
                     brands: result.brands || '',
                     activity_summary: result.activity_summary || '',
-                    confidence: result.confidence || 'low',
+                    confidence: result.confidence,
                     manual_verification_required: result.manual_verification_required,
-                    extraInfo: `Categories: ${result.categories?.join(', ') || 'N/A'}. Brands: ${result.brands || 'N/A'}. Activity: ${result.activity_summary || 'N/A'}`
+                    extraInfo: `Categories: ${result.categories?.join(', ') || 'N/A'}. Brands: ${result.brands || 'N/A'}.`
                 });
             }
         } catch (err) {
             console.error('AI Research Error:', err);
             setAiPreview({
                 error: err.message || 'Unknown Research Error',
-                confidence: 'none',
+                confidence: 0,
                 manual_verification_required: true
             });
         } finally {
             setIsAiResearching(false);
+            setAiStatus('');
         }
     };
 
@@ -362,8 +370,17 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                                     {aiPreview?.error ? 'Failure' : 'Research Findings'}
                                 </div>
                                 {aiPreview && !aiPreview.error && !isAiResearching && (
-                                    <div style={{ padding: '4px 10px', background: aiPreview.confidence === 'high' ? '#dcfce7' : '#fef3c7', color: aiPreview.confidence === 'high' ? '#15803d' : '#92400e', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                        {aiPreview.confidence} Confidence
+                                    <div style={{ 
+                                        padding: '4px 10px', 
+                                        background: aiPreview.confidence > 80 ? '#dcfce7' : aiPreview.confidence > 50 ? '#fef3c7' : '#fee2e2', 
+                                        color: aiPreview.confidence > 80 ? '#15803d' : aiPreview.confidence > 50 ? '#92400e' : '#ef4444', 
+                                        borderRadius: '20px', 
+                                        fontSize: '0.7rem', 
+                                        fontWeight: 800, 
+                                        textTransform: 'uppercase', 
+                                        letterSpacing: '0.05em' 
+                                    }}>
+                                        {aiPreview.confidence}% Confidence
                                     </div>
                                 )}
                             </div>
@@ -372,8 +389,8 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
 
                         {isAiResearching ? (
                             <div style={{ textAlign: 'center', padding: '20px' }}>
-                                <div style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 500, marginBottom: '8px' }}>Antigravity Research Agent is traversing data...</div>
-                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Identifying UEN, Address, and authorized brands.</div>
+                                <div style={{ fontSize: '1rem', color: '#6366f1', fontWeight: 700, marginBottom: '8px' }}>{aiStatus}</div>
+                                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Traversing SGP registries and global industrial data...</div>
                             </div>
                         ) : aiPreview?.error ? (
                             <div style={{ padding: '12px', background: '#fef2f2', borderRadius: '12px', border: '1px solid #fecaca', color: '#991b1b', fontSize: '0.85rem' }}>
