@@ -4,8 +4,8 @@ const API_KEY = (typeof process !== 'undefined' && process.env?.VITE_GOOGLE_API_
 // CONFIG (2026 Stable Models)
 // -----------------------------
 const MODELS = {
-  FAST: "gemini-2.5-flash", 
-  SMART: "gemini-2.5-flash",  
+  FAST: "gemini-2.0-flash", 
+  SMART: "gemini-1.5-pro",  
 };
 
 const API_VERSION = 'v1beta';
@@ -49,7 +49,10 @@ async function runWithFallback(prompt, useSmart = false, history = [], tools = n
       body: JSON.stringify({
         contents: contents,
         tools: tools,
-        generationConfig: DEFAULT_CONFIG,
+        generationConfig: {
+          ...DEFAULT_CONFIG,
+          responseMimeType: "application/json"
+        },
       })
     });
 
@@ -146,71 +149,107 @@ function safeJSONParse(text) {
  * Used for Vessel details, Company details, etc.
  */
 async function runAutofill(input, history, tools) {
+  // 1. Check for specialized raw prompt tasks (like OCR)
+  if (input.prompt && !input.companyName && !input.vessel_name) {
+    return runWithFallback(input.prompt, false, history, tools, input.image);
+  }
+
   const isVessel = input.vessel_name || input.imo_number || input.mmsi;
+  const isContact = input.contact_name;
   
-  const prompt = isVessel ? `
-  You are the **Antigravity Maritime Research Agent**.
-  
-  ### MISSION:
-  Populate a Vessel Information form for the Global Maritime Industry.
-  
-  ### CONTEXT:
-  Input Vessel Name: ${input.vessel_name || 'N/A'}
-  IMO Number: ${input.imo_number || 'N/A'}
-  MMSI Number: ${input.mmsi || 'N/A'}
-  Web Search Data: ${input.searchContext || 'N/A'}
-  
-  ### INSTRUCTIONS:
-  1. **Extract**: Look for IMO, MMSI, Vessel Type, Management, and Owner in the 'Web Search Data' first.
-  2. **Analyze**: Use your internal maritime database knowledge to fill gaps if web search is sparse.
-  3. **Verification**: IMO numbers are usually 7 digits. MMSI are 9 digits.
-  
-  ### RETURN (JSON):
-  {
-    "vessel_name": "...",
-    "imo_number": "...",
-    "mmsi": "...",
-    "vessel_type": "...",
-    "vessel_management": "...",
-    "vessel_owner": "...",
-    "confidence": "high|medium|low",
-    "manual_verification_required": true/false
+  let prompt = "";
+
+  if (isVessel) {
+    prompt = `
+      You are the **Antigravity Maritime Research Agent**.
+      
+      ### MISSION:
+      Populate a Vessel Information form for the Global Maritime Industry.
+      
+      ### CONTEXT:
+      - Vessel Name: ${input.vessel_name || 'N/A'}
+      - IMO: ${input.imo_number || 'N/A'}
+      - MMSI: ${input.mmsi || 'N/A'}
+      - Live Web Data: ${input.searchContext || 'N/A'}
+      
+      ### RETURN (JSON Schema):
+      {
+        "vessel_name": "string",
+        "imo_number": "string",
+        "mmsi": "string",
+        "vessel_type": "string",
+        "vessel_management": "string",
+        "vessel_owner": "string",
+        "confidence": "high|medium|low",
+        "manual_verification_required": boolean
+      }
+    `;
+  } else if (isContact) {
+    prompt = `
+      You are the **Antigravity Intelligence Agent**.
+      
+      ### MISSION:
+      Profile a professional contact within their organization.
+      
+      ### CONTEXT:
+      - Contact Name: ${input.contact_name}
+      - Organization: ${input.company_name || 'N/A'}
+      
+      ### INSTRUCTIONS:
+      1. **Professional Identity**: Identify their current designation/role and department.
+      2. **Contact Coordinates**: Find official business email, phone, and mobile if available.
+      3. **Organization Context**: Verify affiliation with ${input.company_name}.
+      
+      ### RETURN (JSON Schema):
+      {
+        "person_name": "string",
+        "designation": "string",
+        "department": "string",
+        "email": "string",
+        "phone": "string",
+        "mobile": "string",
+        "address": "string",
+        "confidence": "high|medium|low"
+      }
+    `;
+  } else {
+    // Default: Company Research
+    prompt = `
+      You are the **Antigravity Research Agent**, a elite analyst for the Marine and Global Industrial sectors.
+      
+      ### MISSION:
+      Populate a CRM form with verified, high-accuracy company intelligence.
+      
+      ### CONTEXT:
+      - Input Company Name: ${input.companyName}
+      - Target Website: ${input.website || 'N/A'}
+      - Live Web Context: ${input.searchContext || 'N/A'}
+      
+      ### INSTRUCTIONS:
+      1. **Exhaustive Extraction**: Extract UEN (Unique Entity Number), HQ Address, Pincode, Email, and Phone.
+      2. **Live Tool Usage**: If 'Live Web Context' is insufficient, you MUST use the **google_search** tool to find the official UEN, HQ address, and contact details for ${input.companyName}.
+      3. **Singapore Entity Logic**: For Singapore entities, UEN is mandatory. (Format: YYYYNNNNNX).
+      4. **Business Profile**: Identify key activities and brands.
+      
+      ### RETURN (JSON Schema):
+      {
+        "company_name": "string",
+        "website": "string",
+        "uen": "string",
+        "email": "string",
+        "phone": "string",
+        "address": "string",
+        "country": "string",
+        "city": "string",
+        "postal_code": "string",
+        "categories": ["string"],
+        "brands": "string (comma separated)",
+        "activity_summary": "string (2-3 sentences)",
+        "confidence": "high|medium|low",
+        "manual_verification_required": boolean
+      }
+    `;
   }
-  ` : `
-  You are the **Antigravity Research Agent**, specializing in the Marine and Industrial sectors.
-  
-  ### MISSION:
-  Populate a CRM form with highly accurate company intelligence.
-  
-  ### CONTEXT:
-  Input Company Name: ${input.companyName}
-  Target Website: ${input.website || 'N/A'}
-  Live Web Context: ${input.searchContext || 'N/A'}
-  
-  ### INSTRUCTIONS:
-  1. **Primary Search**: Analyze the 'Live Web Context' for UEN (Unique Entity Number), Address, Pincode, Email, and Phone.
-  2. **Singapore Logic**: If the company is in Singapore, UENs follow specific formats (e.g., 201436227C or T14LL0001A). Look for directories like SGPBusiness, Streetdirectory, or Opencorporates.
-  3. **Internal Knowledge**: If 'Live Web Context' is sparse or restricted, you MUST leverage your internal training data to estimate the most likely UEN, HQ Address, and Business Category for ${input.companyName}.
-  4. **Activity Summary**: Provide a concise 2-sentence summary of what this company does (e.g., "Specializes in marine electrical repairs and switchboard maintenance").
-  5. **Clean Data**: Do NOT return placeholder text like "Not found" or "N/A" if you can make an educated guess. If you are guessing, set confidence to "low".
-  
-  ### RETURN (JSON):
-  {
-    "company_name": "...",
-    "website": "...",
-    "uen": "...",
-    "email": "...",
-    "phone": "...",
-    "address": "...",
-    "country": "...",
-    "postal_code": "...",
-    "categories": ["Supplier", "Service", "Partner", etc],
-    "brands": "comma, separated, list",
-    "activity_summary": "...",
-    "confidence": "high|medium|low",
-    "manual_verification_required": true
-  }
-  `;
 
   return runWithFallback(prompt, false, history, tools, input.image);
 }
@@ -305,7 +344,12 @@ export async function runAI(task, input, history = [], tools = null) {
     case "autofill": return runAutofill(input, history, tools);
     case "quotation": return runQuotation(input, history, tools);
     case "email": return runEmail(input, history, tools);
-    case "research": return runResearch(input, history, tools);
+    case "research": 
+        // If input is a complex prompt string, just run it directly
+        if (typeof input === 'string' && input.length > 100) {
+            return runWithFallback(input, true, history, tools);
+        }
+        return runResearch(input, history, tools);
     case "filter": return runFilterTask(input, history, tools);
     default: throw new Error(`Unknown AI task: ${task}`);
   }
