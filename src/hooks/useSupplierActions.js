@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { getPartners, getContactsByPartner, saveContact, savePartner, deleteContact } from '../lib/store';
+import { getPartners, getContactsByPartner, saveContact, savePartner, deleteContact, deletePartner } from '../lib/store';
 import { updateEnquiry } from '../lib/workflowService';
 
 export function useSupplierActions(companyId, enquiryId, initialEnquiry) {
@@ -81,6 +81,33 @@ export function useSupplierActions(companyId, enquiryId, initialEnquiry) {
         }
     };
 
+    const handleCreatePartner = async (data) => {
+        try {
+            const payload = {
+                ...data,
+                company_id: companyId,
+                types: ['Supplier']
+            };
+            const created = await savePartner(payload);
+            setSuppliers(prev => [created, ...prev]);
+            return created;
+        } catch (err) {
+            console.error("Failed to create partner:", err);
+            throw err;
+        }
+    };
+
+    const handleDeletePartner = async (partnerId) => {
+        try {
+            await deletePartner(partnerId);
+            setSuppliers(prev => prev.filter(s => s.id !== partnerId));
+            setSelectedSuppliers(prev => prev.filter(s => s.id !== partnerId));
+        } catch (err) {
+            console.error("Failed to delete partner:", err);
+            throw err;
+        }
+    };
+
     const handleUpdateContact = async (contactId, data) => {
         try {
             const updated = await saveContact({ ...data, id: contactId });
@@ -153,6 +180,10 @@ export function useSupplierActions(companyId, enquiryId, initialEnquiry) {
             const defaultBcc = 'celron.simlim0305@gmail.com,accounts@celron.net';
             window.open(`mailto:?bcc=${emails}${emails ? ',' : ''}${defaultBcc}&subject=${subject}&body=${body}`, '_blank');
 
+            // Record the floating action in the database
+            const supplierIds = selectedSuppliers.map(s => s.id);
+            await import('../lib/workflowService').then(m => m.trackFloatedRFQ(enquiryId, supplierIds, companyId));
+
             await updateEnquiry(enquiryId, { status: 'RFQ Floated' });
             return true;
         } catch (error) {
@@ -181,6 +212,8 @@ export function useSupplierActions(companyId, enquiryId, initialEnquiry) {
         handleUpdatePartner,
         handleUpdateContact,
         handleDeleteContact,
+        handleCreatePartner,
+        handleDeletePartner,
         handleFloatQuotation
     };
 }

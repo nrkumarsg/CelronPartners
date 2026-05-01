@@ -287,6 +287,15 @@ async function runResearch(input, history, tools) {
   return runWithFallback(prompt, true, history, tools);
 }
 
+/**
+ * Task: Filter Translation (Fast)
+ * Translates natural language into structural filter JSON.
+ */
+async function runFilterTask(input, history, tools) {
+  const prompt = typeof input === 'string' ? input : JSON.stringify(input);
+  return runWithFallback(prompt, false, history, tools);
+}
+
 // -----------------------------
 // MAIN ENGINE ENTRY
 // -----------------------------
@@ -297,6 +306,7 @@ export async function runAI(task, input, history = [], tools = null) {
     case "quotation": return runQuotation(input, history, tools);
     case "email": return runEmail(input, history, tools);
     case "research": return runResearch(input, history, tools);
+    case "filter": return runFilterTask(input, history, tools);
     default: throw new Error(`Unknown AI task: ${task}`);
   }
 }

@@ -181,3 +181,82 @@ export async function getExchangeRateWithGemini(fromCurrency, toCurrency = 'SGD'
         return { rate: 1, error: 'Failed to fetch rate' };
     }
 }
+
+/**
+ * Natural Language to Filters: Converts a user query into structured filters for lists.
+ */
+export async function translateQueryToFilters(query, context = {}) {
+    const { partners = [], departments = [], categories = [] } = context;
+    
+    const prompt = `
+        Convert this user query into search filters for a Contact Directory.
+        Query: "${query}"
+        
+        Available Partners: ${JSON.stringify(partners.slice(0, 200).map(p => ({ id: p.id, name: p.name })))}
+        Available Departments: ${JSON.stringify(departments)}
+        Available Categories: ${JSON.stringify(categories)}
+        
+        Return ONLY a valid JSON object with these fields:
+        {
+          "searchTerm": "string or empty",
+          "partnerId": "string ID from available partners or empty",
+          "department": "string from available departments or empty",
+          "type": "string from available categories or empty"
+        }
+        
+        Rules:
+        1. If they mention a company, try to match it to a partnerId.
+        2. If they mention a role or category (e.g. Sales, Technical), match to department or type.
+        3. Use searchTerm for any remaining descriptive words.
+    `;
+
+    try {
+        const response = await runAI('filter', prompt);
+        // engine.js runFilterTask returns runWithFallback which auto-parses JSON
+        if (response && (response.searchTerm !== undefined || response.partnerId)) {
+            return response;
+        }
+        
+        let text = typeof response === 'string' ? response : response.raw || JSON.stringify(response);
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+        }
+        return {};
+    } catch (err) {
+        console.error('Gemini Filter Translation Error:', err);
+        return {};
+    }
+}
+/**
+ * Business Card OCR Parsing: Converts raw OCR text into structured contact details.
+ */
+export async function parseOCRBusinessCard(text) {
+    const prompt = `
+        Analyze this raw OCR text from a business card (front and/or back).
+        Extract structured contact information.
+        Text: "${text}"
+        
+        Return ONLY a JSON object with these fields (use empty string if not found):
+        {
+          "company_name": "string",
+          "person_name": "string",
+          "designation": "string",
+          "email": "string",
+          "phone": "string",
+          "mobile": "string",
+          "address": "string",
+          "website": "string",
+          "services": "string (comma separated list of services/activities mentioned)",
+          "brands": "string (comma separated list of brands mentioned)"
+        }
+    `;
+
+    try {
+        const response = await runAI('autofill', { prompt });
+        return response;
+    } catch (err) {
+        console.error('OCR Parsing Error:', err);
+        return null;
+    }
+}

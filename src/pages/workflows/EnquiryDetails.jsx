@@ -19,6 +19,7 @@ import RichTextEditor from '../../components/common/RichTextEditor';
 import CommunicationWall from '../../components/common/CommunicationWall';
 import { ITEM_UNITS } from '../../utils/units';
 import { WhatsAppShareModal } from '../../components/workflow/WhatsAppShareModal';
+import { Modal, QuickPartnerContactDualAdd } from '../../components/workflow/QuickAddForms';
 
 export default function EnquiryDetails() {
     const { id } = useParams();
@@ -36,6 +37,8 @@ export default function EnquiryDetails() {
     const [editingContactId, setEditingContactId] = useState(null);
     const [addingContactToPartnerId, setAddingContactToPartnerId] = useState(null);
     const [editForm, setEditForm] = useState({});
+    const [supplierModalOpen, setSupplierModalOpen] = useState(false);
+    const [editingSupplier, setEditingSupplier] = useState(null);
 
     const {
         suppliers,
@@ -53,8 +56,12 @@ export default function EnquiryDetails() {
         handleUpdatePartner,
         handleUpdateContact,
         handleDeleteContact,
+        handleCreatePartner,
+        handleDeletePartner,
         handleFloatQuotation
     } = useSupplierActions(profile?.company_id, id, enquiry);
+
+    const [showNewSupplierForm, setShowNewSupplierForm] = useState(false);
 
     // Local UI State
     const [settings, setSettings] = useState(null);
@@ -581,78 +588,10 @@ export default function EnquiryDetails() {
                             </div>
                         </div>
                     </div>
-
-                    {/* Workspace & Documents Section */}
-                    <div style={{ marginTop: '32px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                        
-                        <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                                <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                    <Database size={18} color="#3b82f6" /> Project Workspace & Documents
-                                </h4>
-                                {enquiry.gdrive_file_link && !showLinkInput && (
-                                    <button onClick={() => setShowLinkInput(true)} style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>Edit Drive Link</button>
-                                )}
-                            </div>
-
-                            {(!enquiry.gdrive_file_link || showLinkInput) && (
-                                <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px dashed #cbd5e1', marginBottom: '20px' }}>
-                                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '12px' }}>Paste a Google Drive folder link to sync with this enquiry.</p>
-                                    <div style={{ display: 'flex', gap: '10px' }}>
-                                        <input
-                                            type="text"
-                                            placeholder="Paste Google Drive URL..."
-                                            value={driveLink}
-                                            onChange={(e) => setDriveLink(e.target.value)}
-                                            style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.9rem' }}
-                                        />
-                                        <button onClick={updateDriveLink} style={{ background: '#4f46e5', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Link</button>
-                                        {showLinkInput && <button onClick={() => setShowLinkInput(false)} style={{ background: '#f1f5f9', color: '#64748b', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>}
-                                    </div>
-                                </div>
-                            )}
-
-                            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 350px', gap: '24px' }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                                    <CommunicationWall 
-                                        referenceType="Enquiry" 
-                                        referenceId={id} 
-                                        folderId={enquiry?.gdrive_inventory_photos_id || enquiry?.gdrive_file_link?.split('/')?.pop()} 
-                                    />
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                                    <div style={{ background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '16px' }}>
-                                        <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Internal Documents</h5>
-                                        <DocumentManager referenceType="Enquiry" referenceId={id} />
-                                    </div>
-                                    {enquiry.gdrive_file_link && !showLinkInput && (
-                                        <SafeDriveLink 
-                                            url={enquiry.gdrive_file_link} 
-                                            label="Open Project Drive"
-                                            className="btn btn-block"
-                                            style={{ 
-                                                width: '100%', 
-                                                background: '#fff', 
-                                                color: '#334155', 
-                                                border: '1px solid #cbd5e1', 
-                                                padding: '12px', 
-                                                borderRadius: '8px', 
-                                                display: 'flex', 
-                                                alignItems: 'center', 
-                                                justifyContent: 'center', 
-                                                gap: '8px', 
-                                                fontWeight: 600, 
-                                                cursor: 'pointer'
-                                            }}
-                                        />
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             
-            {/* Always visible Notes area */}
+
+            {/* Notes & Comments Section (Moved Up) */}
             <div style={{ marginTop: '24px', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px' }}>
                 <h4 style={{ margin: '0 0 16px 0', fontSize: '0.9rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <FileText size={16} color="#3b82f6" /> Notes & Comments
@@ -664,9 +603,34 @@ export default function EnquiryDetails() {
                 />
             </div>
 
-            {/* Enquiry Floating Module (Bottom) */}
+            {/* Enquiry Floating Module (Supplier Management) */}
             <div style={{ marginTop: '24px', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px' }}>
-                <h4 style={{ margin: '0 0 16px 0', fontSize: '0.9rem', fontWeight: 700 }}>Floating Module</h4>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>Floating Module</h4>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '10px' }}>Supplier Management</span>
+                    </div>
+                    <button 
+                        onClick={() => { setEditingSupplier(null); setSupplierModalOpen(true); }}
+                        className="btn-vibrant"
+                        style={{ 
+                            padding: '8px 16px', 
+                            borderRadius: '12px', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '8px',
+                            background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+                            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+                            border: 'none',
+                            color: 'white',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <Plus size={16} /> Add Supplier
+                    </button>
+                </div>
+
                 <div style={{ position: 'relative', marginBottom: '12px' }}>
                     <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                     <input 
@@ -703,70 +667,29 @@ export default function EnquiryDetails() {
                                         />
                                         <span style={{ fontSize: '1rem', fontWeight: 700, color: isSelected ? '#4f46e5' : '#1e293b' }}>{supplier.name}</span>
                                     </label>
-                                    {isSelected && !isEditingPartner && (
-                                        <button 
-                                            onClick={() => { setEditingPartnerId(supplier.id); setEditForm(supplier); }}
-                                            style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
-                                            onMouseOver={e => e.currentTarget.style.color = '#6366f1'}
-                                            onMouseOut={e => e.currentTarget.style.color = '#94a3b8'}
-                                        >
-                                            <Edit size={14} />
-                                        </button>
+                                    {isSelected && (
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button 
+                                                onClick={() => { setEditingSupplier(supplier); setSupplierModalOpen(true); }}
+                                                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                                                onMouseOver={e => e.currentTarget.style.color = '#6366f1'}
+                                                onMouseOut={e => e.currentTarget.style.color = '#94a3b8'}
+                                            >
+                                                <Edit size={14} />
+                                            </button>
+                                            <button 
+                                                onClick={async () => { if(confirm(`Delete supplier ${supplier.name}?`)) await handleDeletePartner(supplier.id); }}
+                                                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
+                                                onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
+                                                onMouseOut={e => e.currentTarget.style.color = '#94a3b8'}
+                                            >
+                                                <Trash size={14} />
+                                            </button>
+                                        </div>
                                     )}
                                 </div>
                                 
-                                {isSelected && isEditingPartner ? (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingLeft: '28px', marginBottom: '12px' }}>
-                                        <textarea 
-                                            value={editForm.address || ''} 
-                                            onChange={e => setEditForm({...editForm, address: e.target.value})}
-                                            placeholder="Address"
-                                            style={{ width: '100%', padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
-                                            rows={2}
-                                        />
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <input 
-                                                value={editForm.city || ''} 
-                                                onChange={e => setEditForm({...editForm, city: e.target.value})}
-                                                placeholder="City"
-                                                style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
-                                            />
-                                            <input 
-                                                value={editForm.pincode || ''} 
-                                                onChange={e => setEditForm({...editForm, pincode: e.target.value})}
-                                                placeholder="Pin"
-                                                style={{ width: '80px', padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
-                                            />
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '8px' }}>
-                                            <input 
-                                                value={editForm.phone1 || ''} 
-                                                onChange={e => setEditForm({...editForm, phone1: e.target.value})}
-                                                placeholder="Phone"
-                                                style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
-                                            />
-                                            <input 
-                                                value={editForm.email1 || ''} 
-                                                onChange={e => setEditForm({...editForm, email1: e.target.value})}
-                                                placeholder="Email"
-                                                style={{ flex: 1, padding: '6px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.8rem' }}
-                                            />
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                                            <button 
-                                                onClick={async () => {
-                                                    await handleUpdatePartner(supplier.id, editForm);
-                                                    setEditingPartnerId(null);
-                                                }}
-                                                style={{ flex: 1, padding: '4px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
-                                            >Save</button>
-                                            <button 
-                                                onClick={() => setEditingPartnerId(null)}
-                                                style={{ flex: 1, padding: '4px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer' }}
-                                            >Cancel</button>
-                                        </div>
-                                    </div>
-                                ) : isSelected && (
+                                {isSelected && (
                                     <div className="animate-fade-in" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                         {/* Row 2: Address */}
                                         <div style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.4 }}>
@@ -847,6 +770,75 @@ export default function EnquiryDetails() {
                     <button onClick={handlePrepareFloat} disabled={selectedSuppliers.length === 0} className="btn btn-sm btn-primary" style={{ flex: 1, background: '#4f46e5' }}>Float RFQ</button>
                 </div>
             </div>
+
+            {/* Workspace & Documents Section */}
+            <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                        <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Database size={18} color="#3b82f6" /> Project Workspace & Documents
+                        </h4>
+                        {enquiry.gdrive_file_link && !showLinkInput && (
+                            <button onClick={() => setShowLinkInput(true)} style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>Edit Drive Link</button>
+                        )}
+                    </div>
+
+                    {(!enquiry.gdrive_file_link || showLinkInput) && (
+                        <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px dashed #cbd5e1', marginBottom: '20px' }}>
+                            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '12px' }}>Paste a Google Drive folder link to sync with this enquiry.</p>
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <input
+                                    type="text"
+                                    placeholder="Paste Google Drive URL..."
+                                    value={driveLink}
+                                    onChange={(e) => setDriveLink(e.target.value)}
+                                    style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.9rem' }}
+                                />
+                                <button onClick={updateDriveLink} style={{ background: '#4f46e5', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Link</button>
+                                {showLinkInput && <button onClick={() => setShowLinkInput(false)} style={{ background: '#f1f5f9', color: '#64748b', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>}
+                            </div>
+                        </div>
+                    )}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 350px', gap: '24px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <CommunicationWall 
+                                referenceType="Enquiry" 
+                                referenceId={id} 
+                                folderId={enquiry?.gdrive_inventory_photos_id || enquiry?.gdrive_file_link?.split('/')?.pop()} 
+                            />
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div style={{ background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '16px' }}>
+                                <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Internal Documents</h5>
+                                <DocumentManager referenceType="Enquiry" referenceId={id} />
+                            </div>
+                            {enquiry.gdrive_file_link && !showLinkInput && (
+                                <SafeDriveLink 
+                                    url={enquiry.gdrive_file_link} 
+                                    label="Open Project Drive"
+                                    className="btn btn-block"
+                                    style={{ 
+                                        width: '100%', 
+                                        background: '#fff', 
+                                        color: '#334155', 
+                                        border: '1px solid #cbd5e1', 
+                                        padding: '12px', 
+                                        borderRadius: '8px', 
+                                        display: 'flex', 
+                                        alignItems: 'center', 
+                                        justifyContent: 'center', 
+                                        gap: '8px', 
+                                        fontWeight: 600, 
+                                        cursor: 'pointer'
+                                    }}
+                                />
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
 
 
             {/* Standardized Upload Overlay */}
@@ -1120,6 +1112,26 @@ export default function EnquiryDetails() {
                     alert("PDF Sharing for Enquiries: Please use the 'Print PDF' button to generate the file first, then use your phone's share feature. Alternatively, use 'Chat Now' to send the text message.");
                 }}
             />
+
+            {/* Supplier Management Modal (Image 2 style) */}
+            <Modal 
+                isOpen={supplierModalOpen} 
+                onClose={() => setSupplierModalOpen(false)}
+                title={editingSupplier ? "Edit Supplier Details" : "Add New Supplier"}
+                icon={Users}
+                size="xl"
+            >
+                <QuickPartnerContactDualAdd 
+                    company_id={profile.company_id}
+                    initialPartner={editingSupplier}
+                    partners={suppliers}
+                    onSuccess={async ({ partner, contact }) => {
+                        await fetchSuppliers();
+                        setSupplierModalOpen(false);
+                    }}
+                    onCancel={() => setSupplierModalOpen(false)}
+                />
+            </Modal>
         </>
     );
 }

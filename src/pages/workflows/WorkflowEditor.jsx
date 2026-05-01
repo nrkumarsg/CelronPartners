@@ -1524,13 +1524,23 @@ export default function WorkflowEditor() {
                             <div className="form-item">
                                 <label><User size={14} /> {formData.document_type === 'Purchase Order' ? 'Supplier' : 'Customer'}</label>
                                 <div style={{ position: 'relative' }}>
-                                    <select className="form-select" name="partner_id" value={formData.partner_id} onChange={handleHeaderChange} style={{ width: '100%' }}>
-                                        <option value="">Choose {formData.document_type === 'Purchase Order' ? 'supplier' : 'partner'}...</option>
-                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New {formData.document_type === 'Purchase Order' ? 'Supplier' : 'Customer'}</option>
-                                        {partners
-                                            .filter(p => formData.document_type !== 'Purchase Order' || p.category === 'Supplier')
-                                            .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                    </select>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <select className="form-select" name="partner_id" value={formData.partner_id} onChange={handleHeaderChange} style={{ flex: 1 }}>
+                                            <option value="">Choose {formData.document_type === 'Purchase Order' ? 'supplier' : 'partner'}...</option>
+                                            <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New {formData.document_type === 'Purchase Order' ? 'Supplier' : 'Customer'}</option>
+                                            {partners
+                                                .filter(p => formData.document_type !== 'Purchase Order' || p.category === 'Supplier')
+                                                .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                        </select>
+                                        <button 
+                                            className="icon-btn" 
+                                            onClick={() => setModal({ isOpen: true, type: 'partner_id' })}
+                                            style={{ padding: '8px', background: '#f8fafc' }}
+                                            title="Add New Partner"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
+                                    </div>
                                     {formData.partner_id && (
                                         <button className="btn-edit-inline" onClick={() => handleEditMaster('partner_id')} title="Edit Customer">
                                             <Pencil size={14} />
@@ -1541,16 +1551,26 @@ export default function WorkflowEditor() {
                             <div className="form-item">
                                 <label><MoreHorizontal size={14} /> Contact Person</label>
                                 <div style={{ position: 'relative' }}>
-                                    <select className="form-select" name="contact_id" value={formData.contact_id} onChange={handleHeaderChange} style={{ width: '100%' }}>
-                                        <option value="">Choose contact...</option>
-                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Contact</option>
-                                        {contacts
-                                            .filter(c => !formData.partner_id || c.partnerId === formData.partner_id)
-                                            .map(c => {
-                                                const pName = partners.find(p => p.id === c.partnerId)?.name;
-                                                return <option key={c.id} value={c.id}>{c.name} {pName ? `(${pName})` : ''}</option>;
-                                            })}
-                                    </select>
+                                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                        <select className="form-select" name="contact_id" value={formData.contact_id} onChange={handleHeaderChange} style={{ flex: 1 }}>
+                                            <option value="">Choose contact...</option>
+                                            <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Contact</option>
+                                            {contacts
+                                                .filter(c => !formData.partner_id || c.partnerId === formData.partner_id)
+                                                .map(c => {
+                                                    const pName = partners.find(p => p.id === c.partnerId)?.name;
+                                                    return <option key={c.id} value={c.id}>{c.name} {pName ? `(${pName})` : ''}</option>;
+                                                })}
+                                        </select>
+                                        <button 
+                                            className="icon-btn" 
+                                            onClick={() => setModal({ isOpen: true, type: 'contact_id' })}
+                                            style={{ padding: '8px', background: '#f8fafc' }}
+                                            title="Add New Contact"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
+                                    </div>
                                     {formData.contact_id && (
                                         <button className="btn-edit-inline" onClick={() => handleEditMaster('contact_id')} title="Edit Contact">
                                             <Pencil size={14} />

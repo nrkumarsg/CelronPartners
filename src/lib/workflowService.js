@@ -140,6 +140,30 @@ export const shortlistSupplierQuote = async (enquiryId, quoteId) => {
     return { data, error };
 };
 
+export const trackFloatedRFQ = async (enquiryId, supplierIds, companyId) => {
+    // Check for existing records to avoid duplicates
+    const { data: existing } = await supabase
+        .from('supplier_quotes')
+        .select('supplier_id')
+        .eq('enquiry_id', enquiryId);
+    
+    const existingIds = existing?.map(e => e.supplier_id) || [];
+    const newSupplierIds = supplierIds.filter(id => !existingIds.includes(id));
+
+    if (newSupplierIds.length === 0) return { success: true };
+
+    const records = newSupplierIds.map(sid => ({
+        enquiry_id: enquiryId,
+        supplier_id: sid,
+        company_id: companyId,
+        status: 'Pending',
+        quote_amount: 0
+    }));
+
+    const { error } = await supabase.from('supplier_quotes').insert(records);
+    return { success: !error, error };
+};
+
 // ... rest of the file ...
 
 // ... other CRUD operations for Enquiries, Jobs, etc.

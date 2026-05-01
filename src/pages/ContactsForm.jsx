@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Save, ArrowLeft, X, User, Mail, Phone, Briefcase, Plus, ExternalLink } from 'lucide-react';
+import { Save, ArrowLeft, X, User, Mail, Phone, Briefcase, Plus, ExternalLink, Settings } from 'lucide-react';
 import { getContacts, saveContact, getPartners } from '../lib/store';
 import BusinessCardUpload from '../components/common/BusinessCardUpload';
 
@@ -22,7 +22,8 @@ export default function ContactsForm() {
         type: partnerIdFromUrl ? 'Contact' : 'Other',
         info: '',
         business_card_url: '',
-        business_card_back_url: ''
+        business_card_back_url: '',
+        department: ''
     });
 
     const [partners, setPartners] = useState([]);
@@ -80,7 +81,8 @@ export default function ContactsForm() {
                     type: (partnerIdFromUrl || formData.partnerId) ? 'Contact' : 'Other',
                     info: '',
                     business_card_url: '',
-                    business_card_back_url: ''
+                    business_card_back_url: '',
+                    department: ''
                 });
                 alert('Contact saved! You can now create another.');
             }
@@ -185,6 +187,18 @@ export default function ContactsForm() {
                                 value={formData.phone}
                                 onChange={handleChange}
                                 placeholder="Phone"
+                                style={{ flex: 1, border: 'none', fontSize: '1rem', outline: 'none', color: '#475569' }}
+                            />
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <Settings size={16} color="#64748b" />
+                            <input
+                                type="text"
+                                name="department"
+                                value={formData.department || ''}
+                                onChange={handleChange}
+                                placeholder="Department"
                                 style={{ flex: 1, border: 'none', fontSize: '1rem', outline: 'none', color: '#475569' }}
                             />
                         </div>

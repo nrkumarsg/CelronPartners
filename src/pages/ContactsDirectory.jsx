@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, Edit, Trash2, Printer, Upload, Download, Globe, CheckCircle2, UserCheck, UserPlus, User, MessageSquare, ChevronDown } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Printer, Upload, Download, Globe, CheckCircle2, UserCheck, UserPlus, User, MessageSquare, ChevronDown, Settings, Sparkles, Loader2 } from 'lucide-react';
 import Papa from 'papaparse';
 import { getContacts, deleteContact, getPartners, saveContact } from '../lib/store';
+import { translateQueryToFilters } from '../lib/geminiService';
 import { connectGoogleAPI, fetchGoogleContacts } from '../lib/googleAuthService';
 import Pagination from '../components/Pagination';
 
@@ -12,6 +13,13 @@ export default function ContactsDirectory() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedPartnerId, setSelectedPartnerId] = useState('');
+    const [selectedDepartment, setSelectedDepartment] = useState('');
+    const [selectedType, setSelectedType] = useState('');
+    const [departments, setDepartments] = useState([]);
+    const [isAiSearching, setIsAiSearching] = useState(false);
+    const [aiQuery, setAiQuery] = useState('');
+    const [showAiSearch, setShowAiSearch] = useState(false);
+    const [partnersList, setPartnersList] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
     const navigate = useNavigate();
@@ -58,7 +66,7 @@ export default function ContactsDirectory() {
     const loadData = async () => {
         setLoading(true);
         const [cData, pData] = await Promise.all([getContacts(), getPartners()]);
-
+        setPartnersList(pData);
         const pMap = {};
         const pList = pData.sort((a, b) => a.name.localeCompare(b.name));
         pData.forEach(p => { pMap[p.id] = p.name });
@@ -73,6 +81,11 @@ export default function ContactsDirectory() {
         });
 
         setContacts(sorted);
+        
+        // Collect unique departments
+        const depts = [...new Set(cData.map(c => c.department).filter(Boolean))].sort();
+        setDepartments(depts);
+
         setLoading(false);
     };
 
@@ -134,6 +147,34 @@ export default function ContactsDirectory() {
         const next = new Set(selectedGoogleIds);
         filteredGoogleContacts.forEach(c => next.delete(c.id));
         setSelectedGoogleIds(next);
+    };
+
+    const handleAiSearch = async (e) => {
+        if (e) e.preventDefault();
+        if (!aiQuery.trim()) return;
+
+        setIsAiSearching(true);
+        try {
+            const filters = await translateQueryToFilters(aiQuery, {
+                partners: partnersList,
+                departments,
+                categories: ['Contact', 'Purchase', 'Technical', 'Accounts', 'Delivery', 'Freelancer', 'Personal', 'Friend', 'Relative', 'Other']
+            });
+
+            setSearchTerm(filters.searchTerm || '');
+            setSelectedPartnerId(filters.partnerId || '');
+            setSelectedDepartment(filters.department || '');
+            setSelectedType(filters.type || '');
+            
+            setShowAiSearch(false);
+            setAiQuery('');
+            setCurrentPage(1);
+        } catch (err) {
+            console.error('AI Search Failed:', err);
+            alert('AI Search failed. Please try a simpler query.');
+        } finally {
+            setIsAiSearching(false);
+        }
     };
 
     const handleDelete = async (id) => {
@@ -206,6 +247,7 @@ export default function ContactsDirectory() {
         const cPhone = (c.handphone || '').toLowerCase();
         const cType = (c.type || '').toLowerCase();
         const cPost = (c.post || '').toLowerCase();
+        const cDept = (c.department || '').toLowerCase();
         const cInfo = (c.info || '').toLowerCase();
 
         const matchesSearch = !searchTerm || (
@@ -214,11 +256,15 @@ export default function ContactsDirectory() {
             cPhone.includes(term) ||
             cType.includes(term) ||
             cPost.includes(term) ||
+            cDept.includes(term) ||
             cInfo.includes(term) ||
             partnerName.includes(term)
         );
 
-        return matchesSearch && matchesPartner;
+        const matchesDepartment = !selectedDepartment || c.department === selectedDepartment;
+        const matchesType = !selectedType || c.type === selectedType;
+
+        return matchesSearch && matchesPartner && matchesDepartment && matchesType;
     });
 
     // Real-time filtering for Modal
@@ -275,18 +321,61 @@ export default function ContactsDirectory() {
             </header>
 
             {/* Filter Bar */}
-            <div style={{ display: 'flex', gap: '16px', marginBottom: '32px', alignItems: 'center', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', flex: 1, minWidth: '400px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '4px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', padding: '0 12px', color: '#94a3b8' }}>
-                        <Search size={18} />
-                    </div>
+            {/* AI Search Overlay */}
+            {showAiSearch && (
+                <div style={{ marginBottom: '20px', padding: '20px', background: 'linear-gradient(90deg, #f0f9ff 0%, #e0f2fe 100%)', borderRadius: '12px', border: '1px solid #bae6fd', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                    <form onSubmit={handleAiSearch} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                        <div style={{ flex: 1, position: 'relative' }}>
+                            <Sparkles size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#0ea5e9' }} />
+                            <input
+                                type="text"
+                                value={aiQuery}
+                                onChange={(e) => setAiQuery(e.target.value)}
+                                placeholder="Ask AI to filter... (e.g. 'Show me technical contacts at Veolia')"
+                                style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '8px', border: '1px solid #bae6fd', outline: 'none', fontSize: '1rem' }}
+                                autoFocus
+                            />
+                        </div>
+                        <button 
+                            type="submit" 
+                            disabled={isAiSearching}
+                            style={{ padding: '12px 24px', borderRadius: '8px', background: '#0ea5e9', color: '#fff', border: 'none', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                        >
+                            {isAiSearching ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
+                            {isAiSearching ? 'Thinking...' : 'Apply AI Filter'}
+                        </button>
+                        <button 
+                            type="button" 
+                            onClick={() => setShowAiSearch(false)}
+                            style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontWeight: 500 }}
+                        >
+                            Cancel
+                        </button>
+                    </form>
+                </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '16px', marginBottom: '24px', flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: '300px', position: 'relative', display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 16px', gap: '12px' }}>
+                    <Search size={20} color="#94a3b8" />
                     <input
                         type="text"
-                        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '8px 0', fontSize: '0.95rem', color: '#334155' }}
                         placeholder="Search by name, email, company, or type (e.g. 'Purchase', 'Technical')..."
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e) => {
+                            setSearchTerm(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        style={{ flex: 1, border: 'none', outline: 'none', padding: '12px 0', color: '#1e293b', fontSize: '1rem' }}
                     />
+                    <button
+                        onClick={() => setShowAiSearch(!showAiSearch)}
+                        title="AI Smart Filter"
+                        style={{ background: 'rgba(14, 165, 233, 0.1)', border: 'none', borderRadius: '6px', padding: '6px 10px', color: '#0ea5e9', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, fontSize: '0.85rem' }}
+                    >
+                        <Sparkles size={16} />
+                        AI Search
+                    </button>
                 </div>
 
                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 16px', gap: '8px', minWidth: '250px' }}>
@@ -306,6 +395,42 @@ export default function ContactsDirectory() {
                     </select>
                     <ChevronDown size={14} color="#94a3b8" style={{ position: 'absolute', right: '16px', pointerEvents: 'none' }} />
                 </div>
+
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 16px', gap: '8px', minWidth: '200px' }}>
+                    <Settings size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
+                    <select
+                        value={selectedDepartment}
+                        onChange={(e) => {
+                            setSelectedDepartment(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        style={{ appearance: 'none', background: 'transparent', border: 'none', outline: 'none', color: '#475569', fontSize: '0.9rem', fontWeight: 500, padding: '10px 24px 10px 0', cursor: 'pointer', width: '100%' }}
+                    >
+                        <option value="">All Departments</option>
+                        {departments.map(dept => (
+                            <option key={dept} value={dept}>{dept}</option>
+                        ))}
+                    </select>
+                    <ChevronDown size={14} color="#94a3b8" style={{ position: 'absolute', right: '16px', pointerEvents: 'none' }} />
+                </div>
+
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 16px', gap: '8px', minWidth: '180px' }}>
+                    <Plus size={16} color="#94a3b8" style={{ flexShrink: 0 }} />
+                    <select
+                        value={selectedType}
+                        onChange={(e) => {
+                            setSelectedType(e.target.value);
+                            setCurrentPage(1);
+                        }}
+                        style={{ appearance: 'none', background: 'transparent', border: 'none', outline: 'none', color: '#475569', fontSize: '0.9rem', fontWeight: 500, padding: '10px 24px 10px 0', cursor: 'pointer', width: '100%' }}
+                    >
+                        <option value="">All Categories</option>
+                        {['Contact', 'Purchase', 'Technical', 'Accounts', 'Delivery', 'Freelancer', 'Personal', 'Friend', 'Relative', 'Other'].map(t => (
+                            <option key={t} value={t}>{t}</option>
+                        ))}
+                    </select>
+                    <ChevronDown size={14} color="#94a3b8" style={{ position: 'absolute', right: '16px', pointerEvents: 'none' }} />
+                </div>
             </div>
 
             <div className="glass-panel" style={{ padding: 0 }}>
@@ -316,6 +441,7 @@ export default function ContactsDirectory() {
                                 <th>Contact Name</th>
                                 <th>Category</th>
                                 <th>Linked Partner</th>
+                                <th>Dept.</th>
                                 <th>Post</th>
                                 <th>Email / Phone</th>
                                 <th style={{ textAlign: 'right' }}>Actions</th>
@@ -360,8 +486,13 @@ export default function ContactsDirectory() {
                                                 {c.type || 'Contact'}
                                             </span>
                                         </td>
-                                        <td style={{ color: 'var(--accent)', fontWeight: 500 }}>
+                                        <td style={{ color: '#6366f1', fontWeight: 600 }}>
                                             {partners[c.partnerId] || (c.info?.includes('[Google Sync]') ? 'Google Contact' : 'Unknown Partner')}
+                                        </td>
+                                        <td>
+                                            <span style={{ fontSize: '0.8rem', color: '#64748b', background: '#f1f5f9', padding: '4px 8px', borderRadius: '4px' }}>
+                                                {c.department || '-'}
+                                            </span>
                                         </td>
                                         <td>{c.post || '-'}</td>
                                         <td>

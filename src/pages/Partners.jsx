@@ -12,6 +12,7 @@ import { COUNTRIES, PARTNER_CATEGORIES } from '../lib/constants';
 
 
 import CompanyAutocomplete from '../components/common/CompanyAutocomplete';
+import { Modal, QuickPartnerContactDualAdd } from '../components/workflow/QuickAddForms';
 import PartnerDocuments from '../components/partners/PartnerDocuments';
 
 export default function Partners() {
@@ -64,6 +65,7 @@ export default function Partners() {
     const [showCategoryMgr, setShowCategoryMgr] = useState(false);
     const [modalTab, setModalTab] = useState('details'); // 'details' or 'documents'
     const [createdPartner, setCreatedPartner] = useState(null);
+    const [existingContacts, setExistingContacts] = useState([]);
 
     const handlePurgeCategory = async (catName) => {
         if (window.confirm(`Are you sure you want to delete "${catName}" globally? This will remove it from all partners.`)) {
@@ -124,6 +126,21 @@ export default function Partners() {
             window.open('https://www.google.com', '_blank');
         }
     };
+
+    // Effect to find existing contacts if company name matches
+    useEffect(() => {
+        if (!newPartner.name || !showModal) {
+            setExistingContacts([]);
+            return;
+        }
+        const match = partners.find(p => p.name.toLowerCase() === newPartner.name.trim().toLowerCase());
+        if (match) {
+            supabase.from('contacts').select('*').eq('partnerId', match.id)
+                .then(({ data }) => setExistingContacts(data || []));
+        } else {
+            setExistingContacts([]);
+        }
+    }, [newPartner.name, partners, showModal]);
 
     const handleSaveNewPartner = async (e) => {
         e.preventDefault();
@@ -552,258 +569,29 @@ export default function Partners() {
             )}
 
             {showModal && (
-                <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
-                    <div style={{ background: '#fff', width: modalTab === 'details' ? '1280px' : '700px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto', borderRadius: '16px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)', position: 'relative', transition: 'width 0.3s ease' }}>
-
-                        <div onClick={() => setShowModal(false)} style={{ position: 'absolute', top: '24px', right: '24px', cursor: 'pointer', color: '#94a3b8' }}>
-                            <X size={24} />
-                        </div>
-
-                        <h2 style={{ margin: '0 0 24px 0', fontSize: '1.25rem', fontWeight: 600, color: '#1e293b' }}>{createdPartner ? 'Manage Documents' : 'Add New Partner'}</h2>
-
-                        <div style={{ display: 'flex', gap: '20px', borderBottom: '1px solid #e2e8f0', marginBottom: '24px' }}>
-                            <button
-                                type="button"
-                                onClick={() => !createdPartner && setModalTab('details')}
-                                style={{
-                                    padding: '10px 0',
-                                    background: 'none',
-                                    border: 'none',
-                                    borderBottom: modalTab === 'details' ? '2px solid #6366f1' : '2px solid transparent',
-                                    color: modalTab === 'details' ? '#6366f1' : '#64748b',
-                                    fontWeight: modalTab === 'details' ? 600 : 500,
-                                    cursor: createdPartner ? 'not-allowed' : 'pointer',
-                                    fontSize: '0.9rem'
-                                }}
-                            >
-                                1. Partner Details
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => createdPartner && setModalTab('documents')}
-                                style={{
-                                    padding: '10px 0',
-                                    background: 'none',
-                                    border: 'none',
-                                    borderBottom: modalTab === 'documents' ? '2px solid #6366f1' : '2px solid transparent',
-                                    color: modalTab === 'documents' ? '#6366f1' : '#64748b',
-                                    fontWeight: modalTab === 'documents' ? 600 : 500,
-                                    cursor: createdPartner ? 'pointer' : 'not-allowed',
-                                    fontSize: '0.9rem',
-                                    opacity: createdPartner ? 1 : 0.5
-                                }}
-                            >
-                                2. Documents & Verification
-                            </button>
-                        </div>
-
-                        {modalTab === 'details' ? (
-                            <form onSubmit={handleSaveNewPartner}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '40px', alignItems: 'start' }}>
-                                    {/* Left Column: Partner Details */}
-                                    <div style={{ borderRight: '1px solid #f1f5f9', paddingRight: '40px' }}>
-                                        <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px', color: '#6366f1' }}>
-                                            <Building2 size={18} />
-                                            <span style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Step 1: Partner Information</span>
-                                        </div>
-
-                                        <div style={{ display: 'flex', gap: '24px', alignItems: 'center', padding: '24px', border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc', marginBottom: '16px' }}>
-                                            <div style={{ width: '64px', height: '64px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                <Building2 color="#6366f1" size={28} />
-                                            </div>
-                                            <div style={{ flex: 1 }}>
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                                                    <label style={{ fontWeight: 500, color: '#1e293b', margin: 0 }}>Company Name *</label>
-                                                    {newPartner.name && (
-                                                        <a 
-                                                            href={`https://www.google.com/search?q=${encodeURIComponent(newPartner.name)}`} 
-                                                            target="_blank" 
-                                                            rel="noopener noreferrer" 
-                                                            style={{ color: '#6366f1', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
-                                                        >
-                                                            Search <Search size={12} />
-                                                        </a>
-                                                    )}
-                                                </div>
-                                                <CompanyAutocomplete
-                                                    value={newPartner.name}
-                                                    onChange={val => setNewPartner({ ...newPartner, name: val })}
-                                                    onSelect={handleCompanySelect}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Email *</label>
-                                                <input required type="email" placeholder="contact@partner.com" value={newPartner.email1} onChange={e => setNewPartner({ ...newPartner, email1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Phone</label>
-                                                <input placeholder="+1 234 567 8900" value={newPartner.phone1} onChange={e => setNewPartner({ ...newPartner, phone1: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                            </div>
-                                        </div>
-
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
-                                            <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Full Address</label>
-                                            <textarea placeholder="Street, Building, etc." value={newPartner.address} onChange={e => setNewPartner({ ...newPartner, address: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', minHeight: '60px' }} />
-                                        </div>
-
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>City</label>
-                                                <input placeholder="City" value={newPartner.city} onChange={e => setNewPartner({ ...newPartner, city: e.target.value })} style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none' }} />
-                                            </div>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Country *</label>
-                                                <select
-                                                    required
-                                                    value={newPartner.country}
-                                                    onChange={e => setNewPartner({ ...newPartner, country: e.target.value })}
-                                                    style={{ padding: '10px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', outline: 'none', background: '#fff', cursor: 'pointer' }}
-                                                >
-                                                    <option value="">Select Country</option>
-                                                    {COUNTRIES.map(country => (
-                                                        <option key={country} value={country}>{country}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div style={{ marginBottom: '16px' }}>
-                                            <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569', marginBottom: '12px', display: 'block' }}>Categories</label>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                                {Array.from(new Set([...availableCategories, ...(newPartner.types || [])])).map(cat => (
-                                                    <div
-                                                        key={cat}
-                                                        onClick={() => handleCategoryToggle(cat)}
-                                                        style={{ padding: '6px 14px', borderRadius: '24px', border: (newPartner.types || []).includes(cat) ? '1px solid #6366f1' : '1px solid #e2e8f0', background: (newPartner.types || []).includes(cat) ? '#e0e7ff' : '#fff', color: (newPartner.types || []).includes(cat) ? '#6366f1' : '#475569', fontSize: '0.75rem', fontWeight: 500, cursor: 'pointer' }}
-                                                    >
-                                                        {cat}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '16px' }}>
-                                            <label style={{ fontSize: '0.85rem', fontWeight: 500, color: '#475569' }}>Notes & Business Profile</label>
-                                            <div style={{ background: '#fff' }}>
-                                                <ReactQuill
-                                                    theme="snow"
-                                                    value={newPartner.notes}
-                                                    onChange={(val) => setNewPartner({ ...newPartner, notes: val })}
-                                                    modules={modules}
-                                                    style={{ height: '150px', marginBottom: '50px' }}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Right Column: Primary Contact */}
-                                    <div>
-                                        <div style={{ marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981' }}>
-                                            <User size={18} />
-                                            <span style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Step 2: Primary Contact (Optional)</span>
-                                        </div>
-
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', padding: '24px', background: '#f0fdf4', borderRadius: '16px', border: '1px solid #bbf7d0' }}>
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#166534' }}>Full Name</label>
-                                                <input placeholder="e.g. John Doe" value={newContact.name} onChange={e => setNewContact({ ...newContact, name: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #bbf7d0', outline: 'none' }} />
-                                            </div>
-
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#166534' }}>Job Title / Designation</label>
-                                                <input placeholder="e.g. Purchasing Manager" value={newContact.post} onChange={e => setNewContact({ ...newContact, post: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #bbf7d0', outline: 'none' }} />
-                                            </div>
-
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#166534' }}>Email</label>
-                                                    <input type="email" placeholder="john@partner.com" value={newContact.email} onChange={e => setNewContact({ ...newContact, email: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #bbf7d0', outline: 'none' }} />
-                                                </div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                    <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#166534' }}>Mobile / WhatsApp</label>
-                                                    <input placeholder="+65 ...." value={newContact.handphone} onChange={e => setNewContact({ ...newContact, handphone: e.target.value })} style={{ padding: '10px 12px', borderRadius: '8px', border: '1px solid #bbf7d0', outline: 'none' }} />
-                                                </div>
-                                            </div>
-
-                                            <div style={{ padding: '16px', background: '#fff', borderRadius: '12px', border: '1px solid #dcfce7' }}>
-                                                <BusinessCardUpload
-                                                    frontValue={newContact.business_card_url}
-                                                    backValue={newContact.business_card_back_url}
-                                                    onFrontChange={(url) => setNewContact(prev => ({ ...prev, business_card_url: url }))}
-                                                    onBackChange={(url) => setNewContact(prev => ({ ...prev, business_card_back_url: url }))}
-                                                    label="Contact Business Card"
-                                                />
-                                            </div>
-
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '16px', background: '#fff', borderRadius: '12px', border: '1px solid #dcfce7' }}>
-                                                <h4 style={{ margin: 0, fontSize: '0.8rem', color: '#15803d', textTransform: 'uppercase' }}>Financials (Partner)</h4>
-                                                {(newPartner.types.includes('Customer') || newPartner.types.includes('Supplier')) ? (
-                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                                                        {newPartner.types.includes('Customer') && (
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                                <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Cust. Credit Limit</label>
-                                                                <input placeholder="Limit" value={newPartner.customerCredit} onChange={e => setNewPartner({ ...newPartner, customerCredit: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
-                                                            </div>
-                                                        )}
-                                                        {newPartner.types.includes('Supplier') && (
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                                <label style={{ fontSize: '0.75rem', color: '#64748b' }}>Supp. Credit Limit</label>
-                                                                <input placeholder="Limit" value={newPartner.supplierCredit} onChange={e => setNewPartner({ ...newPartner, supplierCredit: e.target.value })} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #e2e8f0' }} />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>Select 'Customer' or 'Supplier' category to enable credit fields.</div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '32px' }}>
-                                            <button type="button" onClick={() => setShowModal(false)} style={{ padding: '12px 28px', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '10px', color: '#475569', fontWeight: 600, cursor: 'pointer' }}>
-                                                Cancel
-                                            </button>
-                                            <button type="submit" style={{ padding: '12px 32px', background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)', border: 'none', borderRadius: '10px', color: '#fff', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }}>
-                                                Create Partner & Contact
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </form>
-                        ) : (
-                            <div style={{ marginTop: '16px' }}>
-                                <PartnerDocuments
-                                    partnerId={createdPartner?.id}
-                                    partnerName={createdPartner?.name}
-                                    initialFolderId={createdPartner?.gdrive_folder_id}
-                                    initialDriveLink={createdPartner?.google_drive_link}
-                                    onUpdate={(data) => {
-                                        setCreatedPartner(prev => ({
-                                            ...prev,
-                                            gdrive_folder_id: data.id,
-                                            google_drive_link: data.link
-                                        }));
-                                        loadPartners();
-                                    }}
-                                />
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
-                                    <button
-                                        onClick={() => {
-                                            setShowModal(false);
-                                            setCreatedPartner(null);
-                                            setModalTab('details');
-                                        }}
-                                        className="btn btn-primary"
-                                    >
-                                        Done & Close
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                <Modal 
+                    isOpen={showModal} 
+                    onClose={() => { setShowModal(false); setCreatedPartner(null); }}
+                    title={createdPartner ? "Partner Workspace & Documents" : "Add New Partner"}
+                    icon={Users}
+                    size="xl"
+                >
+                    <QuickPartnerContactDualAdd 
+                        company_id={profile.company_id}
+                        initialPartner={createdPartner}
+                        partners={partners}
+                        onSuccess={async ({ partner, contact }) => {
+                            if (!createdPartner) {
+                                setCreatedPartner(partner);
+                            } else {
+                                setShowModal(false);
+                                setCreatedPartner(null);
+                                await loadPartners();
+                            }
+                        }}
+                        onCancel={() => { setShowModal(false); setCreatedPartner(null); }}
+                    />
+                </Modal>
             )}
 
             {/* Category Manager Modal */}

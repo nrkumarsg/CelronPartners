@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Ship, User, Users, MapPin, X, Save, Globe, Mail, Phone, Map, ExternalLink, Plus, Sparkles, Loader2, RefreshCw, Upload, ChevronDown, Paperclip, FileCheck, Calculator, FileText, Search, Check, RotateCcw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { savePartner } from '../../lib/store';
 import { saveJobExpense } from '../../lib/jobExpenseService';
 import BusinessCardUpload from '../common/BusinessCardUpload';
 import { COUNTRIES, PARTNER_CATEGORIES } from '../../lib/constants';
-import { smartSearchCompany, researchContactWithGemini, researchVesselWithGemini } from '../../lib/geminiService';
+import { smartSearchCompany, researchContactWithGemini, researchVesselWithGemini, parseOCRBusinessCard } from '../../lib/geminiService';
 import { runUniversalSearch } from '../../lib/universalFinder';
+import RichTextEditor from '../common/RichTextEditor';
+import PartnerDocuments from '../partners/PartnerDocuments';
 
 // Generic Modal Base
 export const Modal = ({ isOpen, onClose, title, children, icon: Icon, size = 'md' }) => {
@@ -137,6 +139,31 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
     const [customCategory, setCustomCategory] = useState('');
     const [isAiResearching, setIsAiResearching] = useState(false);
     const [aiPreview, setAiPreview] = useState(null);
+
+    const handleOCR = async (text) => {
+        if (!text) return;
+        setIsAiResearching(true);
+        try {
+            const result = await parseOCRBusinessCard(text);
+            if (result) {
+                setFormData(prev => ({
+                    ...prev,
+                    name: prev.name || result.company_name || '',
+                    email1: prev.email1 || result.email || '',
+                    phone1: prev.phone1 || result.phone || '',
+                    weblink: prev.weblink || result.website || '',
+                    address: prev.address || result.address || '',
+                    activity_summary: prev.activity_summary || result.services || '',
+                    brand: prev.brand || result.brands || '',
+                    notes: (prev.notes || '') + `\n\n--- OCR EXTRACTED TEXT ---\n${text}`
+                }));
+            }
+        } catch (err) {
+            console.error('OCR Parsing failed', err);
+        } finally {
+            setIsAiResearching(false);
+        }
+    };
 
     const handleAiAutofill = async () => {
         if (!formData.name) return alert('Please enter a Company Name first.');
@@ -609,7 +636,18 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                     backValue={formData.business_card_back_url}
                     onFrontChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
                     onBackChange={(url) => setFormData(prev => ({ ...prev, business_card_back_url: url }))}
-                    label="Business Card Scan"
+                    onOCR={handleOCR}
+                    label="Business Card Scan (Auto-fills Form)"
+                />
+            </div>
+
+            <div className="form-group" style={{ marginBottom: '24px' }}>
+                <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', marginBottom: '8px' }}>Notes & Business Profile</label>
+                <RichTextEditor 
+                    value={formData.notes || ''} 
+                    onChange={(val) => setFormData(prev => ({ ...prev, notes: val }))} 
+                    placeholder="Enter additional profile details, research notes, etc..."
+                    height="150px"
                 />
             </div>
 
@@ -646,10 +684,34 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
         handphone: '',
         address: '',
         business_card_url: '',
-        business_card_back_url: ''
+        business_card_back_url: '',
+        department: ''
     });
     const [loading, setLoading] = useState(false);
     const [isAiResearching, setIsAiResearching] = useState(false);
+
+    const handleOCR = async (text) => {
+        if (!text) return;
+        setIsAiResearching(true);
+        try {
+            const result = await parseOCRBusinessCard(text);
+            if (result) {
+                setFormData(prev => ({
+                    ...prev,
+                    name: prev.name || result.person_name || '',
+                    email: prev.email || result.email || '',
+                    handphone: prev.handphone || result.mobile || result.phone || '',
+                    post: prev.post || result.designation || '',
+                    department: prev.department || result.department || '',
+                    address: prev.address || result.address || ''
+                }));
+            }
+        } catch (err) {
+            console.error('OCR Parsing failed', err);
+        } finally {
+            setIsAiResearching(false);
+        }
+    };
 
     const handleAiAutofill = async () => {
         if (!formData.name) return alert('Please enter a Contact Name first.');
@@ -778,6 +840,17 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
                 </div>
 
                 <div className="form-item">
+                    <label>Department</label>
+                    <input
+                        className="form-input"
+                        name="department"
+                        value={formData.department || ''}
+                        onChange={handleChange}
+                        placeholder="e.g. Sales, Technical"
+                    />
+                </div>
+
+                <div className="form-item">
                     <label>Post / Designation</label>
                     <input
                         className="form-input"
@@ -841,7 +914,8 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
                     backValue={formData.business_card_back_url}
                     onFrontChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
                     onBackChange={(url) => setFormData(prev => ({ ...prev, business_card_back_url: url }))}
-                    label="Contact Business Card"
+                    onOCR={handleOCR}
+                    label="Contact Business Card (Auto-fills Fields)"
                 />
             </div>
 
@@ -859,13 +933,29 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
 
 // NEW: Combined Partner & Contact Dual Add
 export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initialContact, partners, onSuccess, onCancel }) => {
+    const [activeTab, setActiveTab] = useState('details'); // 'details' | 'documents'
     const [partnerData, setPartnerData] = useState(initialPartner || {
-        name: '', email1: '', phone1: '', country: '', types: ['Customer']
+        name: '', email1: '', phone1: '', country: '', types: ['Customer'], notes: '', uen: '', address: '', city: '', pincode: ''
     });
     const [contactData, setContactData] = useState(initialContact || {
-        name: '', email: '', handphone: '', type: 'Main'
+        name: '', email: '', handphone: '', type: 'Main', department: '', post: ''
     });
     const [loading, setLoading] = useState(false);
+    const [existingContacts, setExistingContacts] = useState([]);
+
+    useEffect(() => {
+        if (!partnerData.name) {
+            setExistingContacts([]);
+            return;
+        }
+        const match = (partners || []).find(p => p.name.toLowerCase() === partnerData.name.trim().toLowerCase());
+        if (match) {
+            supabase.from('contacts').select('*').eq('partnerId', match.id)
+                .then(({ data }) => setExistingContacts(data || []));
+        } else {
+            setExistingContacts([]);
+        }
+    }, [partnerData.name, partners]);
 
     const handleSaveAll = async () => {
         if (!partnerData.name) return alert('Partner Name is required');
@@ -902,69 +992,179 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: '1.2fr 1fr', 
-                gap: '32px', 
-                alignItems: 'start'
-            }}>
-                <div style={{ borderRight: '1px solid #e2e8f0', paddingRight: '32px' }}>
-                    <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#6366f1' }}>
-                        <Users size={18} />
-                        <span style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Company Details</span>
-                    </div>
-                    <QuickPartnerAdd 
-                        company_id={company_id} 
-                        initialData={partnerData} 
-                        hideActions={true} 
-                        onDataChange={setPartnerData} 
-                    />
-                </div>
-                <div>
-                    <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981' }}>
-                        <User size={18} />
-                        <span style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>Primary Contact Details</span>
-                    </div>
-                    <QuickContactAdd 
-                        company_id={company_id} 
-                        partner_id={partnerData.id} 
-                        partners={partners} 
-                        initialData={contactData} 
-                        hideActions={true} 
-                        onDataChange={setContactData} 
-                    />
-                </div>
-            </div>
-
-            <div style={{ 
-                display: 'flex', 
-                justifyContent: 'flex-end', 
-                gap: '12px', 
-                paddingTop: '24px', 
-                borderTop: '2px solid #f1f5f9',
-                background: '#fff',
-                position: 'sticky',
-                bottom: 0,
-                zIndex: 20
-            }}>
-                <button className="btn btn-secondary" onClick={onCancel} style={{ padding: '12px 24px' }}>Cancel</button>
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            {/* Tabs Header */}
+            <div style={{ display: 'flex', gap: '24px', borderBottom: '1px solid #e2e8f0', marginBottom: '24px', padding: '0 4px' }}>
                 <button 
-                    className="btn btn-primary" 
-                    onClick={handleSaveAll} 
-                    disabled={loading || !partnerData.name}
-                    style={{ 
-                        padding: '12px 32px', 
-                        background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
-                        boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+                    onClick={() => setActiveTab('details')}
+                    style={{
+                        padding: '12px 16px',
                         border: 'none',
-                        fontWeight: 700
+                        background: 'none',
+                        borderBottom: activeTab === 'details' ? '3px solid #6366f1' : '3px solid transparent',
+                        color: activeTab === 'details' ? '#6366f1' : '#64748b',
+                        fontWeight: activeTab === 'details' ? 700 : 500,
+                        cursor: 'pointer',
+                        fontSize: '0.95rem',
+                        transition: 'all 0.2s'
                     }}
                 >
-                    {loading ? <Loader2 className="animate-spin" /> : <Save size={18} />}
-                    {loading ? 'Saving Everything...' : (partnerData.id ? 'Update Both' : 'Save Partner & Contact')}
+                    1. Partner Details
+                </button>
+                <button 
+                    onClick={() => setActiveTab('documents')}
+                    disabled={!partnerData.id}
+                    style={{
+                        padding: '12px 16px',
+                        border: 'none',
+                        background: 'none',
+                        borderBottom: activeTab === 'documents' ? '3px solid #6366f1' : '3px solid transparent',
+                        color: activeTab === 'documents' ? '#6366f1' : '#64748b',
+                        fontWeight: activeTab === 'documents' ? 700 : 500,
+                        cursor: partnerData.id ? 'pointer' : 'not-allowed',
+                        fontSize: '0.95rem',
+                        opacity: partnerData.id ? 1 : 0.5,
+                        transition: 'all 0.2s'
+                    }}
+                    title={!partnerData.id ? 'Save partner details first to enable documents' : ''}
+                >
+                    2. Documents & Verification
                 </button>
             </div>
+
+            {activeTab === 'details' ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                    <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '1.2fr 1fr', 
+                        gap: '32px', 
+                        alignItems: 'start'
+                    }}>
+                        <div style={{ borderRight: '1px solid #e2e8f0', paddingRight: '32px' }}>
+                            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#6366f1' }}>
+                                <div style={{ background: '#e0e7ff', p: '6px', borderRadius: '8px' }}><Users size={18} /></div>
+                                <span style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>STEP 1: PARTNER INFORMATION</span>
+                            </div>
+                            <QuickPartnerAdd 
+                                company_id={company_id} 
+                                initialData={partnerData} 
+                                hideActions={true} 
+                                onDataChange={setPartnerData} 
+                            />
+                        </div>
+                        <div>
+                            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981' }}>
+                                <div style={{ background: '#d1fae5', p: '6px', borderRadius: '8px' }}><User size={18} /></div>
+                                <span style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>STEP 2: PRIMARY CONTACT (OPTIONAL)</span>
+                            </div>
+
+                            {existingContacts.length > 0 && (
+                                <div style={{ 
+                                    marginBottom: '20px', 
+                                    padding: '12px', 
+                                    background: '#f0fdf4', 
+                                    border: '1px solid #bbf7d0', 
+                                    borderRadius: '10px',
+                                    maxHeight: '150px',
+                                    overflowY: 'auto'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#166534', marginBottom: '8px', fontSize: '0.8rem' }}>
+                                        <Users size={14} />
+                                        <span style={{ fontWeight: 700 }}>{existingContacts.length} Contacts already linked</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        {existingContacts.map(c => (
+                                            <div key={c.id} style={{ fontSize: '0.7rem', color: '#14532d', padding: '4px 8px', background: '#fff', borderRadius: '4px', border: '1px solid #dcfce7' }}>
+                                                {c.name} ({c.post || 'Contact'})
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <QuickContactAdd 
+                                company_id={company_id} 
+                                partner_id={partnerData.id} 
+                                partners={partners} 
+                                initialData={contactData} 
+                                hideActions={true} 
+                                onDataChange={setContactData} 
+                            />
+
+                            {/* Financials Section as per Image */}
+                            <div style={{ marginTop: '24px', padding: '16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#059669', marginBottom: '12px' }}>
+                                    <Calculator size={16} />
+                                    <span style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase' }}>Financials (Partner)</span>
+                                </div>
+                                <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '12px', fontStyle: 'italic' }}>
+                                    Select 'Customer' or 'Supplier' category to enable credit fields.
+                                </p>
+                                {(partnerData.types?.includes('Customer') || partnerData.types?.includes('Supplier')) ? (
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                        {partnerData.types.includes('Customer') && (
+                                            <div style={{ padding: '10px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#6366f1', marginBottom: '4px' }}>CUST. LIMIT</div>
+                                                <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{partnerData.customerCredit || 'Not Set'}</div>
+                                            </div>
+                                        )}
+                                        {partnerData.types.includes('Supplier') && (
+                                            <div style={{ padding: '10px', background: '#fff', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#059669', marginBottom: '4px' }}>SUPP. LIMIT</div>
+                                                <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{partnerData.supplierCredit || 'Not Set'}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div style={{ height: '40px', background: '#f1f5f9', borderRadius: '8px', border: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', color: '#94a3b8' }}>
+                                        No Financial Categories Selected
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style={{ 
+                        display: 'flex', 
+                        justifyContent: 'flex-end', 
+                        gap: '12px', 
+                        paddingTop: '24px', 
+                        borderTop: '2px solid #f1f5f9',
+                        background: '#fff',
+                        position: 'sticky',
+                        bottom: 0,
+                        zIndex: 20
+                    }}>
+                        <button className="btn btn-secondary" onClick={onCancel} style={{ padding: '12px 24px', borderRadius: '12px' }}>Cancel</button>
+                        <button 
+                            className="btn btn-primary" 
+                            onClick={handleSaveAll} 
+                            disabled={loading || !partnerData.name}
+                            style={{ 
+                                padding: '12px 32px', 
+                                background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+                                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
+                                border: 'none',
+                                fontWeight: 700,
+                                borderRadius: '12px'
+                            }}
+                        >
+                            {loading ? <Loader2 className="animate-spin" /> : <Save size={18} />}
+                            {loading ? 'Saving Everything...' : (partnerData.id ? 'Update Partner & Contact' : 'Create Partner & Contact')}
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div style={{ minHeight: '400px' }}>
+                    <PartnerDocuments
+                        partnerId={partnerData.id}
+                        partnerName={partnerData.name}
+                        initialFolderId={partnerData.gdrive_folder_id}
+                        initialDriveLink={partnerData.google_drive_link}
+                        onUpdate={(res) => setPartnerData(prev => ({ ...prev, gdrive_folder_id: res.id, google_drive_link: res.link }))}
+                    />
+                </div>
+            )}
         </div>
     );
 };
