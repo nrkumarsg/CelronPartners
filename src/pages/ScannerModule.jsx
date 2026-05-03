@@ -61,6 +61,17 @@ export default function ScannerModule() {
                 setScans(allFiles);
             } else {
                 console.warn("ScannerModule: No scansInboxId returned from initializeVault");
+                // Aggressive fallback: find ALL folders named 99. SCANS_INBOX
+                const query = "(name = '99. SCANS_INBOX' or name = 'Celron_Scans') and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+                const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id, name)`, {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                const { files } = await response.json();
+                if (files && files.length > 0) {
+                    setScanFolderId(files[0].id);
+                    const foundFiles = await listFolderContent(token, files[0].id);
+                    setScans(foundFiles.filter(f => f.mimeType !== 'application/vnd.google-apps.folder'));
+                }
             }
         } catch (err) {
             console.error("Error fetching scans:", err);
@@ -197,9 +208,39 @@ export default function ScannerModule() {
                         <p style={{ margin: '0 0 8px 0', color: '#3b82f6' }}>Is your Scan Inbox empty? Try a global search across all folders:</p>
                         <button 
                             onClick={handleGlobalSearch}
-                            style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                            style={{ background: '#3b82f6', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', marginRight: '8px' }}
                         >
                             Run Global Folder Search
+                        </button>
+                        <button 
+                            onClick={async () => {
+                                setLoading(true);
+                                try {
+                                    const token = localStorage.getItem('google_access_token');
+                                    // Search specifically for the one in CELRONHUB
+                                    const query = "name = '99. SCANS_INBOX' and trashed = false";
+                                    const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id, name, parents)`, {
+                                        headers: { 'Authorization': 'Bearer ' + token }
+                                    });
+                                    const { files } = await res.json();
+                                    if (files && files.length > 0) {
+                                        const folderId = files[0].id;
+                                        setScanFolderId(folderId);
+                                        localStorage.setItem('celron_scans_folder_id', folderId);
+                                        await fetchScans();
+                                        alert("Successfully forced link to: " + folderId);
+                                    } else {
+                                        alert("Could not find folder. Please scan a document on your phone first.");
+                                    }
+                                } catch (e) {
+                                    alert("Fix failed: " + e.message);
+                                } finally {
+                                    setLoading(false);
+                                }
+                            }}
+                            style={{ background: '#10b981', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                            Force Link to Current Folder
                         </button>
                     </div>
                 </div>
@@ -306,7 +347,66 @@ export default function ScannerModule() {
                         <div style={{ textAlign: 'center', padding: '100px 0', background: '#fff', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
                             <FileText size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
                             <h3 style={{ color: '#475569', margin: '0 0 8px 0' }}>No scanned documents found</h3>
-                            <p style={{ color: '#94a3b8', margin: 0 }}>Documents scanned via the mobile app will automatically appear here.</p>
+                            <p style={{ color: '#94a3b8', margin: '0 0 24px 0' }}>Documents scanned via the mobile app will automatically appear here.</p>
+                            
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                                <button 
+                                    onClick={async () => {
+                                        setLoading(true);
+                                        try {
+                                            const token = localStorage.getItem('google_access_token');
+                                            const query = "(name = '99. SCANS_INBOX' or name = 'Celron_Scans') and trashed = false and mimeType = 'application/vnd.google-apps.folder'";
+                                            const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id, name)`, {
+                                                headers: { 'Authorization': 'Bearer ' + token }
+                                            });
+                                            const { files } = await res.json();
+                                            if (files && files.length > 0) {
+                                                // Prioritize the verified folder ID found in audit
+                                                const verifiedId = '12foll2u48h3hMDkmLOhCIXAg8IDAUW67';
+                                                const folder = files.find(f => f.id === verifiedId) || files[0];
+                                                
+                                                setScanFolderId(folder.id);
+                                                localStorage.setItem('celron_scans_folder_id', folder.id);
+                                                
+                                                let total = 0;
+                                                let combinedScans = [];
+                                                for (const f of files) {
+                                                    const content = await fetch(`https://www.googleapis.com/drive/v3/files?q='${f.id}' in parents and trashed = false&fields=files(id, name, mimeType, thumbnailLink, webViewLink, createdTime)`, {
+                                                        headers: { 'Authorization': 'Bearer ' + token }
+                                                    });
+                                                    const data = await content.json();
+                                                    if (data.files) {
+                                                        combinedScans = [...combinedScans, ...data.files];
+                                                        total += data.files.length;
+                                                    }
+                                                }
+                                                setScans(combinedScans);
+                                                alert(`Scanner Linked! Found ${total} documents. (Verified folder: ${folder.name})`);
+                                            } else {
+                                                // FINAL FALLBACK: Search by filename globally
+                                                const globalSearch = await fetch(`https://www.googleapis.com/drive/v3/files?q=name contains 'SCAN-' and trashed = false&fields=files(id, name, mimeType, thumbnailLink, webViewLink, createdTime)`, {
+                                                    headers: { 'Authorization': 'Bearer ' + token }
+                                                });
+                                                const globalData = await globalSearch.json();
+                                                if (globalData.files && globalData.files.length > 0) {
+                                                    setScans(globalData.files);
+                                                    alert(`Found ${globalData.files.length} scans via Global Filename Search!`);
+                                                } else {
+                                                    alert("Could not find any files. Please scan a new document on your phone now to 'wake up' the connection.");
+                                                }
+                                            }
+                                        } catch (e) {
+                                            alert("Fix failed: " + e.message);
+                                        } finally {
+                                            setLoading(false);
+                                        }
+                                    }}
+                                    style={{ background: '#10b981', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '12px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 4px 6px rgba(16, 185, 129, 0.2)' }}
+                                >
+                                    <RefreshCw size={18} /> Force Fix Scanner Connection
+                                </button>
+                                <p style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Click this if your documents are in Drive but not showing here.</p>
+                            </div>
                         </div>
                     ) : (
                         <div style={{

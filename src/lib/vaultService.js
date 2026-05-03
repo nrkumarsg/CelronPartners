@@ -20,7 +20,10 @@ export const initializeVault = async (accessToken, companyId) => {
     if (topRootId.includes('drive.google.com')) {
         const match = topRootId.match(/\/folders\/([a-zA-Z0-9_-]+)/) || topRootId.match(/\/d\/([a-zA-Z0-9_-]+)/);
         if (match) topRootId = match[1];
+        else topRootId = 'root'; // Fallback to root if URL is invalid
     }
+    
+    if (!topRootId || topRootId.trim() === '') topRootId = 'root';
 
     const currentYear = new Date().getFullYear();
     const currentYearName = `YEAR${currentYear}`;
@@ -204,10 +207,15 @@ export const saveVaultShortcut = async (companyId, shortcut) => {
  * Bulk Migration Tool: Moves existing messy folders into the CELRONHUB root.
  */
 export const migrateMessyFolders = async (accessToken, companyId) => {
+    // Force refresh settings to ensure we have the latest 'root' value
     const settings = await getDocumentSettings(companyId);
     let topRootId = settings?.google_drive_folder_id;
     
-    if (!topRootId) throw new Error('Root folder not configured');
+    if (!topRootId || topRootId.trim() === '' || topRootId.includes('drive.google.com')) {
+        // Try to extract or fallback to root
+        const match = topRootId?.match(/\/folders\/([a-zA-Z0-9_-]+)/) || topRootId?.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        topRootId = match ? match[1] : 'root';
+    }
 
     // 1. Ensure CELRONHUB exists
     const celronRootId = await getOrCreateFolderAt(accessToken, 'CELRONHUB', topRootId);
@@ -216,41 +224,55 @@ export const migrateMessyFolders = async (accessToken, companyId) => {
     const messyFolders = [
         'Partners', 'CalibrationLab', 'Celron APK', 'OCR Extractions', 
         'Manual', 'Corporate Vault', 'Celron_Scans', 'Catalog Photos', 
-        'CELRON2026', 'Forms', 'Celron Hub Library'
+        'CELRON2026', 'Forms', 'Celron Hub Library', 'CELRON'
     ];
 
     const report = { moved: [], skipped: [], errors: [] };
 
-    // 3. Search root for these folders and move them
+    // 3. Search root for these folders and move them (Handles duplicates)
     const rootItems = await listFolderContent(accessToken, topRootId);
+    const lowerMessyNames = messyFolders.map(n => n.toLowerCase());
     
-    for (const folderName of messyFolders) {
-        const found = rootItems.find(item => 
-            item.name.toLowerCase() === folderName.toLowerCase() && 
-            item.mimeType === 'application/vnd.google-apps.folder'
-        );
-
-        if (found) {
+    for (const item of rootItems) {
+        if (item.mimeType === 'application/vnd.google-apps.folder' && lowerMessyNames.includes(item.name.toLowerCase())) {
             try {
                 // Don't move the new root into itself
-                if (found.id === celronRootId) continue;
+                if (item.id === celronRootId) continue;
                 
-                await moveFile(accessToken, found.id, celronRootId);
-                report.moved.push(folderName);
+                await moveFile(accessToken, item.id, celronRootId);
+                
+                // SPECIAL CASE: If we moved Celron_Scans, rename it to 99. SCANS_INBOX
+                if (item.name.toLowerCase() === 'celron_scans') {
+                    await fetch(`https://www.googleapis.com/drive/v3/files/${item.id}`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Authorization': 'Bearer ' + accessToken,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ name: '99. SCANS_INBOX' })
+                    });
+                }
+                
+                report.moved.push(item.name);
             } catch (err) {
-                report.errors.push(`${folderName}: ${err.message}`);
+                report.errors.push(`${item.name}: ${err.message}`);
             }
-        } else {
-            report.skipped.push(folderName);
         }
     }
 
-    // 4. Move loose files (Quotations, etc.) into an "Unstaged" folder
+    // 4. Move loose files (Quotations, Invoices, etc.) into an "Unstaged" folder
     try {
         const unstagedId = await getOrCreateFolderAt(accessToken, '98. UNSTAGED_FILES', celronRootId);
         const rootFiles = rootItems.filter(item => 
             item.mimeType !== 'application/vnd.google-apps.folder' && 
-            (item.name.includes('Quotation') || item.name.includes('Invoice') || item.name.includes('Report'))
+            (
+                item.name.toLowerCase().includes('quotation') || 
+                item.name.toLowerCase().includes('invoice') || 
+                item.name.toLowerCase().includes('report') ||
+                item.name.toLowerCase().includes('voucher') ||
+                item.name.toLowerCase().includes('order') ||
+                item.name.toLowerCase().includes('ticket')
+            )
         );
 
         for (const file of rootFiles) {
