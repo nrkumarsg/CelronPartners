@@ -148,20 +148,45 @@ export default function Dashboard() {
                     <div className="stat-value">{loading ? '...' : stats.totalContacts}</div>
                 </div>
 
-                <div className="stat-card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
-                        <span>Total Vessels</span>
-                        <Ship size={20} color="#3b82f6" />
-                    </div>
-                    <div className="stat-value">{loading ? '...' : stats.totalVessels}</div>
-                </div>
+            </div>
 
-                <div className="stat-card">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
-                        <span>Work Locations</span>
-                        <MapPin size={20} color="#f97316" />
+            {/* Operations Hub Section */}
+            <div style={{ marginBottom: '32px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+                    <Ship size={22} color="#3b82f6" />
+                    <h3 style={{ fontSize: '1.25rem', fontWeight: 700, margin: 0, color: '#1e293b' }}>Operations Hub</h3>
+                </div>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
+                    <div className="stat-card" style={{ 
+                        background: 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)',
+                        borderLeft: '4px solid #3b82f6',
+                        position: 'relative',
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 600 }}>
+                            <span>Total Vessels</span>
+                            <Ship size={24} color="#3b82f6" />
+                        </div>
+                        <div className="stat-value" style={{ color: '#1e40af' }}>{loading ? '...' : stats.totalVessels}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '-8px' }}>Active fleet management</div>
+                        <Ship size={80} color="#3b82f6" style={{ position: 'absolute', right: '-10px', bottom: '-20px', opacity: 0.05 }} />
                     </div>
-                    <div className="stat-value">{loading ? '...' : stats.totalLocations}</div>
+
+                    <div className="stat-card" style={{ 
+                        background: 'linear-gradient(135deg, #ffffff 0%, #fff7ed 100%)',
+                        borderLeft: '4px solid #f97316',
+                        position: 'relative',
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontWeight: 600 }}>
+                            <span>Work Locations</span>
+                            <MapPin size={24} color="#f97316" />
+                        </div>
+                        <div className="stat-value" style={{ color: '#9a3412' }}>{loading ? '...' : stats.totalLocations}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '-8px' }}>Global operational points</div>
+                        <MapPin size={80} color="#f97316" style={{ position: 'absolute', right: '-10px', bottom: '-20px', opacity: 0.05 }} />
+                    </div>
                 </div>
             </div>
 
