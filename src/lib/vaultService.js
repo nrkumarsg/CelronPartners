@@ -7,7 +7,7 @@ import { getDocumentSettings, saveDocumentSettings } from './store';
 
 /**
  * Initializes the Tiered Vault structure in Google Drive.
- * Hierarchy: [Configured Root] -> CELRON -> [01..99 Tiered Categorization]
+ * Hierarchy: [Configured Root] -> CELRONHUB -> [01..99 Tiered Categorization]
  */
 export const initializeVault = async (accessToken, companyId) => {
     const settings = await getDocumentSettings(companyId);
@@ -31,7 +31,7 @@ export const initializeVault = async (accessToken, companyId) => {
         return vaultCache[cacheKey];
     }
 
-    // 1. Ensure "CELRON" consolidated folder exists under Settings Root
+    // 1. Ensure "CELRONHUB" consolidated folder exists under Settings Root
     let celronRootId = settings?.gdrive_celron_root_id;
     
     // Fetch info about topRootId to check its name
@@ -39,14 +39,14 @@ export const initializeVault = async (accessToken, companyId) => {
         headers: { 'Authorization': 'Bearer ' + accessToken }
     });
     const rootInfo = await rootInfoRes.json();
-    const isAlreadyCelron = rootInfo?.name?.toUpperCase() === 'CELRON';
+    const isAlreadyCelron = rootInfo?.name?.toUpperCase() === 'CELRON' || rootInfo?.name?.toUpperCase() === 'CELRONHUB';
 
     if (isAlreadyCelron) {
-        // If the configured root IS already CELRON, use it as the consolidated root
+        // If the configured root IS already CELRON/HUB, use it as the consolidated root
         celronRootId = topRootId;
     } else if (!celronRootId || !(await checkFileExists(accessToken, celronRootId))) {
-        // Otherwise, create/find a CELRON folder inside the provided root
-        celronRootId = await getOrCreateFolderAt(accessToken, 'CELRON', topRootId);
+        // Otherwise, create/find a CELRONHUB folder inside the provided root
+        celronRootId = await getOrCreateFolderAt(accessToken, 'CELRONHUB', topRootId);
     }
 
     // 2. Ensure Tiered Top-Level Folders exist under CELRON
@@ -198,4 +198,68 @@ export const saveVaultShortcut = async (companyId, shortcut) => {
         ...settings,
         vault_shortcuts: JSON.stringify(shortcuts)
     });
+};
+
+/**
+ * Bulk Migration Tool: Moves existing messy folders into the CELRONHUB root.
+ */
+export const migrateMessyFolders = async (accessToken, companyId) => {
+    const settings = await getDocumentSettings(companyId);
+    let topRootId = settings?.google_drive_folder_id;
+    
+    if (!topRootId) throw new Error('Root folder not configured');
+
+    // 1. Ensure CELRONHUB exists
+    const celronRootId = await getOrCreateFolderAt(accessToken, 'CELRONHUB', topRootId);
+
+    // 2. Define folders to migrate
+    const messyFolders = [
+        'Partners', 'CalibrationLab', 'Celron APK', 'OCR Extractions', 
+        'Manual', 'Corporate Vault', 'Celron_Scans', 'Catalog Photos', 
+        'CELRON2026', 'Forms', 'Celron Hub Library'
+    ];
+
+    const report = { moved: [], skipped: [], errors: [] };
+
+    // 3. Search root for these folders and move them
+    const rootItems = await listFolderContent(accessToken, topRootId);
+    
+    for (const folderName of messyFolders) {
+        const found = rootItems.find(item => 
+            item.name.toLowerCase() === folderName.toLowerCase() && 
+            item.mimeType === 'application/vnd.google-apps.folder'
+        );
+
+        if (found) {
+            try {
+                // Don't move the new root into itself
+                if (found.id === celronRootId) continue;
+                
+                await moveFile(accessToken, found.id, celronRootId);
+                report.moved.push(folderName);
+            } catch (err) {
+                report.errors.push(`${folderName}: ${err.message}`);
+            }
+        } else {
+            report.skipped.push(folderName);
+        }
+    }
+
+    // 4. Move loose files (Quotations, etc.) into an "Unstaged" folder
+    try {
+        const unstagedId = await getOrCreateFolderAt(accessToken, '98. UNSTAGED_FILES', celronRootId);
+        const rootFiles = rootItems.filter(item => 
+            item.mimeType !== 'application/vnd.google-apps.folder' && 
+            (item.name.includes('Quotation') || item.name.includes('Invoice') || item.name.includes('Report'))
+        );
+
+        for (const file of rootFiles) {
+            await moveFile(accessToken, file.id, unstagedId);
+        }
+        if (rootFiles.length > 0) report.moved.push(`${rootFiles.length} loose files`);
+    } catch (err) {
+        console.error('Failed to move loose files:', err);
+    }
+
+    return report;
 };

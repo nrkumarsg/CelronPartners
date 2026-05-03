@@ -3,7 +3,7 @@ import { Settings, UploadCloud, ToggleRight, ToggleLeft, Save, Plus, Globe, Tras
 import { getDocumentSettings, saveDocumentSettings, uploadFile } from '../lib/store';
 import { getUserTools, createUserTool, updateUserTool, deleteUserTool } from '../lib/toolService';
 import { getCommunicationAccounts, createCommunicationAccount, updateCommunicationAccount, deleteCommunicationAccount } from '../lib/communicationService';
-import { initializeVault } from '../lib/vaultService';
+import { initializeVault, migrateMessyFolders } from '../lib/vaultService';
 import { updateCompany } from '../lib/companyService';
 import { useAuth } from '../contexts/AuthContext';
 import { isTokenValid } from '../lib/googleAuthService';
@@ -60,6 +60,7 @@ export default function ModuleSettings() {
     });
 
     const [initializingVault, setInitializingVault] = useState(false);
+    const [migratingDrive, setMigratingDrive] = useState(false);
     const [showFloatingHub, setShowFloatingHub] = useState(localStorage.getItem('show_floating_hub') !== 'false');
 
     const logoInputRef = useRef(null);
@@ -83,6 +84,26 @@ export default function ModuleSettings() {
             alert('Vault Initialization failed: ' + error.message);
         } finally {
             setInitializingVault(false);
+        }
+    };
+
+    const handleDriveMigration = async () => {
+        if (!confirm('This will move your messy root folders into the CELRONHUB folder to clean up your drive. Proceed?')) return;
+        
+        setMigratingDrive(true);
+        try {
+            const accessToken = localStorage.getItem('google_access_token');
+            if (!accessToken) throw new Error('Not connected to Google');
+            
+            const result = await migrateMessyFolders(accessToken, profile.company_id);
+            alert(`Migration Complete!\nMoved: ${result.moved.join(', ')}\nErrors: ${result.errors.length}`);
+            
+            // Re-run vault init to ensure everything is synced
+            await handleVaultInit();
+        } catch (error) {
+            alert('Migration failed: ' + error.message);
+        } finally {
+            setMigratingDrive(false);
         }
     };
 
@@ -789,6 +810,14 @@ export default function ModuleSettings() {
                                         >
                                             {initializingVault ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />}
                                             Sync Tiered Structure
+                                        </button>
+                                        <button
+                                            onClick={handleDriveMigration}
+                                            disabled={migratingDrive || !settings.google_drive_folder_id}
+                                            style={{ padding: '10px 20px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', opacity: (migratingDrive || !settings.google_drive_folder_id) ? 0.6 : 1 }}
+                                        >
+                                            {migratingDrive ? <Loader2 size={18} className="animate-spin" /> : <HardDrive size={18} />}
+                                            Reorganize & Migrate Drive
                                         </button>
                                     </div>
 
