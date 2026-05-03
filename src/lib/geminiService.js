@@ -29,46 +29,71 @@ export async function extractTermsFromImage(base64Image) {
 }
 
 /**
- * Smart Search Company Auto-fill: Redirects to runAI('autofill')
+ * Smart Search Company Auto-fill: Multi-Stage Orchestrator
+ */
+/**
+ * Smart Search Company Auto-fill: 3-Stage Pipeline
  */
 export async function smartSearchCompany(companyName, website = '', searchContext = '') {
     const tools = [{ google_search: {} }];
     try {
-        const data = await runAI('autofill', { companyName, website, searchContext }, [], tools);
-        const cleanValue = (val) => (val === '-' || val === 'null' || !val) ? '' : val;
+        // STAGE 1: Raw Research (No JSON constraint, allows Tool usage)
+        console.log('[AI Stage 1] Researching using Google Search Tool...');
+        const researchSummary = await runAI('research', { 
+            query: `Find official UEN, address, email, phone, and brands for company: ${companyName}. Website: ${website}. Additional Context: ${searchContext}`,
+            useTools: true 
+        }, [], tools);
 
-        return {
-            company_name: data.company_name || companyName,
-            website: data.website || website,
-            uen: cleanValue(data.uen),
-            email: cleanValue(data.email),
-            phone: cleanValue(data.phone),
-            country: data.country || "Singapore",
-            city: cleanValue(data.city),
-            postal_code: cleanValue(data.postal_code),
-            address: cleanValue(data.address),
-            categories: data.categories || ["Supplier"],
-            brands: cleanValue(data.brands),
-            activity_summary: cleanValue(data.activity_summary),
-            confidence: data.confidence || "medium",
-            manual_verification_required: data.manual_verification_required ?? true
-        };
+        // STAGE 2: Extraction (Strict JSON)
+        console.log('[AI Stage 2] Extracting structured data...');
+        const extractData = await runAI('autofill', { 
+            companyName, 
+            website, 
+            searchContext: typeof researchSummary === 'string' ? researchSummary : JSON.stringify(researchSummary)
+        }, [], null); // No tools needed here, just extraction
+        
+        // STAGE 3: Deep Verification (If needed)
+        const confidence = extractData.confidence || 0;
+        if (confidence < 80 || !extractData.uen) {
+            console.log('[AI Stage 3] Deep Verifying...');
+            const verifyData = await runAI('autofill', { 
+                isVerification: true, 
+                extractedData: extractData, 
+                searchContext: typeof researchSummary === 'string' ? researchSummary : JSON.stringify(researchSummary)
+            }, [], tools);
+            
+            return formatResult({ ...extractData, ...verifyData }, companyName, website);
+        }
+
+        return formatResult(extractData, companyName, website);
     } catch (err) {
-        console.warn('Smart Search Fallback triggered:', err);
+        console.warn('Smart Search Pipeline failed:', err);
         return {
             company_name: companyName,
-            uen: "",
-            email: "",
-            phone: "",
-            country: "Singapore",
-            city: "",
-            postal_code: "",
-            address: "",
-            categories: ["Supplier"],
-            confidence: "low",
+            confidence: 0,
             manual_verification_required: true
         };
     }
+}
+
+function formatResult(data, companyName, website) {
+    const cleanValue = (val) => (val === '-' || val === 'null' || !val) ? '' : val;
+    return {
+        company_name: data.company_name || companyName,
+        website: data.website || website || data.website,
+        uen: cleanValue(data.uen),
+        email: cleanValue(data.email),
+        phone: cleanValue(data.phone),
+        country: data.country || "Singapore",
+        city: cleanValue(data.city),
+        postal_code: cleanValue(data.postal_code),
+        address: cleanValue(data.address),
+        categories: data.categories || ["Supplier"],
+        brands: cleanValue(data.brands),
+        activity_summary: cleanValue(data.activity_summary),
+        confidence: data.confidence || 50,
+        manual_verification_required: data.manual_verification_required ?? true
+    };
 }
 
 /**
@@ -258,5 +283,40 @@ export async function parseOCRBusinessCard(text) {
     } catch (err) {
         console.error('OCR Parsing Error:', err);
         return null;
+    }
+}
+/**
+ * Image to Items Extraction: Converts raw OCR text into structured line items for documents.
+ */
+export async function extractLineItemsFromImage(text) {
+    const prompt = `
+        Analyze this raw OCR text which contains a list of items (likely from an invoice, quotation, or packing list).
+        Extract a structured array of line items.
+        Text: "${text}"
+        
+        Return ONLY a JSON array of objects with these fields:
+        [
+          {
+            "name": "string (main item name)",
+            "specification": "string (technical details/specs)",
+            "quantity": number,
+            "uom": "string (unit of measure e.g. PCS, SET, KG)",
+            "unit_price": number (if found, else 0),
+            "total_amount": number (if found, else 0)
+          }
+        ]
+        
+        Rules:
+        1. Try to separate Name from Specification.
+        2. Clean up any OCR artifacts.
+        3. If quantity is missing, default to 1.
+    `;
+
+    try {
+        const response = await runAI('autofill', { prompt });
+        return Array.isArray(response) ? response : [];
+    } catch (err) {
+        console.error('Line Item Extraction Error:', err);
+        return [];
     }
 }

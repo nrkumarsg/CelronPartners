@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
     Users, Search, UserPlus, Mail, Phone, Shield, 
     MoreHorizontal, Edit2, Trash2, X, Check,
-    Building2, Briefcase, User as UserIcon
+    Building2, Briefcase, User as UserIcon, PenTool, Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getAllStaff, createStaff, updateStaff, deleteStaff } from '../lib/userService';
@@ -22,7 +22,8 @@ const StaffDirectory = () => {
         phone: '',
         designation: '',
         role: 'user',
-        status: 'active'
+        status: 'active',
+        signature_url: ''
     });
     const [saveLoading, setSaveLoading] = useState(false);
 
@@ -47,7 +48,8 @@ const StaffDirectory = () => {
             phone: '',
             designation: '',
             role: 'user',
-            status: 'active'
+            status: 'active',
+            signature_url: ''
         });
         setIsModalOpen(true);
     };
@@ -62,7 +64,8 @@ const StaffDirectory = () => {
             phone: person.phone || '',
             designation: person.designation || '',
             role: person.role || 'user',
-            status: person.status || 'active'
+            status: person.status || 'active',
+            signature_url: person.signature_url || ''
         });
         setIsModalOpen(true);
     };
@@ -76,16 +79,44 @@ const StaffDirectory = () => {
                 const { error } = await updateStaff(editingStaff.id, formData);
                 if (error) throw error;
             } else {
-                const payload = { 
-                    ...formData
-                };
-                const { error } = await createStaff(payload);
+                const { error } = await createStaff(formData);
                 if (error) throw error;
             }          
             setIsModalOpen(false);
             fetchStaff();
         } catch (error) {
             alert(`Failed to ${modalType} staff member: ` + error.message);
+        } finally {
+            setSaveLoading(false);
+        }
+    };
+
+    const handleSignatureUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        setSaveLoading(true);
+        try {
+            const { supabase } = await import('../lib/supabase');
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+            const filePath = `signatures/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('staff-docs')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('staff-docs')
+                .getPublicUrl(filePath);
+
+            setFormData({ ...formData, signature_url: publicUrl });
+            alert('Signature uploaded successfully!');
+        } catch (error) {
+            console.error('Upload failed:', error);
+            alert('Upload failed: ' + error.message);
         } finally {
             setSaveLoading(false);
         }
@@ -148,6 +179,7 @@ const StaffDirectory = () => {
                                 <th>Designation</th>
                                 <th>Contact Details</th>
                                 <th>System Role</th>
+                                <th>Signature</th>
                                 <th>Status</th>
                                 {isAdmin && <th style={{ textAlign: 'right' }}>Actions</th>}
                             </tr>
@@ -211,6 +243,28 @@ const StaffDirectory = () => {
                                             }}>
                                                 <Shield size={12} /> {person.role}
                                             </span>
+                                        </td>
+                                        <td>
+                                            {person.signature_url ? (
+                                                <div style={{ 
+                                                    height: '32px', 
+                                                    width: '80px', 
+                                                    background: 'white', 
+                                                    borderRadius: '4px',
+                                                    border: '1px solid #e2e8f0',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    overflow: 'hidden',
+                                                    padding: '2px'
+                                                }}>
+                                                    <img src={person.signature_url} alt="Signature" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                                                </div>
+                                            ) : (
+                                                <span style={{ fontSize: '0.7rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                    <PenTool size={12} /> Missing
+                                                </span>
+                                            )}
                                         </td>
                                         <td>
                                             <span style={{ 
@@ -338,18 +392,49 @@ const StaffDirectory = () => {
                                         {currentUserProfile?.role === 'superadmin' && <option value="superadmin">Superadmin</option>}
                                     </select>
                                 </div>
-                                <div className="form-group">
-                                    <label className="form-label">Status</label>
-                                    <select 
-                                        className="form-select"
-                                        value={formData.status}
-                                        onChange={e => setFormData({ ...formData, status: e.target.value })}
-                                    >
-                                        <option value="active">Active</option>
-                                        <option value="pending">Pending</option>
-                                        <option value="blocked">Blocked</option>
-                                    </select>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Digital Signature Image</label>
+                                <div style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '12px',
+                                    padding: '12px',
+                                    background: 'var(--bg-secondary)',
+                                    borderRadius: '8px',
+                                    border: '1px dashed var(--border-color)'
+                                }}>
+                                    {formData.signature_url ? (
+                                        <div style={{ height: '40px', width: '100px', background: 'white', borderRadius: '4px', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                                            <img src={formData.signature_url} alt="Preview" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
+                                        </div>
+                                    ) : (
+                                        <div style={{ height: '40px', width: '100px', background: '#f1f5f9', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                            <PenTool size={20} color="#94a3b8" />
+                                        </div>
+                                    )}
+                                    <div style={{ flex: 1 }}>
+                                        <label className="btn btn-sm btn-secondary" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                                            <ImageIcon size={14} /> {formData.signature_url ? 'Replace' : 'Upload Signature'}
+                                            <input type="file" hidden accept="image/*" onChange={handleSignatureUpload} />
+                                        </label>
+                                        <p style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '4px' }}>PNG or JPG with transparent background preferred.</p>
+                                    </div>
                                 </div>
+                            </div>
+
+                            <div className="form-group">
+                                <label className="form-label">Status</label>
+                                <select 
+                                    className="form-select"
+                                    value={formData.status}
+                                    onChange={e => setFormData({ ...formData, status: e.target.value })}
+                                >
+                                    <option value="active">Active</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="blocked">Blocked</option>
+                                </select>
                             </div>
 
                             <div style={{ marginTop: '12px', display: 'flex', gap: '12px' }}>

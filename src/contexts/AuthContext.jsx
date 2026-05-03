@@ -135,38 +135,32 @@ export const AuthProvider = ({ children }) => {
                 ? companiesRes.data 
                 : companiesRes.data?.filter(c => c.id === profileData.company_id);
 
-            setProfile(profileData);
-            setCompanies(myComps || []);
-
             const storedCompany = localStorage.getItem('active_company_id');
-            const defaultCompany = (storedCompany && myComps?.some(c => c.id === storedCompany))
+            const defaultCompany = (storedCompany && (myComps || []).some(c => c.id === storedCompany))
                 ? storedCompany : (myComps?.[0]?.id || profileData.company_id);
-            setActiveCompanyId(defaultCompany);
 
-            // POST-FETCH MODULE ENRICHMENT:
-            // Sync profile modules with the active company's enabled modules
             const activeComp = myComps?.find(c => c.id === defaultCompany);
             if (activeComp?.enabled_modules && profileData.role !== 'superadmin') {
-                const companyModules = activeComp.enabled_modules || [];
-                // Merge or override: Here we ensure the user can only see what the company has enabled
-                // OR we can union them. Usually company level is a hard gate.
-                console.log(`Auth: Merging company modules for ${activeComp.name}`);
-                profileData.accessible_modules = companyModules;
+                profileData.accessible_modules = activeComp.enabled_modules || [];
             }
 
             // Fetch actual logo from document_settings since companies table is missing logo_url column
             try {
                 const docSettings = await getDocumentSettings(defaultCompany);
                 if (docSettings?.logo_url) {
-                    profileData.company_logo_url = docSettings.logo_url; // Attach to profile as fallback
+                    profileData.company_logo_url = docSettings.logo_url;
                     if (activeComp) activeComp.logo_url = docSettings.logo_url;
-                    // Also update the array reference
-                    const compIndex = myComps.findIndex(c => c.id === defaultCompany);
+                    const compIndex = (myComps || []).findIndex(c => c.id === defaultCompany);
                     if (compIndex !== -1) myComps[compIndex].logo_url = docSettings.logo_url;
                 }
             } catch (err) {
                 console.error('Auth: Failed to fetch document settings logo', err);
             }
+
+            // Now update all states at once to trigger a single, complete render
+            setProfile(profileData);
+            setCompanies(myComps || []);
+            setActiveCompanyId(defaultCompany);
 
             // Cache for next load
             localStorage.setItem('auth_cached_profile', JSON.stringify(profileData));

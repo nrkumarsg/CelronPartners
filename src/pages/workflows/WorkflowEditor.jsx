@@ -11,7 +11,8 @@ import {
 } from 'lucide-react';
 import { getExchangeRateWithGemini } from '../../lib/geminiService';
 import { listFolderContent, uploadFileToDrive, deleteFile, getOrCreateFolder, provisionFullProjectStructure, provisionPartnerStructure } from '../../lib/driveService';
-import { validateToken, connectGoogleAPI, getStoredToken } from '../../lib/googleAuthService';
+import { validateToken, connectGoogleAPI, getStoredToken, performOCR } from '../../lib/googleAuthService';
+import { extractLineItemsFromImage } from '../../lib/geminiService';
 import { useAuth } from '../../contexts/AuthContext';
 import {
     getWorkflowDocumentById,
@@ -78,6 +79,8 @@ export default function WorkflowEditor() {
     const [supplierPayments, setSupplierPayments] = useState([]);
     const [loadingPayments, setLoadingPayments] = useState(false);
     const [paymentModal, setPaymentModal] = useState({ isOpen: false, type: null, data: null }); // type: 'customer' | 'supplier'
+    const [signedProofs, setSignedProofs] = useState([]);
+    const [loadingSignedProofs, setLoadingSignedProofs] = useState(false);
 
     // Explorer State
     const [explorerFiles, setExplorerFiles] = useState([]);
@@ -89,6 +92,8 @@ export default function WorkflowEditor() {
     const [uploadingExplorer, setUploadingExplorer] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [paymentQuarter, setPaymentQuarter] = useState('All'); // 'All' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
+    const [isOCRLoading, setIsOCRLoading] = useState(false);
+    const [showOCRModal, setShowOCRModal] = useState(false);
 
     const [settings, setSettings] = useState(null);
     const [logoBase64, setLogoBase64] = useState('');
@@ -311,8 +316,50 @@ export default function WorkflowEditor() {
             fetchGallery();
         } else if (activeTab === 'payments' && !isNew) {
             fetchPayments();
+        } else if (activeTab === 'explorer' && !isNew) {
+            fetchSignedProofs();
         }
     }, [activeTab, formData.assigned_job_no]);
+
+    const fetchSignedProofs = async () => {
+        if (!formData.assigned_job_no) return;
+        setLoadingSignedProofs(true);
+        try {
+            const token = getStoredToken();
+            const rootId = await ensureJobFolder();
+            const signedFolderId = await getOrCreateFolder(token, '6. Completed Proof of Delivery / Signed Reports', rootId);
+            const files = await listFolderContent(token, signedFolderId);
+            setSignedProofs(files);
+        } catch (err) {
+            console.error('Error fetching signed proofs:', err);
+        } finally {
+            setLoadingSignedProofs(false);
+        }
+    };
+
+    const handleUploadSignedProofDirect = async (file) => {
+        if (!file) return;
+        setLoadingSignedProofs(true);
+        try {
+            const token = getStoredToken();
+            const rootId = await ensureJobFolder();
+            const signedFolderId = await getOrCreateFolder(token, '6. Completed Proof of Delivery / Signed Reports', rootId);
+            
+            const result = await uploadFileToDrive(token, file, { folderId: signedFolderId });
+            const proofUrl = `https://drive.google.com/file/d/${result.id}/view`;
+
+            const newAttachments = [...(formData.attachment_urls || []), proofUrl];
+            setFormData(prev => ({ ...prev, attachment_urls: newAttachments }));
+            
+            alert('Signed proof uploaded to Folder 6!');
+            fetchSignedProofs();
+        } catch (err) {
+            console.error('Proof upload failed:', err);
+            alert('Upload failed: ' + err.message);
+        } finally {
+            setLoadingSignedProofs(false);
+        }
+    };
 
     const fetchGallery = async () => {
         if (!formData.assigned_job_no) return;
@@ -1395,7 +1442,7 @@ export default function WorkflowEditor() {
                 return (
                     <QuickPartnerContactDualAdd 
                         company_id={profile.company_id} 
-                        initialPartner={partner}
+                        initialPartner={partner || (['Enquiry', 'Purchase Order', 'RFQ'].includes(formData.document_type) ? { types: ['Supplier'] } : { types: ['Customer'] })}
                         initialContact={contact}
                         partners={partners}
                         onSuccess={handleQuickAddSuccess} 
@@ -2119,6 +2166,9 @@ export default function WorkflowEditor() {
                                 <button className="add-btn" onClick={() => addLineItem('item')}><Plus size={14} /> Add a product</button>
                                 <button className="add-btn" onClick={() => addLineItem('section')}>Add a section</button>
                                 <button className="add-btn" onClick={() => addLineItem('note')}>Add a note</button>
+                                <button className="add-btn" onClick={() => setShowOCRModal(true)} style={{ color: '#8b5cf6', fontWeight: 700 }}>
+                                    <Sparkles size={14} /> Image to Items
+                                </button>
                                 <div style={{ position: 'relative' }}>
                                     <div style={{ display: 'flex', gap: '8px' }}>
                                         <button className="add-btn catalog-btn" onClick={() => setShowCatalogDropdown(!showCatalogDropdown)}>
@@ -2525,6 +2575,57 @@ export default function WorkflowEditor() {
 
                 {activeTab === 'explorer' && (
                     <div className="glass-panel animate-fade-in" style={{ padding: '32px' }}>
+                        {/* Signed Proofs Section */}
+                        <div style={{ marginBottom: '32px', background: '#f8fafc', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>
+                                    <FileCheck2 size={22} color="#059669" /> Signed Proofs of Delivery / Service
+                                </h3>
+                                <button 
+                                    className="btn btn-sm btn-primary" 
+                                    style={{ background: '#059669', borderColor: '#059669', display: 'flex', alignItems: 'center', gap: '8px' }}
+                                    onClick={() => document.getElementById('signed-proof-upload').click()}
+                                >
+                                    <Upload size={14} /> Upload Signed Copy
+                                </button>
+                                <input id="signed-proof-upload" type="file" hidden onChange={(e) => handleUploadSignedProofDirect(e.target.files[0])} />
+                            </div>
+
+                            {loadingSignedProofs ? (
+                                <div style={{ textAlign: 'center', padding: '20px' }}><Loader2 size={24} className="animate-spin" /></div>
+                            ) : signedProofs.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8', fontSize: '0.9rem' }}>
+                                    No signed proofs found in Folder 6. Use the Scanner App or upload here.
+                                </div>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+                                    {signedProofs.map(proof => (
+                                        <div key={proof.id} style={{ background: '#fff', padding: '12px', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                            <FileCheck size={18} color="#059669" />
+                                            <div style={{ flex: 1, overflow: 'hidden' }}>
+                                                <div style={{ fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{proof.name}</div>
+                                            </div>
+                                            <a href={proof.webViewLink} target="_blank" rel="noreferrer" style={{ color: '#64748b' }}><ExternalLink size={14} /></a>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            {formData.document_type === 'Tax Invoice' && (
+                                <div style={{ marginTop: '24px', padding: '16px', background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: '12px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                                        <AlertCircle size={18} color="#d97706" />
+                                        <span style={{ fontWeight: 700, fontSize: '0.9rem', color: '#92400e' }}>Invoice Compliance Check</span>
+                                    </div>
+                                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#b45309' }}>
+                                        {signedProofs.length > 0 
+                                            ? `Found ${signedProofs.length} signed proof(s) in Folder 6. Ensure they are attached when emailing the customer.`
+                                            : "Warning: No signed Proof of Delivery found in Folder 6. It is highly recommended to upload a signed copy before sending the invoice."}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
                         {/* Auth Status Bar */}
                         <div style={{ 
                             display: 'flex', 
@@ -3195,6 +3296,85 @@ export default function WorkflowEditor() {
                     </div>
                 </div>
             )}
+
+            {/* OCR Modal */}
+            {showOCRModal && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 30000, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                    <div className="glass-panel" style={{ width: '100%', maxWidth: '600px', padding: '40px', position: 'relative', background: '#fff' }}>
+                        <button onClick={() => setShowOCRModal(false)} style={{ position: 'absolute', right: '24px', top: '24px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+                        
+                        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                            <div style={{ width: '64px', height: '64px', background: '#f5f3ff', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#8b5cf6' }}>
+                                <Sparkles size={32} />
+                            </div>
+                            <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Image to Line Items</h2>
+                            <p style={{ color: '#64748b', marginTop: '8px' }}>Upload an image of an enquiry or quote to extract line items automatically.</p>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div style={{ border: '2px dashed #e2e8f0', borderRadius: '16px', padding: '40px', textAlign: 'center', background: '#f8fafc' }}>
+                                <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    onChange={async (e) => {
+                                        const file = e.target.files[0];
+                                        if (!file) return;
+                                        setIsOCRLoading(true);
+                                        try {
+                                            const text = await performOCR(file);
+                                            if (text) {
+                                                const items = await extractLineItemsFromImage(text);
+                                                if (items && items.length > 0) {
+                                                    items.forEach(item => {
+                                                        const newItem = {
+                                                            id: Date.now() + Math.random(),
+                                                            description: item.name,
+                                                            details: item.specification,
+                                                            quantity: item.quantity || 1,
+                                                            uom: item.uom || 'PC(S)',
+                                                            unit_price: item.unit_price || 0,
+                                                            amount: (item.quantity || 1) * (item.unit_price || 0),
+                                                            tax_enabled: true,
+                                                            tax_rate: 9
+                                                        };
+                                                        setLineItems(prev => [...prev, newItem]);
+                                                    });
+                                                    setShowOCRModal(false);
+                                                } else {
+                                                    alert("No items found in the image. Please try a clearer photo.");
+                                                }
+                                            }
+                                        } catch (err) {
+                                            console.error(err);
+                                            alert("Failed to process image.");
+                                        } finally {
+                                            setIsOCRLoading(false);
+                                        }
+                                    }} 
+                                    style={{ display: 'none' }} 
+                                    id="ocr-upload-editor"
+                                />
+                                <label htmlFor="ocr-upload-editor" style={{ cursor: isOCRLoading ? 'not-allowed' : 'pointer' }}>
+                                    {isOCRLoading ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                                            <Loader2 size={40} className="animate-spin" color="#8b5cf6" />
+                                            <span style={{ fontWeight: 600, color: '#8b5cf6' }}>AI is extracting items...</span>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                                            <Upload size={40} color="#94a3b8" />
+                                            <span style={{ fontWeight: 700, color: '#1e293b' }}>Click to Upload Image</span>
+                                            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Supports JPEG, PNG</span>
+                                        </div>
+                                    )}
+                                </label>
+                            </div>
+                            <button onClick={() => setShowOCRModal(false)} className="btn btn-outline" style={{ width: '100%', padding: '12px', borderRadius: '12px' }}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
 
             <style dangerouslySetInnerHTML={{
                 __html: `

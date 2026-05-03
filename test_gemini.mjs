@@ -1,8 +1,8 @@
 import fetch from 'node-fetch';
 
-const API_KEY = 'AIzaSyBfT3-KSeOlJhLZAC7FTkLFaK3WlQz-ANs';
-const MODELS = ['gemini-1.5-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-pro', 'gemini-pro'];
-const VERSIONS = ['v1', 'v1beta'];
+const API_KEY = 'AIzaSyA_HbU2knq-UMpUf7PY7jATfmFPdMwZU18';
+const MODELS = ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-1.5-pro', 'gemini-1.5-flash'];
+const VERSIONS = ['v1beta', 'v1'];
 
 async function test() {
     for (const v of VERSIONS) {

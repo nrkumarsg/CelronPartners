@@ -158,9 +158,6 @@ body {
   width: 44px;
   height: 44px;
   object-fit: contain;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 4px;
   flex-shrink: 0;
 }
 
@@ -168,11 +165,8 @@ body {
   width: 100%;
   max-width: 220px;
   height: auto;
-  max-height: 60px;
+  max-height: 80px;
   object-fit: contain;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 6px 12px;
   flex-shrink: 0;
 }
 
@@ -563,6 +557,30 @@ tr:hover {
   min-height: 200px;
   font-family: inherit !important;
   font-size: 0.95rem !important;
+}
+
+
+/* Custom Scrollbar Utility */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #e2e8f0 transparent;
 }
 
 /* Micro animations */

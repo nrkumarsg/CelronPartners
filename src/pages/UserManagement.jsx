@@ -207,7 +207,7 @@ const UserManagement = () => {
                         <Search size={18} style={{ color: 'var(--text-secondary)' }} />
                         <input
                             type="text"
-                            placeholder={viewMode === 'users' ? "Search users..." : "Search companies..."}
+                            placeholder={viewMode === 'users' ? "Search by email..." : "Search companies..."}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -246,7 +246,27 @@ const UserManagement = () => {
                                     </tr>
                                 ) : filteredUsers.length === 0 ? (
                                     <tr>
-                                        <td colSpan="5" style={{ textAlign: 'center', padding: '24px' }}>No users found.</td>
+                                        <td colSpan="6" style={{ textAlign: 'center', padding: '48px 24px' }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                                                <div style={{ color: 'var(--text-secondary)' }}>No users found in the database.</div>
+                                                {currentUserProfile?.role === 'superadmin' && (
+                                                    <button 
+                                                        className="btn btn-primary"
+                                                        onClick={async () => {
+                                                            const { createProfileManually } = await import('../lib/userService');
+                                                            const { error } = await createProfileManually(currentUserProfile);
+                                                            if (error) alert("Sync failed: " + error.message);
+                                                            else {
+                                                                alert("Profile synchronized successfully!");
+                                                                fetchUsers();
+                                                            }
+                                                        }}
+                                                    >
+                                                        <ShieldCheck size={18} /> Register My Profile
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </td>
                                     </tr>
                                 ) : (
                                     filteredUsers.map(user => (

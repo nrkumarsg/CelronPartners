@@ -171,14 +171,21 @@ export default function Sidebar() {
                     <span className="nav-text">Live Locator</span>
                 </NavLink>
 
-                <NavLink to="/forms" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Forms Directory">
+                <NavLink to="/forms" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Forms Directory (Stationery)">
                     <FileCheck size={20} color="#10b981" />
-                    <span className="nav-text">Forms Directory</span>
+                    <span className="nav-text">Stationery Directory</span>
                 </NavLink>
 
+                <div className="nav-separator" />
+                <span className="nav-group-header">Operations & Certificates</span>
                 <NavLink to="/forms/calibration-lab" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Calibration Lab">
                     <CheckSquare size={20} color="#059669" />
                     <span className="nav-text">Calibration Lab</span>
+                </NavLink>
+
+                <NavLink to="/certificates" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Certificates Tracking">
+                    <ShieldCheck size={20} color="#3b82f6" />
+                    <span className="nav-text">Certificates Tracking</span>
                 </NavLink>
 
                 <NavLink to="/manuals" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Manuals & Ref. Books">
@@ -203,6 +210,14 @@ export default function Sidebar() {
                 <NavLink to="/commercial-wall" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Commercial Wall">
                     <MessageSquare size={20} color="#6366f1" />
                     <span className="nav-text">Commercial Wall</span>
+                </NavLink>
+
+                <div className="nav-separator" />
+                <span className="nav-group-header">Storage Hub & Search</span>
+                
+                <NavLink to="/storage?tab=explorer" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Advanced Storage Hub">
+                    <HardDrive size={20} color="#6366f1" />
+                    <span className="nav-text" style={{ fontWeight: 700, color: '#6366f1' }}>Advanced Storage Hub</span>
                 </NavLink>
 
                 <NavLink to="/workflows/universal-finder" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Universal Finder">
@@ -311,11 +326,6 @@ export default function Sidebar() {
                     <span className="nav-text">Packing Lists</span>
                 </NavLink>
 
-                <NavLink to="/certificates" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Certificates">
-                    <FileCheck size={20} color="#3b82f6" />
-                    <span className="nav-text">Certificates</span>
-                </NavLink>
-
                 {/* 4. Finance */}
                 <div style={{ padding: '0 8px 0 16px', fontSize: '0.65rem', fontWeight: 700, color: '#f97316', opacity: 0.85, marginTop: '8px', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }} title="Phase 4: Billing & Finance">
                     {isPinned ? "4. Billing" : "4."}
@@ -348,12 +358,12 @@ export default function Sidebar() {
 
                 <div className="nav-separator" />
                 <span className="nav-group-header">File Management</span>
-                <NavLink to="/storage" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Storage Directory">
+                <NavLink to="/storage?tab=explorer" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Storage Hub">
                     <Folder size={20} color="#3b82f6" />
-                    <span className="nav-text">Storage Directory</span>
+                    <span className="nav-text">Storage Hub</span>
                 </NavLink>
 
-                <NavLink to="/vault" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Corporate Vault">
+                <NavLink to="/storage?tab=explorer&folder=vault" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Corporate Vault">
                     <HardDrive size={20} color="#22c55e" />
                     <span className="nav-text">Corporate Vault</span>
                 </NavLink>

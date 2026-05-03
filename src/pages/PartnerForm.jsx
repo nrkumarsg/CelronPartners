@@ -403,7 +403,18 @@ export default function PartnerForm() {
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '0.9rem' }}>
                                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>UEN:</strong> {aiPreview.uen || '-'}</div>
                                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>Email:</strong> {aiPreview.email1 || '-'}</div>
+                                            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>Phone:</strong> {aiPreview.phone1 || '-'}</div>
+                                            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>Website:</strong> {aiPreview.website || '-'}</div>
+                                            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>City:</strong> {aiPreview.city || '-'}</div>
+                                            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>Pincode:</strong> {aiPreview.pincode || '-'}</div>
                                             <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>Address:</strong> {aiPreview.address || '-'}</div>
+                                            <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>Brands:</strong> {aiPreview.brands || '-'}</div>
+                                            {aiPreview.activity_summary && (
+                                                <div style={{ gridColumn: 'span 2', background: 'linear-gradient(to right, #f5f3ff, #ede9fe)', padding: '14px', borderRadius: '12px', border: '1px dashed #c7d2fe' }}>
+                                                    <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', marginBottom: '4px' }}>Business Activity Insight</div>
+                                                    <span style={{ fontSize: '0.85rem', color: '#4338ca', fontStyle: 'italic', lineHeight: 1.6 }}>"{aiPreview.activity_summary}"</span>
+                                                </div>
+                                            )}
                                             <div style={{ gridColumn: 'span 2', display: 'flex', gap: '12px', marginTop: '12px' }}>
                                                 <button type="button" onClick={applyAiResults} className="btn btn-primary" style={{ flex: 1, background: '#10b981', borderColor: '#10b981' }}><Check size={18} /> Apply Intelligence</button>
                                                 <button type="button" onClick={() => setAiPreview(null)} className="btn btn-secondary"><RotateCcw size={18} /> Dismiss</button>

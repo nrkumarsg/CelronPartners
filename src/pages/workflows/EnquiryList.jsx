@@ -14,6 +14,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { validateToken, connectGoogleAPI } from '../../lib/googleAuthService';
 import CustomerEnquiryForm from '../../components/CustomerEnquiryForm';
 import EditJobModal from '../../components/workflows/EditJobModal';
+import { Folder } from 'lucide-react';
 
 export default function EnquiryList() {
     const { profile } = useAuth();
@@ -137,15 +138,19 @@ export default function EnquiryList() {
 
             // Create GDrive folder structure for the new job (Non-blocking)
             const accessToken = localStorage.getItem('google_access_token');
-            const isValid = await validateToken(accessToken);
-            if (accessToken && isValid) {
+            if (accessToken) {
                 try {
                     const { provisionFullProjectStructure } = await import('../../lib/driveService');
-                    await provisionFullProjectStructure(accessToken, job_no);
+                    const { getDocumentSettings } = await import('../../lib/store');
+                    const settings = await getDocumentSettings(profile.company_id);
+                    const celronRootId = settings?.gdrive_celron_root_id;
+                    const year = new Date().getFullYear().toString();
+                    
+                    if (celronRootId) {
+                        await provisionFullProjectStructure(accessToken, celronRootId, year, job_no);
+                    }
                 } catch (driveErr) {
                     console.error('GDrive folder creation failed:', driveErr);
-                    // Non-blocking warning: Job still gets created in DB
-                    alert("Job record created, but Google Drive folders couldn't be provisioned. Please check your Drive connection in Settings.");
                 }
             }
 
@@ -172,6 +177,60 @@ export default function EnquiryList() {
         return new Date(dateStr).toLocaleDateString('en-GB', {
             day: '2-digit', month: 'short', year: 'numeric'
         });
+    };
+
+    const openDriveFolder = async (item) => {
+        const folderId = activeTab === 'enquiries' ? item.gdrive_folder_id : item.enquiries?.gdrive_folder_id;
+        
+        if (folderId) {
+            window.open(`https://drive.google.com/drive/folders/${folderId}`, '_blank');
+            return;
+        }
+
+        // Auto-provision logic for missing folder
+        if (!window.confirm('No Drive folder linked. Create one now?')) return;
+
+        try {
+            setLoading(true);
+            const accessToken = localStorage.getItem('google_access_token');
+            if (!accessToken) throw new Error('Google account not connected');
+
+            const { getDocumentSettings } = await import('../../lib/store');
+            const { getOrCreateFolder } = await import('../../lib/driveService');
+            const { updateEnquiry } = await import('../../lib/workflowService');
+
+            const settings = await getDocumentSettings(profile.company_id);
+            let celronRootId = settings?.gdrive_celron_root_id || settings?.google_drive_folder_id;
+            
+            if (!celronRootId) throw new Error('Google Drive Root Folder ID not configured in Settings. Please go to Settings > Company and set the "Google Drive Root Folder ID".');
+
+            // Extract ID if URL was provided
+            if (celronRootId.includes('drive.google.com')) {
+                const match = celronRootId.match(/\/folders\/([a-zA-Z0-9_-]+)/) || celronRootId.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                if (match) celronRootId = match[1];
+            }
+
+            const currentYear = new Date().getFullYear().toString();
+            const timeBasedId = await getOrCreateFolder(accessToken, '01. TIME_BASED', celronRootId);
+            const yearId = await getOrCreateFolder(accessToken, `YEAR${currentYear}`, timeBasedId);
+            const enquiriesRootId = await getOrCreateFolder(accessToken, 'ENQUIRIES', yearId);
+            
+            const docNo = activeTab === 'enquiries' ? item.enquiry_no : item.enquiries?.enquiry_no;
+            const newFolderId = await getOrCreateFolder(accessToken, docNo, enquiriesRootId);
+
+            // Link to DB
+            const enquiryId = activeTab === 'enquiries' ? item.id : item.enquiry_id;
+            await updateEnquiry(enquiryId, { gdrive_folder_id: newFolderId });
+
+            alert('Folder provisioned and linked successfully!');
+            fetchData();
+            window.open(`https://drive.google.com/drive/folders/${newFolderId}`, '_blank');
+        } catch (error) {
+            console.error('Auto-provisioning failed:', error);
+            alert('Failed to provision folder: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const getStatusStyle = (status) => {
@@ -424,6 +483,7 @@ export default function EnquiryList() {
                                 {activeTab === 'jobs' && <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem' }}>Payment</th>}
                                 <th style={{ padding: '12px 16px', fontSize: '0.75rem' }}>Date Sent</th>
                                 <th style={{ padding: '12px 16px', fontSize: '0.75rem' }}>Status</th>
+                                <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.75rem' }}>Folder</th>
                                 <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.75rem' }}>Actions</th>
                             </tr>
                         </thead>
@@ -467,6 +527,7 @@ export default function EnquiryList() {
                                                      activeTab === 'rfqs' ? item.document_no :
                                                      item.job_no}
                                                 </div>
+
                                                 {activeTab === 'jobs' && (
                                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
                                                         From: {item.enquiries?.enquiry_no}
@@ -556,6 +617,28 @@ export default function EnquiryList() {
                                                     {st.icon}
                                                     {item.status}
                                                 </span>
+                                            </td>
+                                            <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        openDriveFolder(item);
+                                                    }}
+                                                    style={{
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        color: ((activeTab === 'enquiries' && item.gdrive_folder_id) || (activeTab === 'jobs' && item.enquiries?.gdrive_folder_id)) ? '#f59e0b' : '#6366f1',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        width: '100%',
+                                                        opacity: ((activeTab === 'enquiries' && item.gdrive_folder_id) || (activeTab === 'jobs' && item.enquiries?.gdrive_folder_id)) ? 1 : 0.4
+                                                    }}
+                                                    title={((activeTab === 'enquiries' && item.gdrive_folder_id) || (activeTab === 'jobs' && item.enquiries?.gdrive_folder_id)) ? "Open Google Drive Folder" : "Click to Provision Folder"}
+                                                >
+                                                    <Folder size={20} fill={((activeTab === 'enquiries' && item.gdrive_folder_id) || (activeTab === 'jobs' && item.enquiries?.gdrive_folder_id)) ? "#f59e0b" : "currentColor"} fillOpacity={0.2} />
+                                                </button>
                                             </td>
                                             <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>

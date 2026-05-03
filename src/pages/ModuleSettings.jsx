@@ -157,7 +157,15 @@ export default function ModuleSettings() {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setSettings(prev => ({ ...prev, [name]: value }));
+        let finalValue = value;
+
+        // Auto-sanitize Google Drive Links to IDs for easier setup
+        if (name === 'google_drive_folder_id' && value.includes('drive.google.com')) {
+            const match = value.match(/\/folders\/([a-zA-Z0-9_-]+)/) || value.match(/\/d\/([a-zA-Z0-9_-]+)/);
+            if (match) finalValue = match[1];
+        }
+
+        setSettings(prev => ({ ...prev, [name]: finalValue }));
     };
 
     const handleFileUpload = async (e, fieldName) => {

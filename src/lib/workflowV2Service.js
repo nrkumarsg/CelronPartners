@@ -3,6 +3,21 @@ import { supabase } from './supabase';
 const padZero = (num, length) => String(num).padStart(length, '0');
 
 /**
+ * Fetch revision history for a document.
+ * Filters by original_document_id or document_no pattern.
+ */
+export const getDocumentHistory = async (doc) => {
+    const originalId = doc.original_document_id || doc.id;
+    const { data, error } = await supabase
+        .from('workflow_documents')
+        .select('*')
+        .or(`id.eq.${originalId},original_document_id.eq.${originalId}`)
+        .order('revision_no', { ascending: false });
+
+    return { data, error };
+};
+
+/**
  * Generate Next Document Number
  * Pattern: [PREFIX]-YYYYMM-XXXX
  */
@@ -106,7 +121,7 @@ export const generateDocNumber = async (companyId, type, isRevision = false, ori
 export const getWorkflowDocuments = async (companyId, type = null) => {
     let query = supabase
         .from('workflow_documents')
-        .select(`*, partners(name), vessels(vessel_name), work_locations(location_name)`)
+        .select(`*`)
         .eq('company_id', companyId)
         .order('created_at', { ascending: false });
 
@@ -119,6 +134,19 @@ export const getWorkflowDocuments = async (companyId, type = null) => {
     }
 
     const { data, error } = await query;
+    if (error) return { data: null, error };
+
+    // Fetch related names manually if needed to avoid relationship join errors
+    if (data && data.length > 0) {
+        // Fetch partners
+        const partnerIds = [...new Set(data.map(d => d.partner_id).filter(Boolean))];
+        if (partnerIds.length > 0) {
+            const { data: partners } = await supabase.from('partners').select('id, name').in('id', partnerIds);
+            const partnerMap = Object.fromEntries(partners?.map(p => [p.id, p]) || []);
+            data.forEach(d => { d.partners = partnerMap[d.partner_id]; });
+        }
+    }
+    
     return { data, error };
 };
 
@@ -233,7 +261,8 @@ export const saveWorkflowDocument = async (docData, lineItems) => {
         'customer_po_no', 'customer_po_date', 'customer_po_by_id', 'customer_po_attachment_url',
         'is_job', 'assigned_job_no',
         'original_document_id', 'revision_no',
-        'attachment_urls', 'delivery_verification', 'gdrive_folder_id'
+        'attachment_urls', 'delivery_verification', 'gdrive_folder_id', 'drive_folder_id',
+        'signature_url', 'signed_by', 'is_signed'
     ];
 
     const sanitizedHeader = {};
@@ -762,6 +791,7 @@ export const getGDriveFolderIdForStage = (stage) => {
         case 'Tax Invoice': return '4. Finance & Invoices';
         case 'Statement of Account': return '4. Finance & Invoices';
         case 'Payment Received': return '5. Expenses & Payments';
+        case 'Signed Proof': return '6. Completed Proof of Delivery / Signed Reports';
         default: return '7. Correspondence & Admin';
     }
 };

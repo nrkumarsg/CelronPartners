@@ -133,20 +133,19 @@ export default function Header() {
                             <div style={{
                                 width: '32px',
                                 height: '32px',
-                                background: activeCompany.logo_url ? '#fff' : 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                                background: 'transparent',
                                 borderRadius: '8px',
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'center',
                                 color: '#fff',
-                                overflow: 'hidden',
-                                border: activeCompany.logo_url ? '1px solid #e2e8f0' : 'none'
+                                overflow: 'hidden'
                             }}>
-                                {activeCompany.logo_url ? (
-                                    <img src={activeCompany.logo_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                ) : (
-                                    <Building2 size={20} />
-                                )}
+                                <img 
+                                    src={activeCompany.logo_url || profile?.company_logo_url || "/logo.png"} 
+                                    alt="" 
+                                    style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                                />
                             </div>
                             <span style={{ maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {activeCompany.name}

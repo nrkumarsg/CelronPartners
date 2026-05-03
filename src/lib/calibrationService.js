@@ -157,6 +157,8 @@ export const getInstrumentHistory = async (instrumentId) => {
                 calibration_date,
                 due_date,
                 job_no,
+                workflow_doc_id,
+                certificate_url,
                 vessel:vessels(vessel_name)
             )
         `)

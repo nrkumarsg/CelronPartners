@@ -2,14 +2,26 @@ import { supabase } from './supabase';
 
 export const getProfile = async (userId) => {
     try {
-        const { data, error } = await supabase
+        const { data: profileData, error: profileError } = await supabase
             .from('profiles')
-            .select('*, company:companies(*)')
+            .select('*')
             .eq('id', userId)
             .single();
 
-        if (error) throw error;
-        return { data, error: null };
+        if (profileError) throw profileError;
+
+        // Fetch company separately if profile has company_id
+        let companyData = null;
+        if (profileData?.company_id) {
+            const { data: cData } = await supabase
+                .from('companies')
+                .select('*')
+                .eq('id', profileData.company_id)
+                .single();
+            companyData = cData;
+        }
+
+        return { data: { ...profileData, company: companyData }, error: null };
     } catch (error) {
         console.error('Error fetching profile:', error);
         return { data: null, error };

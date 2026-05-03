@@ -5,7 +5,7 @@ import {
     MoreHorizontal, ChevronDown, Package, Database, Edit, Ship, 
     Link, ArrowRight, Cloud, ImageIcon, Pencil
 } from 'lucide-react';
-import { Modal, QuickPartnerAdd } from '../components/workflow/QuickAddForms';
+import { Modal, QuickPartnerContactDualAdd } from '../components/workflow/QuickAddForms';
 import { supabase } from '../lib/supabase';
 import ScannerModal from '../components/ScannerModal';
 import ReactQuill from 'react-quill-new';
@@ -1188,9 +1188,10 @@ const CatalogForm = () => {
                     title={`Edit ${editModal.type === 'supplier_id' ? 'Supplier' : 'Master'}`}
                 >
                     {editModal.type === 'supplier_id' && (
-                        <QuickPartnerAdd 
+                        <QuickPartnerContactDualAdd 
                             company_id={profile?.company_id}
-                            initialData={editModal.initialData}
+                            initialPartner={editModal.initialData}
+                            partners={partners}
                             onSuccess={handleEditMasterSuccess}
                             onCancel={() => setEditModal({ isOpen: false, type: null, initialData: null })}
                         />

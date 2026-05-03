@@ -33,7 +33,19 @@ export const initializeVault = async (accessToken, companyId) => {
 
     // 1. Ensure "CELRON" consolidated folder exists under Settings Root
     let celronRootId = settings?.gdrive_celron_root_id;
-    if (!celronRootId || !(await checkFileExists(accessToken, celronRootId))) {
+    
+    // Fetch info about topRootId to check its name
+    const rootInfoRes = await fetch(`https://www.googleapis.com/drive/v3/files/${topRootId}?fields=name`, {
+        headers: { 'Authorization': 'Bearer ' + accessToken }
+    });
+    const rootInfo = await rootInfoRes.json();
+    const isAlreadyCelron = rootInfo?.name?.toUpperCase() === 'CELRON';
+
+    if (isAlreadyCelron) {
+        // If the configured root IS already CELRON, use it as the consolidated root
+        celronRootId = topRootId;
+    } else if (!celronRootId || !(await checkFileExists(accessToken, celronRootId))) {
+        // Otherwise, create/find a CELRON folder inside the provided root
         celronRootId = await getOrCreateFolderAt(accessToken, 'CELRON', topRootId);
     }
 

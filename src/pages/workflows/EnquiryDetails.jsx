@@ -6,7 +6,7 @@ import { convertEnquiryToV2Document } from '../../lib/workflowV2Service';
 
 import { getPartners, getDocumentSettings, saveVessel, saveWorkLocation } from '../../lib/store';
 import { getCatalogItems, createCatalogItem, updateCatalogItem } from '../../lib/catalogService';
-import { ArrowLeft, ArrowRight, Send, Ship, Mail, Phone, ExternalLink, Database, FolderPlus, ArrowRightLeft, FileText, CheckCircle2, Clock, DollarSign, BadgeDollarSign, ShieldCheck, Plus, Search, Trash, Save, Edit, AlertTriangle, Users, Eye, MailCheck, Download, Calendar, ChevronDown, PlusCircle, MapPin, MessageSquare } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Send, Ship, Mail, Phone, ExternalLink, Database, FolderPlus, ArrowRightLeft, FileText, CheckCircle2, Clock, DollarSign, BadgeDollarSign, ShieldCheck, Plus, Search, Trash, Save, Edit, AlertTriangle, Users, Eye, MailCheck, Download, Calendar, ChevronDown, PlusCircle, MapPin, MessageSquare, Sparkles } from 'lucide-react';
 import UploadOverlay from '../../components/common/UploadOverlay';
 import SafeDriveLink from '../../components/common/SafeDriveLink';
 import EmailPreviewModal from '../../components/workflows/EmailPreviewModal';
@@ -20,6 +20,8 @@ import CommunicationWall from '../../components/common/CommunicationWall';
 import { ITEM_UNITS } from '../../utils/units';
 import { WhatsAppShareModal } from '../../components/workflow/WhatsAppShareModal';
 import { Modal, QuickPartnerContactDualAdd } from '../../components/workflow/QuickAddForms';
+import { performOCR } from '../../lib/googleAuthService';
+import { extractLineItemsFromImage } from '../../lib/geminiService';
 
 export default function EnquiryDetails() {
     const { id } = useParams();
@@ -84,6 +86,8 @@ export default function EnquiryDetails() {
     const [editingCatalogItem, setEditingCatalogItem] = useState(null);
     const [newItemForm, setNewItemForm] = useState({ name: '', specification: '' });
     const [whatsappShareModal, setWhatsappShareModal] = useState({ isOpen: false });
+    const [isOCRLoading, setIsOCRLoading] = useState(false);
+    const [showOCRModal, setShowOCRModal] = useState(false);
 
     useEffect(() => {
         if (profile?.company_id) {
@@ -526,6 +530,12 @@ export default function EnquiryDetails() {
                                 >
                                     Add a note
                                 </button>
+                                <button 
+                                    onClick={() => setShowOCRModal(true)}
+                                    style={{ background: 'none', border: 'none', color: '#8b5cf6', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                    <Sparkles size={16} /> Image to Items
+                                </button>
                             </div>
                             
                             <div style={{ position: 'relative' }}>
@@ -641,7 +651,7 @@ export default function EnquiryDetails() {
                         style={{ width: '100%', padding: '8px 8px 8px 32px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                     />
                 </div>
-                <div style={{ maxHeight: '500px', overflowY: 'auto', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div className="custom-scrollbar" style={{ maxHeight: '350px', overflowY: 'auto', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).map(supplier => {
                         const isSelected = selectedSuppliers.some(s => s.id === supplier.id);
                         const contacts = supplierContacts[supplier.id] || [];
@@ -651,7 +661,7 @@ export default function EnquiryDetails() {
                             <div key={supplier.id} style={{ 
                                 border: isSelected ? '1px solid #6366f1' : '1px solid #f1f5f9', 
                                 borderRadius: '16px', 
-                                padding: '16px', 
+                                padding: isSelected ? '16px' : '10px 16px', 
                                 background: isSelected ? '#f8faff' : '#fff', 
                                 transition: 'all 0.2s',
                                 boxShadow: isSelected ? '0 4px 6px -1px rgba(99, 102, 241, 0.1)' : 'none'
@@ -1123,7 +1133,7 @@ export default function EnquiryDetails() {
             >
                 <QuickPartnerContactDualAdd 
                     company_id={profile.company_id}
-                    initialPartner={editingSupplier}
+                    initialPartner={editingSupplier || { types: ['Supplier'] }}
                     partners={suppliers}
                     onSuccess={async ({ partner, contact }) => {
                         await fetchSuppliers();
@@ -1132,6 +1142,71 @@ export default function EnquiryDetails() {
                     onCancel={() => setSupplierModalOpen(false)}
                 />
             </Modal>
+
+            {/* OCR Modal */}
+            {showOCRModal && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+                    <div style={{ background: '#fff', borderRadius: '24px', width: '100%', maxWidth: '600px', padding: '40px', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+                        <button onClick={() => setShowOCRModal(false)} style={{ position: 'absolute', right: '24px', top: '24px', border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={24} /></button>
+                        
+                        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+                            <div style={{ width: '64px', height: '64px', background: '#f5f3ff', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', color: '#8b5cf6' }}>
+                                <Sparkles size={32} />
+                            </div>
+                            <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Image to Line Items</h2>
+                            <p style={{ color: '#64748b', marginTop: '8px' }}>Upload an image of an enquiry or quote to extract line items automatically.</p>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div style={{ border: '2px dashed #e2e8f0', borderRadius: '16px', padding: '40px', textAlign: 'center', background: '#f8fafc' }}>
+                                <input 
+                                    type="file" 
+                                    accept="image/*" 
+                                    onChange={async (e) => {
+                                        const file = e.target.files[0];
+                                        if (!file) return;
+                                        setIsOCRLoading(true);
+                                        try {
+                                            const text = await performOCR(file);
+                                            if (text) {
+                                                const items = await extractLineItemsFromImage(text);
+                                                if (items && items.length > 0) {
+                                                    items.forEach(item => handleAddItem(item));
+                                                    setShowOCRModal(false);
+                                                } else {
+                                                    alert("No items found in the image. Please try a clearer photo.");
+                                                }
+                                            }
+                                        } catch (err) {
+                                            console.error(err);
+                                            alert("Failed to process image.");
+                                        } finally {
+                                            setIsOCRLoading(false);
+                                        }
+                                    }} 
+                                    style={{ display: 'none' }} 
+                                    id="ocr-upload"
+                                />
+                                <label htmlFor="ocr-upload" style={{ cursor: isOCRLoading ? 'not-allowed' : 'pointer' }}>
+                                    {isOCRLoading ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                                            <Loader2 size={40} className="animate-spin" color="#8b5cf6" />
+                                            <span style={{ fontWeight: 600, color: '#8b5cf6' }}>AI is extracting items...</span>
+                                        </div>
+                                    ) : (
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                                            <Upload size={40} color="#94a3b8" />
+                                            <span style={{ fontWeight: 700, color: '#1e293b' }}>Click to Upload Image</span>
+                                            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>Supports JPEG, PNG</span>
+                                        </div>
+                                    )}
+                                </label>
+                            </div>
+                            <button onClick={() => setShowOCRModal(false)} className="btn btn-outline" style={{ width: '100%', padding: '12px', borderRadius: '12px' }}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </>
     );
 }

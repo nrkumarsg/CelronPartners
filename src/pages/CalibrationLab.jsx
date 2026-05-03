@@ -4,9 +4,10 @@ import {
     FileCheck, Plus, Search, Archive, Sparkles, ExternalLink,
     Download, Trash2, Save, FileText, Ship, User, Hash,
     Calendar, AlertCircle, CheckCircle2, Loader2, Brain, RefreshCcw, Globe,
-    LayoutGrid, List, Clock, Youtube, Book, MessageSquare, Pencil, Trash, QrCode
+    LayoutGrid, List, Clock, Youtube, Book, MessageSquare, Pencil, Trash, QrCode, X
 } from 'lucide-react';
 import UploadOverlay from '../components/common/UploadOverlay';
+import GDriveConnectionModal from '../components/common/GDriveConnectionModal';
 import {
     getCalibrationRecords, createCalibrationRecord, updateCalibrationRecord, deleteCalibrationRecord, archiveOldRecords,
     getInstruments, createInstrument, getPartners, updateInstrument, deleteInstrument,
@@ -24,8 +25,10 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { QRCodeSVG } from 'qrcode.react';
 import { getDocumentSettings } from '../lib/store';
+import { generateDocNumber, saveWorkflowDocument } from '../lib/workflowV2Service';
 
 export default function CalibrationLab() {
+    const navigate = useNavigate();
     const [records, setRecords] = useState([]);
     const [instruments, setInstruments] = useState([]);
     const [jobs, setJobs] = useState([]);
@@ -61,6 +64,7 @@ export default function CalibrationLab() {
     const [selectedInstrumentTitle, setSelectedInstrumentTitle] = useState('');
     const [isQRModalOpen, setIsQRModalOpen] = useState(false);
     const [qrValue, setQrValue] = useState('');
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -220,22 +224,27 @@ export default function CalibrationLab() {
         ins.serial_no?.toLowerCase().includes(instrumentSearchTerm.toLowerCase())
     );
 
-    const navigate = useNavigate();
+
 
     const fetchData = async () => {
         setLoading(true);
-        const [recRes, insRes, jobRes, parRes] = await Promise.all([
-            getCalibrationRecords(),
-            getInstruments(),
-            getJobs(sessionStorage.getItem('company_id')), // Need companyId
-            getPartners(),
-            fetchVessels()
-        ]);
-        if (recRes.data) setRecords(recRes.data);
-        if (insRes.data) setInstruments(insRes.data);
-        if (jobRes.data) setJobs(jobRes.data);
-        if (parRes.data) setPartners(parRes.data);
-        setLoading(false);
+        try {
+            const [recRes, insRes, jobRes, parRes] = await Promise.all([
+                getCalibrationRecords(),
+                getInstruments(),
+                getJobs(sessionStorage.getItem('company_id')), // Need companyId
+                getPartners(),
+                fetchVessels()
+            ]);
+            if (recRes?.data) setRecords(recRes.data);
+            if (insRes?.data) setInstruments(insRes.data);
+            if (jobRes?.data) setJobs(jobRes.data);
+            if (parRes?.data) setPartners(parRes.data);
+        } catch (err) {
+            console.error("Error fetching calibration data:", err);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleInstrumentSave = async (e) => {
@@ -488,7 +497,46 @@ export default function CalibrationLab() {
                 }
             }
 
-            // 3. Save Relational Data to Supabase
+            // 3. Generate Workflow Certificate Document (v3 Integration)
+            let workflowDocId = null;
+            try {
+                const companyId = sessionStorage.getItem('company_id');
+                const certDocNo = await generateDocNumber(companyId, 'Certificate');
+                
+                const workflowDocData = {
+                    company_id: companyId,
+                    document_type: 'Certificate',
+                    document_no: certDocNo,
+                    issue_date: formData.calibration_date,
+                    expiry_date: formData.due_date,
+                    partner_id: formData.customer_id,
+                    vessel_id: formData.vessel_id,
+                    subject: `Calibration Certificate: ${formData.selectedInstruments.map(i => i.name).join(', ')}`,
+                    status: 'Confirmed',
+                    notes: `System generated from Calibration Lab. Job: ${jobNo}. Remark: ${formData.remark}`,
+                    attachment_urls: recordPayload.certificate_url ? [recordPayload.certificate_url] : []
+                };
+
+                const workflowItems = formData.selectedInstruments.map(i => ({
+                    description: i.name,
+                    details: `${i.maker} ${i.model} (S/N: ${i.serial_no})`,
+                    quantity: 1,
+                    unit_price: 0,
+                    amount: 0,
+                    notes: `Std: ${i.standard_reading}, Act: ${i.actual_reading}, Result: ${i.result}`
+                }));
+
+                const { data: savedWfDoc } = await saveWorkflowDocument(workflowDocData, workflowItems);
+                if (savedWfDoc) {
+                    workflowDocId = savedWfDoc.id;
+                    recordPayload.workflow_doc_id = workflowDocId;
+                }
+            } catch (wfErr) {
+                console.error("Failed to generate workflow document:", wfErr);
+                // Continue saving calibration even if workflow doc fails
+            }
+
+            // 4. Save Relational Data to Supabase
             let result;
             if (editingRecordId) {
                 result = await updateCalibrationRecord(editingRecordId, recordPayload, itemsPayload);
@@ -1044,6 +1092,16 @@ export default function CalibrationLab() {
                                             </td>
                                             <td style={{ padding: '16px', textAlign: 'right' }}>
                                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                    {record.workflow_doc_id && (
+                                                        <button 
+                                                            onClick={() => navigate(`/workflows/editor/certificate/${record.workflow_doc_id}`)}
+                                                            className="btn-icon" 
+                                                            title="View Workflow Certificate"
+                                                            style={{ color: '#6366f1', background: 'none', border: '1px solid #e0e7ff', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}
+                                                        >
+                                                            <FileText size={18} />
+                                                        </button>
+                                                    )}
                                                     {record.youtube_link && (
                                                         <button
                                                             onClick={() => { setActiveResource(record.youtube_link); setViewerType('youtube'); }}
@@ -1067,9 +1125,6 @@ export default function CalibrationLab() {
                                                     </button>
                                                     <button onClick={() => handleDeleteRecord(record.id)} style={{ background: 'none', border: '1px solid #fee2e2', padding: '6px', borderRadius: '6px', color: '#ef4444', cursor: 'pointer' }} title="Delete Record">
                                                         <Trash size={16} />
-                                                    </button>
-                                                    <button onClick={() => window.open(record.certificate_url, '_blank')} style={{ background: 'none', border: '1px solid #e2e8f0', padding: '6px', borderRadius: '6px', color: '#4285F4', cursor: 'pointer' }} title="View Certificate">
-                                                        <ExternalLink size={16} />
                                                     </button>
                                                 </div>
                                             </td>
@@ -1746,13 +1801,22 @@ export default function CalibrationLab() {
                                                 <div style={{ fontWeight: 600 }}>{item.actual_reading}</div>
                                             </div>
                                         </div>
-                                        <div style={{ alignSelf: 'flex-end' }}>
-                                            <button
-                                                onClick={() => window.open(`/calibration-viewer/${item.record.id}`, '_blank')}
-                                                style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '0.8rem', fontWeight: 600, color: '#444', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                                            >
-                                                <FileText size={14} /> View Certificate
-                                            </button>
+                                        <div style={{ alignSelf: 'flex-end', display: 'flex', gap: '8px' }}>
+                                            {item.record.workflow_doc_id ? (
+                                                <button
+                                                    onClick={() => navigate(`/workflows/editor/certificate/${item.record.workflow_doc_id}`)}
+                                                    style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid #e0e7ff', background: '#fff', fontSize: '0.8rem', fontWeight: 600, color: '#6366f1', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                >
+                                                    <FileText size={14} /> Workflow Cert
+                                                </button>
+                                            ) : item.record.certificate_url && (
+                                                <button
+                                                    onClick={() => window.open(item.record.certificate_url, '_blank')}
+                                                    style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '0.8rem', fontWeight: 600, color: '#4285F4', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                                >
+                                                    <Download size={14} /> View PDF
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 ))}

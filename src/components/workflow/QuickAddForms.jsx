@@ -118,7 +118,7 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
     const [formData, setFormData] = useState(initialData || {
         name: '',
         uen: '',
-        types: ['Customer'],
+        types: ['Supplier'],
         address: '',
         country: '',
         email1: '',
@@ -952,7 +952,21 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
 export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initialContact, partners, onSuccess, onCancel }) => {
     const [activeTab, setActiveTab] = useState('details'); // 'details' | 'documents'
     const [partnerData, setPartnerData] = useState(initialPartner || {
-        name: '', email1: '', phone1: '', country: '', types: ['Customer'], notes: '', uen: '', address: '', city: '', pincode: ''
+        name: '',
+        uen: '',
+        types: ['Supplier'],
+        address: '',
+        country: '',
+        email1: '',
+        phone1: '',
+        weblink: '',
+        city: '',
+        pincode: '',
+        brand: '',
+        activity_summary: '',
+        notes: '',
+        business_card_url: '',
+        business_card_back_url: ''
     });
     const [contactData, setContactData] = useState(initialContact || {
         name: '', email: '', handphone: '', type: 'Main', department: '', post: ''
@@ -1030,7 +1044,7 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
                 </button>
                 <button 
                     onClick={() => setActiveTab('documents')}
-                    disabled={!partnerData.id}
+                    disabled={!partnerData.name}
                     style={{
                         padding: '12px 16px',
                         border: 'none',
@@ -1038,14 +1052,18 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
                         borderBottom: activeTab === 'documents' ? '3px solid #6366f1' : '3px solid transparent',
                         color: activeTab === 'documents' ? '#6366f1' : '#64748b',
                         fontWeight: activeTab === 'documents' ? 700 : 500,
-                        cursor: partnerData.id ? 'pointer' : 'not-allowed',
+                        cursor: partnerData.name ? 'pointer' : 'not-allowed',
                         fontSize: '0.95rem',
-                        opacity: partnerData.id ? 1 : 0.5,
-                        transition: 'all 0.2s'
+                        opacity: partnerData.name ? 1 : 0.5,
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
                     }}
-                    title={!partnerData.id ? 'Save partner details first to enable documents' : ''}
+                    title={!partnerData.name ? 'Enter partner name first to enable documents' : ''}
                 >
                     2. Documents & Verification
+                    {partnerData.gdrive_folder_id && <Check size={14} color="#10b981" />}
                 </button>
             </div>
 
@@ -1178,7 +1196,11 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
                         partnerName={partnerData.name}
                         initialFolderId={partnerData.gdrive_folder_id}
                         initialDriveLink={partnerData.google_drive_link}
-                        onUpdate={(res) => setPartnerData(prev => ({ ...prev, gdrive_folder_id: res.id, google_drive_link: res.link }))}
+                        onUpdate={(res) => setPartnerData(prev => ({ 
+                            ...prev, 
+                            gdrive_folder_id: res.id, 
+                            google_drive_link: res.link 
+                        }))}
                     />
                 </div>
             )}
@@ -1778,9 +1800,10 @@ export const QuickExpenseAdd = ({ job_id, partners, jobs, expense, onSuccess, on
                 <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)', padding: '24px' }}>
                     <div style={{ width: '100%', maxWidth: '1000px', maxHeight: '90vh', background: 'white', borderRadius: '16px', padding: '32px', overflowY: 'auto', position: 'relative' }}>
                         <button onClick={() => setEditModal({ isOpen: false, type: null })} style={{ position: 'absolute', right: '20px', top: '20px', background: 'none', border: 'none', cursor: 'pointer' }}><X size={24} /></button>
-                        <QuickPartnerAdd 
+                        <QuickPartnerContactDualAdd 
                             company_id={company_id} 
-                            initialData={editModal.initialData} 
+                            initialPartner={editModal.initialData} 
+                            partners={partners}
                             onSuccess={handleEditSuccess} 
                             onCancel={() => setEditModal({ isOpen: false, type: null })} 
                         />

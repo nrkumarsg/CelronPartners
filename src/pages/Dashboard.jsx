@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Users, DollarSign, Activity, FileSpreadsheet, Ship, MapPin, Brain, MessageSquare, FileText, Briefcase, ShoppingCart, Truck, Receipt, Award, CheckCircle, List, ClipboardCheck, Package, Layers, RefreshCw, FileDigit, Clock } from 'lucide-react';
+import { Search, Users, DollarSign, Activity, FileSpreadsheet, Ship, MapPin, Brain, MessageSquare, FileText, Briefcase, ShoppingCart, Truck, Receipt, Award, CheckCircle, List, ClipboardCheck, Package, Layers, RefreshCw, FileDigit, Clock, HardDrive } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getPartners, getContacts } from '../lib/store';
 import { supabase } from '../lib/supabase';
@@ -82,15 +82,36 @@ export default function Dashboard() {
         <div style={{ background: '#f8fafc', minHeight: '100%', padding: '32px', color: '#334155', borderRadius: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
                 <h2 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>Dashboard</h2>
-                <div style={{ display: 'flex', alignItems: 'center', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 12px', width: '100%', maxWidth: '350px' }}>
-                    <Search size={18} color="#94a3b8" />
-                    <input
-                        type="text"
-                        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '10px 0', marginLeft: '8px', fontSize: '0.95rem', color: '#334155' }}
-                        placeholder="Global Search Partners..."
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                    />
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <button
+                        onClick={() => navigate('/storage?tab=explorer')}
+                        style={{
+                            background: '#fff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '8px',
+                            padding: '8px 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            fontWeight: 600,
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            color: '#6366f1',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                        }}
+                    >
+                        <HardDrive size={18} /> Storage Hub
+                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0 12px', width: '300px' }}>
+                        <Search size={18} color="#94a3b8" />
+                        <input
+                            type="text"
+                            style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', padding: '10px 0', marginLeft: '8px', fontSize: '0.95rem', color: '#334155' }}
+                            placeholder="Global Search Partners..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
+                    </div>
                 </div>
             </div>
 
@@ -210,6 +231,7 @@ export default function Dashboard() {
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
                     {[
+                        { label: 'Storage Hub', icon: HardDrive, path: '/storage?tab=explorer', color: '#6366f1' },
                         { label: 'All Documents', icon: Layers, path: '/workflows', color: '#64748b' },
                         { label: 'Jobs', icon: Briefcase, path: '/workflows?type=Jobs', color: '#0f172a' },
                         { label: 'Enquiry from customer', icon: FileText, path: '/workflows?type=Enquiry', color: '#3b82f6' },

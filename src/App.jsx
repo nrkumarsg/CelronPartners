@@ -5,6 +5,7 @@ import { downloadApkByIdentifier } from './lib/driveService';
 // Build cache invalidation: v1.0.1
 import Sidebar from './components/Sidebar';
 import Header from './components/Header';
+import GDriveConnectionTray from './components/common/GDriveConnectionTray';
 import Dashboard from './pages/Dashboard';
 import Partners from './pages/Partners';
 import PartnerForm from './pages/PartnerForm';
@@ -86,6 +87,7 @@ const AppLayout = ({ children }) => {
         <main className="main-content">
           {children}
         </main>
+        <GDriveConnectionTray />
       </div>
     </div>
   );

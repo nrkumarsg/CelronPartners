@@ -184,7 +184,7 @@ export default function AIChatInterface({ onSearchTrigger, searchId }) {
                         <div style={{ fontWeight: 600, fontSize: '1rem' }}>Spare Parts Assistant</div>
                         <div style={{ fontSize: '0.75rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <span style={{ width: '6px', height: '6px', background: '#10b981', borderRadius: '50%', boxShadow: '0 0 0 rgba(16, 185, 129, 0.4)', animation: 'pulse 2s infinite' }}></span>
-                            Powered by Gemini 2.5 Flash
+                            Powered by Gemini 2.5 Pro & Flash Engine
                             {searchId && <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '10px', fontSize: '0.65rem', fontWeight: 700 }}>LIVE SEARCH CONTEXT</span>}
                         </div>
                     </div>

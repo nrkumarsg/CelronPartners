@@ -1,12 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getWorkflowDocuments, deleteWorkflowDocument, duplicateWorkflowDocument, convertQuotationToJob, revertJobToQuotation, convertProformaToTaxInvoice } from '../../lib/workflowV2Service';
+import { getWorkflowDocuments, deleteWorkflowDocument, duplicateWorkflowDocument, convertQuotationToJob, revertJobToQuotation, convertProformaToTaxInvoice, getDocumentHistory } from '../../lib/workflowV2Service';
 import {
-    FileText, Plus, Search, Filter,
-    MoreVertical, Eye, Trash2, Printer, Copy,
-    ChevronLeft, ChevronRight,
-    ArrowRightLeft,
-    FileCheck, Play, Briefcase, X, Loader2, PlayCircle
+    FileCheck, Play, Briefcase, X, Loader2, PlayCircle, Folder, Upload,
+    ArrowRightLeft, Filter, Eye, Printer, Search, Trash2, Plus, FileText, Copy
 } from 'lucide-react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import CustomerEnquiryForm from '../../components/CustomerEnquiryForm';
@@ -36,6 +33,9 @@ export default function WorkflowV2Board() {
 
     // Job Editing States
     const [editingJob, setEditingJob] = useState(null);
+    const [historyDoc, setHistoryDoc] = useState(null);
+    const [historyItems, setHistoryItems] = useState([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
 
     const dropdownRef = useRef(null);
 
@@ -135,6 +135,21 @@ export default function WorkflowV2Board() {
             }
         }
     };
+
+    const handleShowHistory = async (doc) => {
+        setHistoryDoc(doc);
+        setLoadingHistory(true);
+        try {
+            const { data, error } = await getDocumentHistory(doc);
+            if (data) setHistoryItems(data);
+            if (error) throw error;
+        } catch (err) {
+            console.error("History fetch error:", err);
+            alert("Failed to fetch history: " + err.message);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
     
     const handleConversionSubmit = async (e) => {
         e.preventDefault();
@@ -184,6 +199,22 @@ export default function WorkflowV2Board() {
         }
     };
 
+    const handleRestore = async (doc) => {
+        if (!window.confirm(`Restore ${doc.document_no} to active workflows?`)) return;
+        try {
+            setLoading(true);
+            const { supabase } = await import('../../lib/supabase');
+            await supabase.from('workflow_documents').update({ status: 'Draft' }).eq('id', doc.id);
+            alert('Document restored to active list.');
+            fetchDocs();
+        } catch (error) {
+            console.error('Restore failed:', error);
+            alert('Restore failed: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
 
     const formatDate = (dateStr) => {
         if (!dateStr) return '-';
@@ -207,6 +238,53 @@ export default function WorkflowV2Board() {
             case 'Proforma Invoice': return '#f43f5e';
             case 'Packing List': return '#f97316';
             default: return '#64748b';
+        }
+    };
+
+    const handleUploadSignedProof = async (doc, file) => {
+        if (!file) return;
+        
+        try {
+            setLoading(true);
+            const accessToken = localStorage.getItem('google_access_token');
+            if (!accessToken) throw new Error('Google account not connected');
+
+            const { getDocumentSettings } = await import('../../lib/store');
+            const { getOrCreateFolder, provisionFullProjectStructure, uploadFileToDrive } = await import('../../lib/driveService');
+            const { getGDriveFolderIdForStage } = await import('../../lib/workflowV2Service');
+
+            const settings = await getDocumentSettings(profile.company_id);
+            let celronRootId = settings?.gdrive_celron_root_id || settings?.google_drive_folder_id;
+            if (celronRootId?.includes('drive.google.com')) {
+                const match = celronRootId.match(/\/folders\/([a-zA-Z0-9_-]+)/) || celronRootId.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                if (match) celronRootId = match[1];
+            }
+
+            const currentYear = new Date().getFullYear().toString();
+            const jobNo = doc.assigned_job_no;
+            const projectFolderId = await provisionFullProjectStructure(accessToken, celronRootId, currentYear, jobNo);
+            
+            const signedFolderId = await getOrCreateFolder(accessToken, '6. Completed Proof of Delivery / Signed Reports', projectFolderId);
+            
+            const result = await uploadFileToDrive(accessToken, file, { folderId: signedFolderId });
+            const proofUrl = `https://drive.google.com/file/d/${result.id}/view`;
+
+            // Save to DB in attachment_urls or a specific field if we had one, 
+            // for now let's use internal_notes or just alert success as it's in the folder
+            const { supabase } = await import('../../lib/supabase');
+            const newAttachments = [...(doc.attachment_urls || []), proofUrl];
+            await supabase.from('workflow_documents').update({ 
+                attachment_urls: newAttachments,
+                status: 'Confirmed' 
+            }).eq('id', doc.id);
+
+            alert('Signed proof uploaded successfully to Folder 6!');
+            fetchDocs();
+        } catch (error) {
+            console.error('Upload failed:', error);
+            alert('Upload failed: ' + error.message);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -236,6 +314,65 @@ export default function WorkflowV2Board() {
             url += `?job_id=${jobId}`;
         }
         window.open(url, '_blank');
+    };
+
+    const openDriveFolder = async (doc) => {
+        // 1. Direct link on the document itself
+        const folderId = doc.drive_folder_id || doc.gdrive_folder_id;
+        if (folderId) {
+            window.open(`https://drive.google.com/drive/folders/${folderId}`, '_blank');
+            return;
+        }
+
+        // 2. If it's a Job or part of a Job, try to find the Project folder
+        const jobNo = doc.assigned_job_no;
+        if (!jobNo) {
+            alert('This document is not linked to an active Job or Enquiry folder.');
+            return;
+        }
+
+        if (!window.confirm(`No folder linked for ${doc.document_no}. Provision folder for ${jobNo} now?`)) return;
+
+        try {
+            setLoading(true);
+            const accessToken = localStorage.getItem('google_access_token');
+            if (!accessToken) throw new Error('Google account not connected');
+
+            const { getDocumentSettings } = await import('../../lib/store');
+            const { getOrCreateFolder, provisionFullProjectStructure } = await import('../../lib/driveService');
+            const { getGDriveFolderIdForStage } = await import('../../lib/workflowV2Service');
+
+            const settings = await getDocumentSettings(profile.company_id);
+            let celronRootId = settings?.gdrive_celron_root_id || settings?.google_drive_folder_id;
+            
+            if (!celronRootId) throw new Error('Google Drive Root Folder ID not configured in Settings.');
+            
+            // Extract ID if URL was provided
+            if (celronRootId.includes('drive.google.com')) {
+                const match = celronRootId.match(/\/folders\/([a-zA-Z0-9_-]+)/) || celronRootId.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                if (match) celronRootId = match[1];
+            }
+
+            const currentYear = new Date().getFullYear().toString();
+            const projectFolderId = await provisionFullProjectStructure(accessToken, celronRootId, currentYear, jobNo);
+            
+            // Find specific subfolder for this document type
+            const subfolderName = getGDriveFolderIdForStage(doc.document_type);
+            const targetFolderId = await getOrCreateFolder(accessToken, subfolderName, projectFolderId);
+
+            // Update DB if possible (Optional, but helps for next time)
+            const { supabase } = await import('../../lib/supabase');
+            await supabase.from('workflow_documents').update({ drive_folder_id: targetFolderId }).eq('id', doc.id);
+
+            alert('Folder provisioned successfully!');
+            fetchDocs();
+            window.open(`https://drive.google.com/drive/folders/${targetFolderId}`, '_blank');
+        } catch (error) {
+            console.error('Provisioning failed:', error);
+            alert('Failed to provision: ' + error.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handlePrintPreview = (id) => {
@@ -514,7 +651,9 @@ export default function WorkflowV2Board() {
                                     <th>PO By</th>
                                     <th>Description</th>
                                     <th>Value (SGD)</th>
+                                    <th>Signature</th>
                                     <th>Attachment</th>
+                                    <th style={{ textAlign: 'center' }}>Folder</th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
                                 </tr>
                             ) : (
@@ -525,7 +664,9 @@ export default function WorkflowV2Board() {
                                     <th>Customer</th>
                                     <th>Vessel / Work Location</th>
                                     <th>Total</th>
+                                    <th>Signature</th>
                                     <th>Status</th>
+                                    <th style={{ textAlign: 'center' }}>Folder</th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
                                 </tr>
                             )}
@@ -561,6 +702,13 @@ export default function WorkflowV2Board() {
                                             </td>
                                             <td className="font-bold">SGD {doc.delivery_verification?.po_value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '-'}</td>
                                             <td>
+                                                {doc.signature_url ? (
+                                                    <img src={doc.signature_url} alt="Sig" style={{ height: '24px', maxWidth: '80px', objectFit: 'contain' }} />
+                                                ) : (
+                                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>-</span>
+                                                )}
+                                            </td>
+                                            <td>
                                                 {doc.customer_po_attachment_url ? (
                                                     <a href={doc.customer_po_attachment_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                         <FileText size={12} /> View PO
@@ -568,6 +716,15 @@ export default function WorkflowV2Board() {
                                                 ) : (
                                                     <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>No Upload</span>
                                                 )}
+                                            </td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <button
+                                                    onClick={() => openDriveFolder(doc)}
+                                                    style={{ background: 'none', border: 'none', color: (doc.drive_folder_id || doc.gdrive_folder_id) ? '#f59e0b' : '#6366f1', cursor: 'pointer', opacity: (doc.drive_folder_id || doc.gdrive_folder_id) ? 1 : 0.4 }}
+                                                    title={(doc.drive_folder_id || doc.gdrive_folder_id) ? "Open Project Folder" : "Provision Project Folder"}
+                                                >
+                                                    <Folder size={20} fill={(doc.drive_folder_id || doc.gdrive_folder_id) ? "#f59e0b" : "currentColor"} fillOpacity={0.2} />
+                                                </button>
                                             </td>
                                             <td style={{ textAlign: 'right' }}>
                                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -626,6 +783,16 @@ export default function WorkflowV2Board() {
                                                     >
                                                         <Trash2 size={14} />
                                                     </button>
+                                                    <label style={{ cursor: 'pointer', position: 'relative', zIndex: 20 }} title="Upload Signed Copy to Folder 6">
+                                                        <div className="btn btn-sm btn-secondary" style={{ color: '#059669' }}>
+                                                            <Upload size={14} />
+                                                        </div>
+                                                        <input 
+                                                            type="file" 
+                                                            hidden 
+                                                            onChange={(e) => handleUploadSignedProof(doc, e.target.files[0])} 
+                                                        />
+                                                    </label>
                                                 </div>
                                             </td>
                                         </tr>
@@ -665,6 +832,13 @@ export default function WorkflowV2Board() {
                                                 {doc.currency} {doc.total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                             </td>
                                             <td>
+                                                {doc.signature_url ? (
+                                                    <img src={doc.signature_url} alt="Sig" style={{ height: '24px', maxWidth: '80px', objectFit: 'contain' }} />
+                                                ) : (
+                                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>-</span>
+                                                )}
+                                            </td>
+                                            <td>
                                                 <span style={{
                                                     padding: '4px 10px',
                                                     borderRadius: '12px',
@@ -675,6 +849,15 @@ export default function WorkflowV2Board() {
                                                 }}>
                                                     {doc.status}
                                                 </span>
+                                            </td>
+                                            <td style={{ textAlign: 'center' }}>
+                                                <button
+                                                    onClick={() => openDriveFolder(doc)}
+                                                    style={{ background: 'none', border: 'none', color: (doc.drive_folder_id || doc.gdrive_folder_id) ? '#f59e0b' : '#6366f1', cursor: 'pointer', opacity: (doc.drive_folder_id || doc.gdrive_folder_id) ? 1 : 0.4 }}
+                                                    title={(doc.drive_folder_id || doc.gdrive_folder_id) ? "Open Drive Folder" : "Provision Drive Folder"}
+                                                >
+                                                    <Folder size={20} fill={(doc.drive_folder_id || doc.gdrive_folder_id) ? "#f59e0b" : "currentColor"} fillOpacity={0.2} />
+                                                </button>
                                             </td>
                                             <td style={{ textAlign: 'right' }}>
                                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', position: 'relative', zIndex: 10 }}>
@@ -721,6 +904,22 @@ export default function WorkflowV2Board() {
                                                     >
                                                         <Copy size={14} />
                                                     </button>
+
+                                                    {doc.document_type === 'Certificate' && (
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-sm btn-secondary"
+                                                            style={{ color: '#8b5cf6', position: 'relative', zIndex: 20, cursor: 'pointer' }}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                handleShowHistory(doc);
+                                                            }}
+                                                            title="View Revision History"
+                                                        >
+                                                            <Clock size={14} />
+                                                        </button>
+                                                    )}
     
                                                     {(doc.document_type?.toUpperCase() === 'QUOTATION' || doc.document_type?.toUpperCase() === 'ENQUIRY') && (
                                                         <button
@@ -1029,6 +1228,69 @@ export default function WorkflowV2Board() {
                     position: relative;
                 }
             `}} />
+            {/* History Modal */}
+            {historyDoc && (
+                <div className="modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className="modal-content" style={{ width: '800px', maxWidth: '90%', maxHeight: '80vh', overflowY: 'auto', background: 'var(--bg-panel)', padding: '24px', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <div>
+                                <h3 style={{ margin: 0 }}>Revision History</h3>
+                                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>{historyDoc.document_no} - {historyDoc.subject}</p>
+                            </div>
+                            <button onClick={() => setHistoryDoc(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)' }}><X size={24} /></button>
+                        </div>
+
+                        {loadingHistory ? (
+                            <div style={{ textAlign: 'center', padding: '40px' }}><Loader2 className="animate-spin" /></div>
+                        ) : (
+                            <div className="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Rev</th>
+                                            <th>Document No</th>
+                                            <th>Date</th>
+                                            <th>Signature</th>
+                                            <th>Status</th>
+                                            <th style={{ textAlign: 'right' }}>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {historyItems.map(item => (
+                                            <tr key={item.id} className="table-row">
+                                                <td>R{item.revision_no || 0}</td>
+                                                <td className="font-medium">{item.document_no}</td>
+                                                <td>{new Date(item.issue_date).toLocaleDateString()}</td>
+                                                <td>
+                                                    {item.signature_url ? (
+                                                        <img src={item.signature_url} alt="Sig" style={{ height: '20px' }} />
+                                                    ) : '-'}
+                                                </td>
+                                                <td>
+                                                    <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.1)', color: '#10b981' }}>{item.status}</span>
+                                                </td>
+                                                <td style={{ textAlign: 'right' }}>
+                                                    <button 
+                                                        className="btn btn-sm btn-secondary"
+                                                        onClick={() => {
+                                                            const isExternal = item.notes?.includes('drive.google.com') || item.notes?.startsWith('http');
+                                                            if (isExternal) window.open(item.notes, '_blank');
+                                                            else navigate(`/workflows/editor/${item.document_type.toLowerCase().replace(/\s+/g, '-')}/${item.id}`);
+                                                            setHistoryDoc(null);
+                                                        }}
+                                                    >
+                                                        <Eye size={14} /> View
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

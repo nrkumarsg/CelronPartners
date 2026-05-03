@@ -5,11 +5,13 @@
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
-// Combined scopes for Gmail and Contacts
+// Combined scopes for Gmail, Contacts, and Drive
 const SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
     'https://www.googleapis.com/auth/contacts.readonly',
-    'https://www.googleapis.com/auth/drive.file'
+    'https://www.googleapis.com/auth/drive.file',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/userinfo.email'
 ].join(' ');
 
 /**
@@ -35,7 +37,12 @@ export const connectGoogleAPI = (state = 'sync', customScope = null) => {
         prompt: 'select_account'
     });
 
-    console.log('Initiating Google OAuth with redirect_uri:', redirectUri);
+    console.log('Initiating Google OAuth:', {
+        clientId: clientId,
+        redirectUri: redirectUri,
+        state: state
+    });
+    
     window.location.href = `${GOOGLE_AUTH_URL}?${params.toString()}`;
 };
 

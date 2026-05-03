@@ -23,7 +23,7 @@ export default function OAuthCallback() {
                     localStorage.setItem('google_access_token', accessToken);
                     localStorage.setItem('google_token_expiry', new Date(Date.now() + parseInt(expiresIn) * 1000).toISOString());
 
-                    if (state === 'contacts_sync' || state === 'manual_upload' || state === 'enquiry_form' || state === 'catalog_photo_upload' || state === 'calibration_lab' || state === 'scanner_module' || state === 'apk_management') {
+                    if (state === 'contacts_sync' || state === 'manual_upload' || state === 'enquiry_form' || state === 'catalog_photo_upload' || state === 'calibration_lab' || state === 'scanner_module' || state === 'apk_management' || state === 'drive_status_tray') {
                         // Temp store token for the sync process
                         sessionStorage.setItem('google_contacts_token', accessToken);
                         sessionStorage.setItem('google_contacts_expires', new Date(Date.now() + parseInt(expiresIn) * 1000).toISOString());
@@ -35,8 +35,10 @@ export default function OAuthCallback() {
                             catalog_photo_upload: 'Google Drive Connected! You can now upload photos.',
                             calibration_lab: 'Google Drive Connected! Calibration Lab is ready.',
                             scanner_module: 'Google Drive Connected! Celron Scanner is active.',
-                            apk_management: 'Google Drive Connected! APK Manager is ready.'
+                            apk_management: 'Google Drive Connected! APK Manager is ready.',
+                            drive_status_tray: 'Google Drive Connected!'
                         };
+
                         const targetMap = {
                             enquiry_form: '/workflows',
                             contacts_sync: '/contacts',
@@ -44,11 +46,16 @@ export default function OAuthCallback() {
                             catalog_photo_upload: '/catalog',
                             calibration_lab: '/forms/calibration-lab',
                             scanner_module: '/scanner',
-                            apk_management: '/admin/apks'
+                            apk_management: '/admin/apks',
+                            drive_status_tray: '/dashboard'
                         };
 
-                        alert(messageMap[state]);
-                        navigate(targetMap[state]);
+                        const returnUrl = sessionStorage.getItem('google_auth_return_url');
+                        const target = returnUrl || targetMap[state] || '/dashboard';
+                        if (returnUrl) sessionStorage.removeItem('google_auth_return_url');
+
+                        alert(messageMap[state] || 'Google Connected Successfully!');
+                        navigate(target);
                         return;
                     }
 

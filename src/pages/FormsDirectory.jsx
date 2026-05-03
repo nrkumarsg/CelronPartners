@@ -1,94 +1,98 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Plus, FileText, Globe, Trash2, ExternalLink, Grid, List, Edit, FileCheck } from 'lucide-react';
-import { getForms, deleteForm } from '../lib/formsService';
+import { Search, Plus, FileText, Globe, Trash2, ExternalLink, Grid, List, Edit, FileCheck, Loader2, FolderOpen } from 'lucide-react';
+import { getDocumentSettings } from '../lib/store';
+import { listFolderContent, getOrCreateFolder, uploadFileToDrive } from '../lib/driveService';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function FormsDirectory() {
-    const [forms, setForms] = useState([]);
+    const { profile } = useAuth();
+    const [stationeryItems, setStationeryItems] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [formsFolderId, setFormsFolderId] = useState(localStorage.getItem('forms_drive_folder_id') || '');
-
+    const [stationeryFolderId, setStationeryFolderId] = useState(null);
+    const [settings, setSettings] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+    const [viewMode, setViewMode] = useState('grid');
     const navigate = useNavigate();
 
     useEffect(() => {
-        fetchForms();
-        tryDetectFolder();
-    }, []);
+        if (profile?.company_id) {
+            initStationery();
+        }
+    }, [profile]);
 
-    const tryDetectFolder = async () => {
-        const token = sessionStorage.getItem('google_contacts_token');
-        if (token && !formsFolderId) {
-            try {
-                const { getOrCreateFolder } = await import('../lib/driveService');
-                const id = await getOrCreateFolder(token, 'Forms');
-                if (id) {
-                    setFormsFolderId(id);
-                    localStorage.setItem('forms_drive_folder_id', id);
-                }
-            } catch (err) {
-                console.error("Error detecting folder:", err);
+    const initStationery = async () => {
+        setLoading(true);
+        try {
+            const settingsData = await getDocumentSettings(profile.company_id);
+            setSettings(settingsData);
+
+            const accessToken = localStorage.getItem('google_access_token');
+            if (!accessToken) throw new Error("Google Drive not connected");
+
+            // 1. Determine the Stationery Folder ID
+            let folderId = settingsData?.gdrive_stationery_id;
+
+            if (!folderId && settingsData?.gdrive_04_id) {
+                // If not saved in DB, try to find "01. Company_Stationery" under Vault (04)
+                folderId = await getOrCreateFolder(accessToken, '01. Company_Stationery', settingsData.gdrive_04_id);
             }
+
+            if (folderId) {
+                setStationeryFolderId(folderId);
+                const items = await listFolderContent(accessToken, folderId);
+                setStationeryItems(items);
+            }
+        } catch (err) {
+            console.error("Stationery error:", err);
+        } finally {
+            setLoading(false);
         }
     };
 
     const handleOpenDrive = () => {
-        const url = formsFolderId
-            ? `https://drive.google.com/drive/folders/${formsFolderId}`
+        const url = stationeryFolderId
+            ? `https://drive.google.com/drive/folders/${stationeryFolderId}`
             : 'https://drive.google.com';
         window.open(url, '_blank');
     };
 
-    const fetchForms = async () => {
-        setLoading(true);
-        const { data } = await getForms();
-        if (data) setForms(data);
-        setLoading(false);
-    };
-
-    const handleDelete = async (id) => {
-        if (window.confirm('Remove this form from library?')) {
-            await deleteForm(id);
-            fetchForms();
-        }
-    };
-
-    const filteredForms = forms.filter(f =>
-        f.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        f.form_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        f.author_company?.toLowerCase().includes(searchTerm.toLowerCase())
+    const filteredItems = stationeryItems.filter(item =>
+        item.name?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    const getFileIcon = (mimeType) => {
+        if (mimeType.includes('folder')) return <FolderOpen size={32} color="#3b82f6" />;
+        if (mimeType.includes('pdf')) return <FileText size={32} color="#ef4444" />;
+        if (mimeType.includes('image')) return <FileText size={32} color="#ec4899" />;
+        return <FileText size={32} color="#6366f1" />;
+    };
+
     return (
-        <div style={{ padding: '24px', maxWidth: '100%', margin: '0', background: '#f8fafc', minHeight: '100vh' }}>
-            <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ padding: '24px', background: '#f8fafc', minHeight: '100vh', color: '#334155' }}>
+            <header style={{ marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
                     <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0', letterSpacing: '-0.02em' }}>
-                        Forms Directory
+                        Stationery Directory
                     </h1>
-                    <p style={{ margin: 0, color: '#64748b', fontSize: '1rem' }}>Frequently used documents & Google Drive Cloud Storage</p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b' }}>
+                        <Globe size={14} color="#4285F4" />
+                        <span style={{ fontSize: '0.9rem' }}>Synced with Google Drive: <b>01. Company_Stationery</b></span>
+                    </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <button
-                        onClick={() => navigate('/forms/calibration-lab')}
-                        style={{ background: '#fff', color: '#10b981', border: '1px solid #10b981', padding: '10px 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
-                    >
-                        <FileCheck size={18} /> Calibration Lab
-                    </button>
-                    <button
                         onClick={handleOpenDrive}
                         style={{ background: '#fff', color: '#475569', border: '1px solid #e2e8f0', padding: '10px 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
                     >
-                        <Globe size={18} color="#4285F4" /> Open Forms Folder
+                        <ExternalLink size={18} /> Open in Drive
                     </button>
                     <button
-                        onClick={() => navigate('/forms/new')}
-                        className="btn btn-primary"
-                        style={{ padding: '10px 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px' }}
+                        onClick={() => navigate('/storage?tab=explorer&folder=vault')}
+                        style={{ background: '#6366f1', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, cursor: 'pointer', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.25)' }}
                     >
-                        <Plus size={18} /> Add New Form
+                        <FolderOpen size={18} /> Manage Vault
                     </button>
                 </div>
             </header>
@@ -98,7 +102,7 @@ export default function FormsDirectory() {
                     <div style={{ display: 'flex', alignItems: 'center', color: '#94a3b8' }}><Search size={20} /></div>
                     <input
                         type="text"
-                        placeholder="Search by title, type, or author..."
+                        placeholder="Search stationery documents..."
                         style={{ flex: 1, border: 'none', outline: 'none', padding: '12px', fontSize: '1rem' }}
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
@@ -117,51 +121,65 @@ export default function FormsDirectory() {
 
             {loading ? (
                 <div style={{ textAlign: 'center', padding: '100px 0', color: '#64748b' }}>
-                    <div className="animate-spin" style={{ width: '40px', height: '40px', border: '4px solid #f3f3f3', borderTop: '4px solid #6366f1', borderRadius: '50%', margin: '0 auto 20px' }}></div>
-                    <p>Loading your forms library...</p>
+                    <Loader2 className="animate-spin" size={40} color="#6366f1" style={{ margin: '0 auto 20px' }} />
+                    <p style={{ fontWeight: 500 }}>Syncing with Company Stationery...</p>
                 </div>
-            ) : filteredForms.length === 0 ? (
+            ) : filteredItems.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '100px 0', background: '#fff', borderRadius: '16px', border: '2px dashed #e2e8f0' }}>
-                    <FileCheck size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
-                    <h3 style={{ color: '#475569', margin: '0 0 8px 0' }}>No forms found</h3>
-                    <p style={{ color: '#94a3b8', margin: 0 }}>Start by uploading your first company form.</p>
+                    <FileText size={48} color="#cbd5e1" style={{ marginBottom: '16px' }} />
+                    <h3 style={{ color: '#475569', margin: '0 0 8px 0' }}>No stationery found</h3>
+                    <p style={{ color: '#94a3b8', margin: 0 }}>Add documents to your <b>01. Company_Stationery</b> folder in Drive to see them here.</p>
                 </div>
             ) : (
                 <div style={{
                     display: viewMode === 'grid' ? 'grid' : 'block',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
                     gap: '24px'
                 }}>
-                    {filteredForms.map(form => (
-                        <div key={form.id} className="glass-panel" style={{ padding: '20px', marginBottom: viewMode === 'list' ? '12px' : '0', display: viewMode === 'list' ? 'flex' : 'block', alignItems: 'center', gap: '20px' }}>
-                            <div style={{ width: viewMode === 'list' ? '48px' : '100%', height: viewMode === 'list' ? '48px' : '160px', background: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: viewMode === 'grid' ? '16px' : '0' }}>
-                                <FileText size={viewMode === 'list' ? 24 : 48} color="#6366f1" />
+                    {filteredItems.map(item => (
+                        <div 
+                            key={item.id} 
+                            onClick={() => window.open(item.webViewLink, '_blank')}
+                            style={{ 
+                                padding: '24px', 
+                                background: '#fff',
+                                borderRadius: '16px',
+                                border: '1px solid #e2e8f0',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                display: viewMode === 'list' ? 'flex' : 'block',
+                                alignItems: 'center',
+                                gap: '20px',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                            }}
+                            onMouseEnter={e => {
+                                e.currentTarget.style.transform = 'translateY(-4px)';
+                                e.currentTarget.style.boxShadow = '0 12px 20px rgba(0,0,0,0.05)';
+                                e.currentTarget.style.borderColor = '#6366f1';
+                            }}
+                            onMouseLeave={e => {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)';
+                                e.currentTarget.style.borderColor = '#e2e8f0';
+                            }}
+                        >
+                            <div style={{ 
+                                width: viewMode === 'list' ? '48px' : '100%', 
+                                height: viewMode === 'list' ? '48px' : '120px', 
+                                background: '#f8fafc', 
+                                borderRadius: '12px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                justifyContent: 'center', 
+                                marginBottom: viewMode === 'grid' ? '16px' : '0' 
+                            }}>
+                                {getFileIcon(item.mimeType)}
                             </div>
                             <div style={{ flex: 1 }}>
-                                <h3 style={{ margin: '0 0 4px 0', fontSize: '1.1rem', color: '#1e293b' }}>{form.title}</h3>
-                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                                    <span style={{ fontSize: '0.75rem', padding: '2px 8px', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontWeight: 600 }}>{form.form_type}</span>
-                                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{form.author_company}</span>
-                                </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <a
-                                        href={form.file_url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="btn btn-secondary"
-                                        style={{ flex: 1, padding: '8px', fontSize: '0.85rem', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                                    >
-                                        <ExternalLink size={14} /> View Form
-                                    </a>
-                                    <button
-                                        onClick={() => navigate(`/forms/${form.id}`)}
-                                        style={{ padding: '8px', background: 'none', border: '1px solid #e2e8f0', borderRadius: '8px', color: '#64748b', cursor: 'pointer' }}
-                                    >
-                                        <Edit size={16} />
-                                    </button>
-                                    <button onClick={() => handleDelete(form.id)} style={{ padding: '8px', background: 'none', border: '1px solid #fee2e2', borderRadius: '8px', color: '#ef4444', cursor: 'pointer' }}>
-                                        <Trash2 size={16} />
-                                    </button>
+                                <h3 style={{ margin: '0 0 4px 0', fontSize: '1rem', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</h3>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Updated {new Date(item.createdTime).toLocaleDateString()}</span>
+                                    <ExternalLink size={14} color="#94a3b8" />
                                 </div>
                             </div>
                         </div>
