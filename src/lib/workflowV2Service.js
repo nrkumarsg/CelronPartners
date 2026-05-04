@@ -145,6 +145,22 @@ export const getWorkflowDocuments = async (companyId, type = null) => {
             const partnerMap = Object.fromEntries(partners?.map(p => [p.id, p]) || []);
             data.forEach(d => { d.partners = partnerMap[d.partner_id]; });
         }
+
+        // Fetch vessels
+        const vesselIds = [...new Set(data.map(d => d.vessel_id).filter(Boolean))];
+        if (vesselIds.length > 0) {
+            const { data: vessels } = await supabase.from('vessels').select('id, vessel_name').in('id', vesselIds);
+            const vesselMap = Object.fromEntries(vessels?.map(v => [v.id, v]) || []);
+            data.forEach(d => { d.vessels = vesselMap[d.vessel_id]; });
+        }
+
+        // Fetch work locations
+        const locationIds = [...new Set(data.map(d => d.work_location_id).filter(Boolean))];
+        if (locationIds.length > 0) {
+            const { data: locations } = await supabase.from('work_locations').select('id, location_name').in('id', locationIds);
+            const locationMap = Object.fromEntries(locations?.map(l => [l.id, l]) || []);
+            data.forEach(d => { d.work_locations = locationMap[d.work_location_id]; });
+        }
     }
     
     return { data, error };

@@ -1813,3 +1813,98 @@ export const QuickExpenseAdd = ({ job_id, partners, jobs, expense, onSuccess, on
         </div>
     );
 };
+
+// Quick Form Add
+export const QuickFormAdd = ({ company_id, initialData, onSuccess, onCancel }) => {
+    const [formData, setFormData] = useState(initialData || {
+        title: '',
+        form_type: 'PDF',
+        author_company: '',
+        info: '',
+        file_url: ''
+    });
+    const [loading, setLoading] = useState(false);
+
+    const handleSave = async () => {
+        if (!formData.title) return alert('Form Title is required');
+        setLoading(true);
+        try {
+            const { saveForm } = await import('../../lib/formsService');
+            const { data, error } = await saveForm({
+                ...formData,
+                company_id
+            });
+            if (error) throw error;
+            onSuccess(data);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to save form');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="form-item">
+                <label>Form Title *</label>
+                <input
+                    className="form-input"
+                    value={formData.title}
+                    onChange={e => setFormData({ ...formData, title: e.target.value })}
+                    placeholder="e.g. Site Audit Checklist"
+                    autoFocus
+                />
+            </div>
+            <div className="grid-2">
+                <div className="form-item">
+                    <label>Form Type</label>
+                    <select
+                        className="form-select"
+                        value={formData.form_type}
+                        onChange={e => setFormData({ ...formData, form_type: e.target.value })}
+                    >
+                        <option value="PDF">PDF Document</option>
+                        <option value="DOCX">Word Document</option>
+                        <option value="XLSX">Excel Spreadsheet</option>
+                        <option value="LINK">External Link</option>
+                    </select>
+                </div>
+                <div className="form-item">
+                    <label>Issuer / Department</label>
+                    <input
+                        className="form-input"
+                        value={formData.author_company}
+                        onChange={e => setFormData({ ...formData, author_company: e.target.value })}
+                        placeholder="e.g. Operations"
+                    />
+                </div>
+            </div>
+            <div className="form-item">
+                <label>Template Link (Google Drive / Web)</label>
+                <input
+                    className="form-input"
+                    value={formData.file_url}
+                    onChange={e => setFormData({ ...formData, file_url: e.target.value })}
+                    placeholder="https://drive.google.com/..."
+                />
+            </div>
+            <div className="form-item">
+                <label>Instructions / Info</label>
+                <textarea
+                    className="form-textarea"
+                    value={formData.info}
+                    onChange={e => setFormData({ ...formData, info: e.target.value })}
+                    placeholder="Add brief instructions for this form..."
+                    rows={3}
+                />
+            </div>
+            <div className="quick-form-actions">
+                <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+                <button className="btn btn-primary" onClick={handleSave} disabled={loading || !formData.title}>
+                    <Save size={18} /> {loading ? 'Saving...' : 'Save Template'}
+                </button>
+            </div>
+        </div>
+    );
+};

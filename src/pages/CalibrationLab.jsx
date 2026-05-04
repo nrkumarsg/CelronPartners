@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import {
     FileCheck, Plus, Search, Archive, Sparkles, ExternalLink,
     Download, Trash2, Save, FileText, Ship, User, Hash,
     Calendar, AlertCircle, CheckCircle2, Loader2, Brain, RefreshCcw, Globe,
-    LayoutGrid, List, Clock, Youtube, Book, MessageSquare, Pencil, Trash, QrCode, X
+    LayoutGrid, List, Clock, Youtube, Book, MessageSquare, Pencil, Trash, QrCode, X,
+    Eye, Printer, Copy, Folder
 } from 'lucide-react';
 import UploadOverlay from '../components/common/UploadOverlay';
 import GDriveConnectionModal from '../components/common/GDriveConnectionModal';
@@ -25,11 +27,22 @@ import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { QRCodeSVG } from 'qrcode.react';
 import { getDocumentSettings } from '../lib/store';
-import { generateDocNumber, saveWorkflowDocument } from '../lib/workflowV2Service';
+import { 
+    generateDocNumber, 
+    saveWorkflowDocument, 
+    getWorkflowDocuments, 
+    deleteWorkflowDocument, 
+    duplicateWorkflowDocument, 
+    getDocumentHistory 
+} from '../lib/workflowV2Service';
 
 export default function CalibrationLab() {
     const navigate = useNavigate();
+    const { profile } = useAuth();
+    const companyId = profile?.company_id || sessionStorage.getItem('company_id');
+    
     const [records, setRecords] = useState([]);
+    const [workflowDocs, setWorkflowDocs] = useState([]);
     const [instruments, setInstruments] = useState([]);
     const [jobs, setJobs] = useState([]);
     const [partners, setPartners] = useState([]);
@@ -61,6 +74,10 @@ export default function CalibrationLab() {
     const [instrumentHistory, setInstrumentHistory] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
     const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+    
+    // Workflow History States
+    const [historyDoc, setHistoryDoc] = useState(null);
+    const [historyItems, setHistoryItems] = useState([]);
     const [selectedInstrumentTitle, setSelectedInstrumentTitle] = useState('');
     const [isQRModalOpen, setIsQRModalOpen] = useState(false);
     const [qrValue, setQrValue] = useState('');
@@ -79,6 +96,140 @@ export default function CalibrationLab() {
         selectedInstruments: [] // { instrument_id, name, maker, model, serial_no, standard_reading, actual_reading, result: 'Pass' }
     });
 
+
+    const handleArchive = async () => {
+        if (!confirm("Are you sure you want to archive records older than 1 year?")) return;
+        try {
+            setLoading(true);
+            await archiveOldRecords();
+            alert("Old records archived successfully.");
+            fetchData();
+        } catch (err) {
+            console.error("Archive error:", err);
+            alert("Failed to archive: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handlePrintPreview = (docId) => {
+        window.open(`/workflows/print/${docId}`, '_blank');
+    };
+
+    const handleDuplicateWorkflow = async (id) => {
+        if (!confirm('Are you sure you want to duplicate this document? All items will be copied to a new draft.')) return;
+        try {
+            setLoading(true);
+            await duplicateWorkflowDocument(id);
+            alert('Document duplicated successfully.');
+            fetchData();
+        } catch (err) {
+            console.error("Duplicate error:", err);
+            alert("Failed to duplicate: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleShowWorkflowHistory = async (doc) => {
+        setHistoryDoc(doc);
+        setLoadingHistory(true);
+        try {
+            const { data, error } = await getDocumentHistory(doc);
+            if (data) setHistoryItems(data);
+            if (error) throw error;
+        } catch (err) {
+            console.error("History fetch error:", err);
+            alert("Failed to fetch history: " + err.message);
+        } finally {
+            setLoadingHistory(false);
+        }
+    };
+
+    const handleDeleteWorkflow = async (id) => {
+        if (!confirm('Are you sure you want to delete this document? This action cannot be undone.')) return;
+        try {
+            setLoading(true);
+            const { error } = await deleteWorkflowDocument(id);
+            if (error) throw error;
+            alert('Document deleted successfully.');
+            fetchData();
+        } catch (err) {
+            console.error("Delete error:", err);
+            alert("Failed to delete: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const openDriveFolder = async (doc) => {
+        const token = sessionStorage.getItem('google_contacts_token');
+        if (!token) {
+            alert("Connect GDrive first!");
+            setIsAuthModalOpen(true);
+            return;
+        }
+
+        const folderId = doc.drive_folder_id || doc.gdrive_folder_id;
+        if (folderId) {
+            window.open(`https://drive.google.com/drive/folders/${folderId}`, '_blank');
+        } else {
+            // Auto-provision logic for certificates
+            if (!confirm("No drive folder linked. Would you like to provision a new project structure for this job?")) return;
+            
+            try {
+                setLoading(true);
+                const { getDocumentSettings } = await import('../lib/store');
+                const { provisionFullProjectStructure } = await import('../lib/driveService');
+                
+                const settings = await getDocumentSettings(profile?.company_id);
+                let rootId = settings?.gdrive_celron_root_id;
+                
+                const year = new Date().getFullYear().toString();
+                const jobNo = doc.assigned_job_no || doc.document_no; // Fallback to doc no if not linked to job
+                
+                const newFolderId = await provisionFullProjectStructure(token, rootId, year, jobNo);
+                
+                // Update doc with folder ID
+                await supabase.from('workflow_documents').update({ drive_folder_id: newFolderId }).eq('id', doc.id);
+                
+                alert("Folder structure provisioned successfully!");
+                fetchData();
+                window.open(`https://drive.google.com/drive/folders/${newFolderId}`, '_blank');
+            } catch (err) {
+                console.error("Provisioning error:", err);
+                alert("Failed to provision folder: " + err.message);
+            } finally {
+                setLoading(false);
+            }
+        }
+    };
+
+    const fetchData = async () => {
+        if (!companyId) return;
+        setLoading(true);
+        try {
+            const [recRes, insRes, jobRes, parRes, wfRes] = await Promise.all([
+                getCalibrationRecords(),
+                getInstruments(),
+                getJobs(companyId),
+                getPartners(),
+                getWorkflowDocuments(companyId, 'Certificate'),
+                fetchVessels()
+            ]);
+            if (recRes?.data) setRecords(recRes.data);
+            if (insRes?.data) setInstruments(insRes.data);
+            if (jobRes?.data) setJobs(jobRes.data);
+            if (parRes?.data) setPartners(parRes.data);
+            if (wfRes?.data) setWorkflowDocs(wfRes.data);
+            else if (wfRes?.error) setWorkflowDocs([]); // Safety fallback
+        } catch (err) {
+            console.error("Error fetching calibration data:", err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Auto-update due_date when calibration_date changes
     useEffect(() => {
         if (formData.calibration_date) {
@@ -87,6 +238,13 @@ export default function CalibrationLab() {
             setFormData(prev => ({ ...prev, due_date: dueDate }));
         }
     }, [formData.calibration_date]);
+
+    useEffect(() => {
+        if (companyId) {
+            fetchData();
+            fetchTemplates();
+        }
+    }, [companyId]);
 
     const addInstrumentRow = () => {
         setFormData(prev => ({
@@ -109,6 +267,33 @@ export default function CalibrationLab() {
 
     const [viewerType, setViewerType] = useState(null); // 'youtube' or 'manual'
     const [activeResource, setActiveResource] = useState(null);
+
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '-';
+        return new Date(dateStr).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        });
+    };
+
+    const getTypeColor = (type) => {
+        switch (type) {
+            case 'Enquiry': return '#6366f1';
+            case 'Quotation': return '#3b82f6';
+            case 'Purchase Order': return '#f59e0b';
+            case 'Order Acknowledgment': return '#059669';
+            case 'Delivery Order': return '#10b981';
+            case 'Service Report': return '#ec4899';
+            case 'Tax Invoice': return '#ef4444';
+            case 'Certificate': return '#6366f1';
+            case 'Payment Received': return '#10b981';
+            case 'Statement of Account': return '#3b82f6';
+            case 'Proforma Invoice': return '#f43f5e';
+            case 'Packing List': return '#f97316';
+            default: return '#64748b';
+        }
+    };
 
     const showQR = (instrument) => {
         const qrContent = JSON.stringify({
@@ -226,26 +411,7 @@ export default function CalibrationLab() {
 
 
 
-    const fetchData = async () => {
-        setLoading(true);
-        try {
-            const [recRes, insRes, jobRes, parRes] = await Promise.all([
-                getCalibrationRecords(),
-                getInstruments(),
-                getJobs(sessionStorage.getItem('company_id')), // Need companyId
-                getPartners(),
-                fetchVessels()
-            ]);
-            if (recRes?.data) setRecords(recRes.data);
-            if (insRes?.data) setInstruments(insRes.data);
-            if (jobRes?.data) setJobs(jobRes.data);
-            if (parRes?.data) setPartners(parRes.data);
-        } catch (err) {
-            console.error("Error fetching calibration data:", err);
-        } finally {
-            setLoading(false);
-        }
-    };
+
 
     const handleInstrumentSave = async (e) => {
         e.preventDefault();
@@ -592,15 +758,6 @@ export default function CalibrationLab() {
         }
     };
 
-    const handleArchive = async () => {
-        if (window.confirm("Archive certificates older than 3 years?")) {
-            const { data, error } = await archiveOldRecords();
-            if (data) {
-                alert(`Archived ${data.length} records.`);
-                fetchData();
-            }
-        }
-    };
 
     const filteredRecords = records.filter(r =>
         r.job_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -1027,109 +1184,158 @@ export default function CalibrationLab() {
             {activeTab === 'records' && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
                     <div className="glass-panel" style={{ background: '#fff', borderRadius: '24px', padding: '32px', border: '1px solid #e2e8f0' }}>
-                        <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
-                            <div style={{ flex: 1, position: 'relative' }}>
-                                <Search size={20} style={{ position: 'absolute', left: '16px', top: '14px', color: '#94a3b8' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '8px 16px', minWidth: '450px' }}>
+                                <Search size={20} color="#94a3b8" style={{ marginRight: '12px' }} />
                                 <input
                                     type="text"
-                                    className="form-input"
-                                    placeholder="Search by job, instrument or vessel..."
+                                    placeholder="Search by doc no, customer, vessel or job..."
+                                    style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, color: '#1e293b', fontSize: '1rem' }}
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    style={{ width: '100%', padding: '12px 12px 12px 48px', borderRadius: '12px', border: '1px solid #e2e8f0' }}
                                 />
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button onClick={fetchData} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <RefreshCcw size={16} /> Refresh
+                                </button>
                             </div>
                         </div>
 
-                        <div style={{ overflowX: 'auto' }}>
+                        <div style={{ overflowX: 'auto', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
-                                    <tr style={{ textAlign: 'left', borderBottom: '2px solid #f1f5f9' }}>
-                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600 }}>Job No</th>
-                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600 }}>Instrument</th>
-                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600 }}>Vessel / Customer</th>
-                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600 }}>Cal. Date</th>
-                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600 }}>Due Date</th>
-                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600 }}>Status</th>
-                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600, textAlign: 'right' }}>Action</th>
+                                    <tr style={{ textAlign: 'left', background: '#f8fafc', borderBottom: '2px solid #f1f5f9' }}>
+                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>Type</th>
+                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>Document No</th>
+                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>Issue Date</th>
+                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>Customer</th>
+                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>Vessel / Work Location</th>
+                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>Signature</th>
+                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>Status</th>
+                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase', textAlign: 'center' }}>Folder</th>
+                                        <th style={{ padding: '16px', color: '#64748b', fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase', textAlign: 'right' }}>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {records.filter(r =>
-                                        r.job_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                        r.instrument_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                        r.vessel?.vessel_name?.toLowerCase().includes(searchTerm.toLowerCase())
-                                    ).map(record => (
-                                        <tr key={record.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                                            <td style={{ padding: '16px', fontWeight: 600, color: '#1e293b' }}>{record.job_no}</td>
-                                            <td style={{ padding: '16px' }}>
-                                                <div style={{ fontWeight: 500 }}>{record.instrument_name}</div>
-                                                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>S/N: {record.serial_no}</div>
-                                            </td>
-                                            <td style={{ padding: '16px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#475569' }}>
-                                                    <Ship size={14} /> {record.vessel?.vessel_name || record.vessel?.name}
-                                                </div>
-                                                <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginLeft: '20px' }}>{record.customer?.name}</div>
-                                            </td>
-                                            <td style={{ padding: '16px', color: '#64748b' }}>
-                                                {new Date(record.calibration_date).toLocaleDateString()}
-                                            </td>
-                                            <td style={{ padding: '16px', color: '#ef4444', fontWeight: 600 }}>
-                                                {record.due_date ? new Date(record.due_date).toLocaleDateString() : 'N/A'}
-                                            </td>
-                                            <td style={{ padding: '16px' }}>
-                                                <span style={{
-                                                    padding: '4px 10px',
-                                                    borderRadius: '20px',
-                                                    fontSize: '0.75rem',
-                                                    fontWeight: 700,
-                                                    background: record.is_archived ? '#f1f5f9' : (record.data?.result === 'Pass' ? '#dcfce7' : '#fee2e2'),
-                                                    color: record.is_archived ? '#64748b' : (record.data?.result === 'Pass' ? '#166534' : '#991b1b')
-                                                }}>
-                                                    {record.is_archived ? 'Archived' : record.data?.result}
-                                                </span>
-                                            </td>
-                                            <td style={{ padding: '16px', textAlign: 'right' }}>
-                                                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                                    {record.workflow_doc_id && (
-                                                        <button 
-                                                            onClick={() => navigate(`/workflows/editor/certificate/${record.workflow_doc_id}`)}
-                                                            className="btn-icon" 
-                                                            title="View Workflow Certificate"
-                                                            style={{ color: '#6366f1', background: 'none', border: '1px solid #e0e7ff', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}
-                                                        >
-                                                            <FileText size={18} />
-                                                        </button>
-                                                    )}
-                                                    {record.youtube_link && (
-                                                        <button
-                                                            onClick={() => { setActiveResource(record.youtube_link); setViewerType('youtube'); }}
-                                                            style={{ background: 'none', border: '1px solid #fee2e2', padding: '6px', borderRadius: '6px', color: '#ff0000', cursor: 'pointer' }}
-                                                            title="Watch Tutorial"
-                                                        >
-                                                            <ExternalLink size={16} />
-                                                        </button>
-                                                    )}
-                                                    {record.manual_url && (
-                                                        <button
-                                                            onClick={() => { setActiveResource(record.manual_url); setViewerType('manual'); }}
-                                                            style={{ background: 'none', border: '1px solid #e2e8f0', padding: '6px', borderRadius: '6px', color: '#64748b', cursor: 'pointer' }}
-                                                            title="View Manual"
-                                                        >
-                                                            <FileText size={16} />
-                                                        </button>
-                                                    )}
-                                                    <button onClick={() => handleEditRecord(record)} style={{ background: 'none', border: '1px solid #e2e8f0', padding: '6px', borderRadius: '6px', color: '#64748b', cursor: 'pointer' }} title="Edit Record">
-                                                        <Pencil size={16} />
-                                                    </button>
-                                                    <button onClick={() => handleDeleteRecord(record.id)} style={{ background: 'none', border: '1px solid #fee2e2', padding: '6px', borderRadius: '6px', color: '#ef4444', cursor: 'pointer' }} title="Delete Record">
-                                                        <Trash size={16} />
-                                                    </button>
-                                                </div>
+                                    {workflowDocs.filter(doc => 
+                                        doc.document_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                        doc.partners?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                        doc.vessels?.vessel_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                        doc.assigned_job_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                        doc.subject?.toLowerCase().includes(searchTerm.toLowerCase())
+                                    ).length === 0 ? (
+                                        <tr>
+                                            <td colSpan="9" style={{ padding: '48px', textAlign: 'center', color: '#94a3b8' }}>
+                                                <FileText size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
+                                                <p>No certificates found matching your criteria.</p>
                                             </td>
                                         </tr>
-                                    ))}
+                                    ) : (
+                                        workflowDocs.filter(doc => 
+                                            doc.document_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                            doc.partners?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                            doc.vessels?.vessel_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                            doc.assigned_job_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                            doc.subject?.toLowerCase().includes(searchTerm.toLowerCase())
+                                        ).map((doc) => (
+                                            <tr key={doc.id} style={{ borderBottom: '1px solid #f1f5f9', transition: 'background 0.2s' }} onMouseEnter={(e) => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
+                                                <td style={{ padding: '16px' }}>
+                                                    <span style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: 700,
+                                                        color: getTypeColor(doc.document_type),
+                                                        textTransform: 'uppercase'
+                                                    }}>
+                                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: getTypeColor(doc.document_type) }} />
+                                                        {doc.document_type}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '16px', fontWeight: 600, color: '#6366f1' }}>{doc.document_no}</td>
+                                                <td style={{ padding: '16px', color: '#64748b' }}>{formatDate(doc.issue_date)}</td>
+                                                <td style={{ padding: '16px' }}>
+                                                    <div style={{ fontWeight: 600, color: '#1e293b' }}>{doc.partners?.name || 'Walk-in'}</div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#94a3b8', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.subject || '-'}</div>
+                                                </td>
+                                                <td style={{ padding: '16px', color: '#475569' }}>
+                                                    {doc.vessels?.vessel_name || doc.work_locations?.location_name || '-'}
+                                                </td>
+                                                <td style={{ padding: '16px' }}>
+                                                    {doc.signature_url ? (
+                                                        <img src={doc.signature_url} alt="Sig" style={{ height: '24px', maxWidth: '80px', objectFit: 'contain' }} />
+                                                    ) : (
+                                                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>-</span>
+                                                    )}
+                                                </td>
+                                                <td style={{ padding: '16px' }}>
+                                                    <span style={{
+                                                        padding: '4px 10px',
+                                                        borderRadius: '20px',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: 700,
+                                                        background: doc.status === 'Draft' ? 'rgba(100, 116, 139, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                        color: doc.status === 'Draft' ? '#64748b' : '#10b981'
+                                                    }}>
+                                                        {doc.status}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '16px', textAlign: 'center' }}>
+                                                    <button
+                                                        onClick={() => openDriveFolder(doc)}
+                                                        style={{ background: 'none', border: 'none', color: (doc.drive_folder_id || doc.gdrive_folder_id) ? '#f59e0b' : '#6366f1', cursor: 'pointer', opacity: (doc.drive_folder_id || doc.gdrive_folder_id) ? 1 : 0.4 }}
+                                                        title={(doc.drive_folder_id || doc.gdrive_folder_id) ? "Open Drive Folder" : "Provision Drive Folder"}
+                                                    >
+                                                        <Folder size={20} fill={(doc.drive_folder_id || doc.gdrive_folder_id) ? "#f59e0b" : "currentColor"} fillOpacity={0.2} />
+                                                    </button>
+                                                </td>
+                                                <td style={{ padding: '16px', textAlign: 'right' }}>
+                                                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            onClick={() => navigate(`/workflows/editor/certificate/${doc.id}`)}
+                                                            title="Open Editor"
+                                                        >
+                                                            <Eye size={14} /> Open
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            onClick={() => handlePrintPreview(doc.id)}
+                                                            title="Print / Save PDF"
+                                                        >
+                                                            <Printer size={14} />
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            style={{ color: '#3b82f6' }}
+                                                            onClick={() => handleDuplicateWorkflow(doc.id)}
+                                                            title="Duplicate Certificate"
+                                                        >
+                                                            <Copy size={14} />
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            style={{ color: '#8b5cf6' }}
+                                                            onClick={() => handleShowWorkflowHistory(doc)}
+                                                            title="View Revision History"
+                                                        >
+                                                            <Clock size={14} />
+                                                        </button>
+                                                        <button
+                                                            className="btn btn-sm btn-secondary"
+                                                            style={{ color: '#ef4444', borderColor: '#fecaca', background: '#fef2f2' }}
+                                                            onClick={() => handleDeleteWorkflow(doc.id)}
+                                                            title="Delete Certificate"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
                                 </tbody>
                             </table>
                         </div>
@@ -1885,6 +2091,66 @@ export default function CalibrationLab() {
                                 onCancel={() => setEditModal({ isOpen: false, type: null })} 
                             />
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* Revision History Modal */}
+            {historyDoc && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10005, padding: '24px' }}>
+                    <div className="glass-panel" style={{ width: '100%', maxWidth: '800px', background: '#fff', borderRadius: '24px', padding: '32px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <div>
+                                <h2 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', color: '#1e293b' }}>
+                                    <Clock size={24} color="#6366f1" /> Revision History
+                                </h2>
+                                <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.9rem' }}>Tracking changes for {historyDoc.document_no}</p>
+                            </div>
+                            <button onClick={() => setHistoryDoc(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div style={{ flex: 1, overflowY: 'auto', paddingRight: '8px' }}>
+                            {loadingHistory ? (
+                                <div style={{ textAlign: 'center', padding: '40px' }}>
+                                    <Loader2 className="animate-spin" style={{ margin: '0 auto 16px' }} />
+                                    <p style={{ color: '#64748b' }}>Loading history data...</p>
+                                </div>
+                            ) : historyItems.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                                    <Clock size={48} style={{ opacity: 0.1, marginBottom: '16px' }} />
+                                    <p>No revision history found for this document.</p>
+                                </div>
+                            ) : (
+                                <div style={{ position: 'relative', paddingLeft: '32px' }}>
+                                    <div style={{ position: 'absolute', left: '11px', top: 0, bottom: 0, width: '2px', background: '#f1f5f9' }} />
+                                    {historyItems.map((item, index) => (
+                                        <div key={item.id} style={{ position: 'relative', marginBottom: '32px' }}>
+                                            <div style={{ position: 'absolute', left: '-26px', top: '4px', width: '12px', height: '12px', borderRadius: '50%', background: index === 0 ? '#6366f1' : '#cbd5e1', border: '3px solid #fff', boxShadow: '0 0 0 1px #f1f5f9' }} />
+                                            <div style={{ background: '#f8fafc', borderRadius: '16px', padding: '20px', border: '1px solid #f1f5f9' }}>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                                                    <div>
+                                                        <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '1rem' }}>{item.action_type}</div>
+                                                        <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{new Date(item.created_at).toLocaleString()}</div>
+                                                    </div>
+                                                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#6366f1', background: '#eef2ff', padding: '4px 10px', borderRadius: '20px' }}>
+                                                        {item.action_by_name || 'System User'}
+                                                    </div>
+                                                </div>
+                                                <div style={{ fontSize: '0.9rem', color: '#475569', lineHeight: 1.5, background: '#fff', padding: '12px', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+                                                    {item.description || 'No description provided.'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+                            <button onClick={() => setHistoryDoc(null)} className="btn btn-primary" style={{ padding: '10px 30px' }}>Done</button>
+                        </div>
                     </div>
                 </div>
             )}
