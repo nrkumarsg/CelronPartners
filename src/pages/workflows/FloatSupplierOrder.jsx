@@ -18,11 +18,12 @@ import {
     AlertCircle,
     ChevronDown,
     ChevronUp,
-    ExternalLink
+    ExternalLink,
+    BadgeDollarSign
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { shortlistSupplierQuote, saveSupplierQuote } from '../../lib/workflowService';
-import { createQuotationFromSupplierQuote } from '../../lib/workflowV2Service';
+import { createQuotationFromSupplierQuote, createSupplierPOFromSupplierQuote } from '../../lib/workflowV2Service';
 
 export default function FloatSupplierOrder() {
     const navigate = useNavigate();
@@ -280,22 +281,40 @@ export default function FloatSupplierOrder() {
                                                                             Shortlist Bid
                                                                         </button>
                                                                     ) : (
-                                                                        <button 
-                                                                            disabled={isConverting}
-                                                                            onClick={async () => {
-                                                                                setIsConverting(true);
-                                                                                try {
-                                                                                    const doc = await createQuotationFromSupplierQuote(quote.id);
-                                                                                    navigate(`/workflows/editor/quotation/${doc.id}`);
-                                                                                } catch (err) {
-                                                                                    alert("Failed to generate quotation");
-                                                                                    setIsConverting(false);
-                                                                                }
-                                                                            }}
-                                                                            style={{ padding: '6px 12px', borderRadius: '8px', background: '#6366f1', color: '#fff', border: 'none', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                                                        >
-                                                                            <ArrowRightLeft size={14} /> Generate QTN
-                                                                        </button>
+                                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                            <button 
+                                                                                disabled={isConverting}
+                                                                                onClick={async () => {
+                                                                                    setIsConverting(true);
+                                                                                    try {
+                                                                                        const doc = await createQuotationFromSupplierQuote(quote.id);
+                                                                                        navigate(`/workflows/editor/quotation/${doc.id}`);
+                                                                                    } catch (err) {
+                                                                                        alert("Failed to generate quotation");
+                                                                                        setIsConverting(false);
+                                                                                    }
+                                                                                }}
+                                                                                style={{ padding: '6px 12px', borderRadius: '8px', background: '#6366f1', color: '#fff', border: 'none', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                                                                            >
+                                                                                <ArrowRightLeft size={14} /> Generate QTN
+                                                                            </button>
+                                                                            <button 
+                                                                                disabled={isConverting}
+                                                                                onClick={async () => {
+                                                                                    setIsConverting(true);
+                                                                                    try {
+                                                                                        const doc = await createSupplierPOFromSupplierQuote(quote.id);
+                                                                                        navigate(`/workflows/editor/purchase-order/${doc.id}`);
+                                                                                    } catch (err) {
+                                                                                        alert("Failed to generate supplier PO: " + err.message);
+                                                                                        setIsConverting(false);
+                                                                                    }
+                                                                                }}
+                                                                                style={{ padding: '6px 12px', borderRadius: '8px', background: '#059669', color: '#fff', border: 'none', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                                                                            >
+                                                                                <BadgeDollarSign size={14} /> Generate Supplier PO
+                                                                            </button>
+                                                                        </div>
                                                                     )}
                                                                     <button 
                                                                         onClick={() => handleRecordQuote(quote)}

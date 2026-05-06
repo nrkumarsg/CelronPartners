@@ -575,6 +575,78 @@ export const createQuotationFromSupplierQuote = async (quoteId) => {
 };
 
 /**
+ * Convert Shortlisted Supplier Quote -> V2 Document (Purchase Order to Supplier)
+ */
+export const createSupplierPOFromSupplierQuote = async (quoteId) => {
+    // 1. Fetch the Supplier Quote with Enquiry info
+    const { data: quote, error: quoteError } = await supabase
+        .from('supplier_quotes')
+        .select(`*, enquiries:customer_enquiries(*)`)
+        .eq('id', quoteId)
+        .single();
+    if (quoteError) throw quoteError;
+
+    const enq = quote.enquiries;
+    if (!enq) throw new Error("Linked enquiry not found");
+
+    // 2. Generate Next Number for PO
+    const nextNo = await generateDocNumber(enq.company_id, 'Purchase Order');
+
+    // 3. Prepare Header
+    const docData = {
+        company_id: enq.company_id,
+        document_type: 'Purchase Order',
+        document_no: nextNo,
+        partner_id: quote.supplier_id, // Important: Partner is the Supplier
+        subject: `Order for: ${enq.enquiry_no} | ${enq.subject || ''}`,
+        customer_ref: enq.customer_ref,
+        status: 'Draft',
+        currency: 'SGD',
+        subtotal: quote.quote_amount || 0,
+        total_amount: (quote.quote_amount || 0), // POs usually don't have GST added by us, but by supplier. Let's keep subtotal for now.
+        enquiry_id: enq.id,
+        vessel_id: enq.vessel_id,
+        work_location_id: enq.work_location_id
+    };
+
+    // 4. Save Header
+    const { data: savedDoc, error: saveError } = await supabase
+        .from('workflow_documents')
+        .insert([docData])
+        .select()
+        .single();
+    if (saveError) throw saveError;
+
+    // 5. Handle Line Items (Map items from enquiry with supplier pricing)
+    const items = enq.catalog_items || [];
+    if (items.length > 0) {
+        // Average the supplier price across items if we can't map them 1:1
+        const avgPrice = (quote.quote_amount || 0) / items.length;
+
+        const itemsToInsert = items.map((item, index) => ({
+            document_id: savedDoc.id,
+            item_id: item.id || item.item_id || null,
+            description: item.name || item.description,
+            details: item.specification || item.details || '',
+            quantity: item.qty || item.quantity || 1,
+            unit_price: avgPrice,
+            uom: item.unit || item.uom || 'UNIT(S)',
+            amount: avgPrice * (item.qty || item.quantity || 1),
+            sort_order: index,
+            tax_rate: 0, // PO tax handled by supplier
+            tax_enabled: false
+        }));
+
+        const { error: itemError } = await supabase
+            .from('workflow_line_items')
+            .insert(itemsToInsert);
+        if (itemError) throw itemError;
+    }
+
+    return savedDoc;
+};
+
+/**
  * Create a Revision of an existing Document
  */
 export const createDocumentRevision = async (docId) => {

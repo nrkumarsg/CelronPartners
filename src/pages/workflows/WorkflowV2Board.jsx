@@ -692,7 +692,21 @@ export default function WorkflowV2Board() {
                                                 <div style={{ fontWeight: 500 }}>{doc.partners?.name || 'Walk-in'}</div>
                                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{doc.subject || '-'}</div>
                                             </td>
-                                            <td>{doc.customer_po_no || '-'}</td>
+                                            <td>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                    <span style={{ fontWeight: 600, color: '#4f46e5', fontSize: '0.85rem' }}>{doc.customer_po_no || 'N/A'}</span>
+                                                    {doc.customer_po_attachment_url && (
+                                                        <a 
+                                                            href={doc.customer_po_attachment_url} 
+                                                            target="_blank" 
+                                                            rel="noreferrer"
+                                                            style={{ fontSize: '0.65rem', color: '#6366f1', textDecoration: 'underline', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                        >
+                                                            <FileText size={10} /> View PO
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            </td>
                                             <td>{doc.customer_po_date ? formatDate(doc.customer_po_date) : '-'}</td>
                                             <td>{doc.contacts?.first_name || '-'}</td>
                                             <td>
@@ -1039,7 +1053,8 @@ export default function WorkflowV2Board() {
                             <button className="btn btn-secondary" onClick={() => setShowEnquiryForm(false)}>Cancel</button>
                         </div>
                         <CustomerEnquiryForm 
-                            onSuccess={() => {
+                            onClose={() => setShowEnquiryForm(false)}
+                            onSave={() => {
                                 setShowEnquiryForm(false);
                                 fetchDocs();
                             }} 
@@ -1252,6 +1267,7 @@ export default function WorkflowV2Board() {
                                             <th>Date</th>
                                             <th>Signature</th>
                                             <th>Status</th>
+                                            {activeType === 'Job' && <th style={{ width: '150px' }}>Customer PO</th>}
                                             <th style={{ textAlign: 'right' }}>Actions</th>
                                         </tr>
                                     </thead>

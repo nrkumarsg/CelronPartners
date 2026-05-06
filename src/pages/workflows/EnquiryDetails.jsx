@@ -6,7 +6,7 @@ import { convertEnquiryToV2Document } from '../../lib/workflowV2Service';
 
 import { getPartners, getDocumentSettings, saveVessel, saveWorkLocation } from '../../lib/store';
 import { getCatalogItems, createCatalogItem, updateCatalogItem } from '../../lib/catalogService';
-import { ArrowLeft, ArrowRight, Send, Ship, Mail, Phone, ExternalLink, Database, FolderPlus, ArrowRightLeft, FileText, CheckCircle2, Clock, DollarSign, BadgeDollarSign, ShieldCheck, Plus, Search, Trash, Save, Edit, AlertTriangle, Users, Eye, MailCheck, Download, Calendar, ChevronDown, PlusCircle, MapPin, MessageSquare, Sparkles } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Send, Ship, Mail, Phone, ExternalLink, Database, FolderPlus, ArrowRightLeft, FileText, CheckCircle2, Clock, DollarSign, BadgeDollarSign, ShieldCheck, Plus, Search, Trash, Save, Edit, AlertTriangle, Users, Eye, MailCheck, Download, Calendar, ChevronDown, PlusCircle, MapPin, MessageSquare, Sparkles, Building2, Upload, ImageIcon, Copy, Loader2, Crop as CropIcon } from 'lucide-react';
 import UploadOverlay from '../../components/common/UploadOverlay';
 import SafeDriveLink from '../../components/common/SafeDriveLink';
 import EmailPreviewModal from '../../components/workflows/EmailPreviewModal';
@@ -263,12 +263,95 @@ export default function EnquiryDetails() {
     };
 
 
+    const [isSavingMaster, setIsSavingMaster] = useState(false);
+    const [attachment, setAttachment] = useState(null);
+
+    const handleSaveMaster = async () => {
+        if (!enquiry.customer_id) return alert("Please select a customer first.");
+        
+        setIsSavingMaster(true);
+        try {
+            const { createEnquiry, generateEnquiryNo } = await import('../../lib/workflowService');
+            const { validateToken } = await import('../../lib/googleAuthService');
+            
+            let gdriveFileId = enquiry?.gdrive_file_id || null;
+            let gdriveFileLink = enquiry?.gdrive_file_link || null;
+            let projectFolderId = enquiry?.gdrive_folder_id || null;
+
+            const accessToken = localStorage.getItem('google_access_token');
+            const isValid = await validateToken(accessToken);
+
+            // 1. Provision Folder Structure if needed
+            if (accessToken && isValid && !projectFolderId) {
+                try {
+                    const { provisionFullProjectStructure } = await import('../../lib/driveService');
+                    const settings = await getDocumentSettings();
+                    const topRootId = settings?.gdrive_celron_root_id || settings?.google_drive_folder_id;
+                    if (topRootId) {
+                        const year = `YEAR${new Date().getFullYear()}`;
+                        const partner = allPartners.find(c => c.id === enquiry.customer_id)?.name || 'Unknown Partner';
+                        const enq_no = enquiry.enquiry_no === 'Draft' ? 'NEW' : enquiry.enquiry_no;
+                        projectFolderId = await provisionFullProjectStructure(accessToken, topRootId, year, `${enq_no} - ${partner}`);
+                    }
+                } catch (e) { console.error("Folder creation failed", e); }
+            }
+
+            // 2. Handle Attachment Upload
+            if (attachment && accessToken && isValid && projectFolderId) {
+                const { createFolderStructure, uploadFileToDrive } = await import('../../lib/driveService');
+                const subFolderId = await createFolderStructure(accessToken, '1. Customer_Request_&_Offer', projectFolderId);
+                const uploadResult = await uploadFileToDrive(accessToken, attachment, {
+                    folderId: subFolderId,
+                    title: attachment.name,
+                    company_id: profile.company_id
+                });
+                gdriveFileId = uploadResult.id;
+                gdriveFileLink = uploadResult.webViewLink;
+            }
+
+            const payload = {
+                ...enquiry,
+                company_id: profile.company_id,
+                user_id: profile.id,
+                catalog_items: selectedItems,
+                gdrive_file_id: gdriveFileId,
+                gdrive_file_link: gdriveFileLink,
+                gdrive_folder_id: projectFolderId
+            };
+
+            // Remove non-schema fields
+            const invalidColumns = ['vessels', 'work_locations', 'customer', 'contact', 'vessel_name', 'location_name'];
+            invalidColumns.forEach(p => delete payload[p]);
+
+            if (id === 'new') {
+                const enq_no = await generateEnquiryNo(profile.company_id);
+                payload.enquiry_no = enq_no;
+                const { data, error } = await createEnquiry(payload);
+                if (error) throw error;
+                alert(`Enquiry ${enq_no} created successfully!`);
+                navigate(`/workflows/enquiry/${data.id}`, { replace: true });
+            } else {
+                const { error } = await updateEnquiry(id, payload);
+                if (error) throw error;
+                alert("Changes saved successfully!");
+                refreshEnquiry();
+            }
+        } catch (err) {
+            console.error("Master Save Failed:", err);
+            alert("Failed to save enquiry: " + (err.message || err));
+        } finally {
+            setIsSavingMaster(false);
+        }
+    };
+
     if (loading) return <div className="loading-state">Loading details...</div>;
     if (!enquiry) return <div className="page-container"><h2>Enquiry Not Found</h2></div>;
 
     return (
         <>
             <div className="page-container" style={{ background: '#f8fafc', minHeight: '100vh', padding: '24px' }}>
+                <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
             {/* 1. Status Navigation Bar */}
             <div style={{ display: 'flex', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px', overflow: 'hidden' }}>
                 {['New Enquiry', 'RFQ Floated', 'Quotation Sent', 'Job Created'].map((status) => (
@@ -312,28 +395,68 @@ export default function EnquiryDetails() {
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button 
-                        onClick={() => refreshEnquiry()}
+                        onClick={handleSaveMaster}
+                        disabled={isSavingMaster}
                         className="btn btn-sm btn-primary" 
                         style={{ background: '#6366f1', display: 'flex', alignItems: 'center', gap: '6px' }}
                     >
-                        <Save size={16} /> Save
+                        {isSavingMaster ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />} 
+                        {id === 'new' ? 'Create Enquiry' : 'Save Changes'}
                     </button>
-                    <button onClick={() => window.open(`/workflows/enquiry/print/${id}`, '_blank')} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Download size={16} /> Print PDF</button>
-                    <button onClick={handleFloatQuotation} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={16} /> Send by email</button>
-                    <button onClick={handleWhatsApp} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#25D366', color: '#fff', border: 'none' }}><MessageSquare size={16} /> WhatsApp Share</button>
-                    <button onClick={handleConvertToV2} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#6366f1', borderColor: '#6366f1' }}><ArrowRightLeft size={16} /> Convert to Quote</button>
-                    <button onClick={handleConvertToOrder} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#059669', borderColor: '#059669' }}><BadgeDollarSign size={16} /> Convert to Order</button>
+                    {id !== 'new' && (
+                        <>
+                            <button onClick={() => window.open(`/workflows/enquiry/print/${id}`, '_blank')} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Download size={16} /> Print PDF</button>
+                            <button onClick={handleFloatQuotation} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Mail size={16} /> Send by email</button>
+                            <button onClick={handleWhatsApp} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#25D366', color: '#fff', border: 'none' }}><MessageSquare size={16} /> WhatsApp Share</button>
+                            <button onClick={handleConvertToV2} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#6366f1', borderColor: '#6366f1' }}><ArrowRightLeft size={16} /> Convert to Quote</button>
+                            <button onClick={handleConvertToOrder} className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#059669', borderColor: '#059669' }}><BadgeDollarSign size={16} /> Convert to Order</button>
+                        </>
+                    )}
                     <button className="btn btn-sm btn-outline" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Plus size={16} /> Create Revision</button>
                 </div>
             </div>
 
             {/* 3. Info Grid (Enquiry Template) */}
             <div className="glass-panel" style={{ padding: '24px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', marginBottom: '24px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                        <div className="form-group">
+                            <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.6 }}>Customer *</label>
+                            <div style={{ position: 'relative' }}>
+                                <select 
+                                    className="form-select"
+                                    required
+                                    value={enquiry.customer_id || ''}
+                                    onChange={(e) => handleUpdateHeader({ customer_id: e.target.value, contact_id: '' })}
+                                    style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 36px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', fontWeight: 600 }}
+                                >
+                                    <option value="">Select a customer...</option>
+                                    {allPartners.filter(p => Array.isArray(p.types) && p.types.includes('Customer')).map(c => (
+                                        <option key={c.id} value={c.id}>{c.name}</option>
+                                    ))}
+                                </select>
+                                <Building2 size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--accent)' }} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.6 }}>Contact</label>
+                            <div style={{ position: 'relative' }}>
+                                <select 
+                                    className="form-select"
+                                    value={enquiry.contact_id || ''}
+                                    onChange={(e) => handleUpdateHeader({ contact_id: e.target.value })}
+                                    style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 36px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0' }}
+                                    disabled={!enquiry.customer_id}
+                                >
+                                    <option value="">{enquiry.customer_id ? 'Select a contact...' : 'Select a customer first...'}</option>
+                                    {allPartners.find(p => p.id === enquiry.customer_id)?.contacts?.map(cnt => (
+                                        <option key={cnt.id} value={cnt.id}>{cnt.name}</option>
+                                    ))}
+                                </select>
+                                <Users size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                            </div>
+                        </div>
+                    </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                        {/* 
-                            Customer selection hidden as it's now handled by selection in 
-                            the Floating Module for RFQ purposes. 
-                        */}
                         <div className="form-group">
                             <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.6 }}>Subject / Project Notes</label>
                             <input 
@@ -341,7 +464,7 @@ export default function EnquiryDetails() {
                                 className="form-input"
                                 value={enquiry?.customer_ref || ''}
                                 onChange={(e) => handleUpdateHeader({ customer_ref: e.target.value })}
-                                placeholder={enquiry.enquiry_no ? `Ref: ${enquiry.enquiry_no}` : "E.g. Spares for MV Brave..."}
+                                placeholder={enquiry.enquiry_no && enquiry.enquiry_no !== 'Draft' ? `Ref: ${enquiry.enquiry_no}` : "E.g. Spares for MV Brave..."}
                                 style={{ borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 12px' }}
                             />
                         </div>
@@ -1118,10 +1241,74 @@ export default function EnquiryDetails() {
                     total_amount: 0,
                     salesperson_name: profile?.full_name || 'CEL-RON Team'
                 }}
-                onShareFile={(msg) => {
-                    alert("PDF Sharing for Enquiries: Please use the 'Print PDF' button to generate the file first, then use your phone's share feature. Alternatively, use 'Chat Now' to send the text message.");
-                }}
             />
+            </div> {/* End of main column */}
+
+            <div style={{ width: '380px', display: 'flex', flexDirection: 'column', gap: '24px', position: 'sticky', top: '24px' }}>
+                {/* Vault / Project Attachment */}
+                <div className="glass-panel" style={{ padding: '24px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '24px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                        <div style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent)', borderRadius: '10px' }}>
+                            <FolderPlus size={20} />
+                        </div>
+                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>Project Vault</h3>
+                    </div>
+                    <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
+                        Documents uploaded here are saved into the <b>Vault</b> for central tracking and transparency.
+                    </p>
+                    
+                    <div style={{ border: '2px dashed #e2e8f0', borderRadius: '16px', padding: '24px', textAlign: 'center', background: '#f8fafc', transition: 'all 0.2s' }}>
+                        <Upload size={32} color="#94a3b8" style={{ marginBottom: '12px' }} />
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '4px' }}>Upload Final Document</div>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Supports PDF or Images</div>
+                        <input 
+                            type="file" 
+                            style={{ display: 'none' }} 
+                            id="vault-upload" 
+                            onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (!file) return;
+                                setAttachment(file);
+                            }}
+                        />
+                        <label htmlFor="vault-upload" className="btn btn-sm btn-primary" style={{ marginTop: '16px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                            {attachment ? <CheckCircle2 size={14} /> : <Plus size={14} />} 
+                            {attachment ? attachment.name.substring(0, 15) + '...' : 'Select File'}
+                        </label>
+                    </div>
+
+                    {enquiry.gdrive_file_link && (
+                        <div style={{ marginTop: '20px', padding: '16px', background: '#f0f9ff', borderRadius: '12px', border: '1px solid #bae6fd' }}>
+                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <CheckCircle2 size={14} /> Linked from Vault
+                            </div>
+                            <SafeDriveLink href={enquiry.gdrive_file_link} />
+                        </div>
+                    )}
+                </div>
+
+                {/* Smart OCR Assistant */}
+                <div className="glass-panel" style={{ padding: '24px', background: 'linear-gradient(135deg, #f5f3ff 0%, #ffffff 100%)', border: '1px solid #ddd6fe', borderRadius: '24px', boxShadow: '0 10px 25px -5px rgba(139, 92, 246, 0.1)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                        <div style={{ padding: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', borderRadius: '10px' }}>
+                            <Sparkles size={20} />
+                        </div>
+                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#1e293b' }}>AI OCR Assistant</h3>
+                    </div>
+                    
+                    <div 
+                        onClick={() => setShowOCRModal(true)}
+                        style={{ border: '2px dashed #ddd6fe', borderRadius: '16px', padding: '32px', textAlign: 'center', background: 'rgba(255,255,255,0.5)', cursor: 'pointer', transition: 'all 0.2s' }}
+                        onMouseOver={e => e.currentTarget.style.borderColor = '#8b5cf6'}
+                        onMouseOut={e => e.currentTarget.style.borderColor = '#ddd6fe'}
+                    >
+                        <ImageIcon size={32} color="#8b5cf6" style={{ marginBottom: '12px' }} />
+                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>Upload Scratch Image</div>
+                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>AI will extract line items from photos</div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
             {/* Supplier Management Modal (Image 2 style) */}
             <Modal 

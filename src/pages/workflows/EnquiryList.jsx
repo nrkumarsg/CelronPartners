@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { validateToken, connectGoogleAPI } from '../../lib/googleAuthService';
-import CustomerEnquiryForm from '../../components/CustomerEnquiryForm';
 import EditJobModal from '../../components/workflows/EditJobModal';
 import { Folder } from 'lucide-react';
 import { getWorkflowDocuments, getWorkflowCounts, deleteWorkflowDocument } from '../../lib/workflowV2Service';
@@ -308,7 +307,7 @@ export default function EnquiryList() {
                         <button
                             className="btn btn-primary"
                             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                            onClick={() => setShowEnquiryForm(true)}
+                            onClick={() => navigate('/workflows/enquiry/new')}
                         >
                             <Plus size={18} /> New Enquiry
                         </button>
@@ -735,16 +734,6 @@ export default function EnquiryList() {
                 </div>
             </div>
 
-            {(showEnquiryForm || editingEnquiry) && (
-                <CustomerEnquiryForm
-                    editingEnquiry={editingEnquiry}
-                    onClose={() => {
-                        setShowEnquiryForm(false);
-                        setEditingEnquiry(null);
-                    }}
-                    onSave={handleEnquirySaved}
-                />
-            )}
 
             {editingJob && (
                 <EditJobModal

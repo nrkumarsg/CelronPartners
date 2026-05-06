@@ -1515,7 +1515,25 @@ export default function WorkflowEditor() {
                              (formData.document_type === 'Quotation' && (formData.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : 
                              formData.document_type}
                         </div>
-                        <h1 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)' }}>{formData.document_no || 'Draft'}</h1>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <h1 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{formData.document_no || 'Draft'}</h1>
+                            {formData.customer_po_no && (
+                                <div style={{ 
+                                    background: '#e0e7ff', 
+                                    color: '#4338ca', 
+                                    padding: '4px 12px', 
+                                    borderRadius: '20px', 
+                                    fontSize: '0.75rem', 
+                                    fontWeight: 700,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    border: '1px solid #c7d2fe'
+                                }}>
+                                    <Package size={14} /> PO: {formData.customer_po_no}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
 
@@ -1861,10 +1879,10 @@ export default function WorkflowEditor() {
                 <div className="tab-container">
                     <button className={`tab ${activeTab === 'items' ? 'active' : ''}`} onClick={() => setActiveTab('items')}>Order Lines</button>
                     <button className={`tab ${activeTab === 'other' ? 'active' : ''}`} onClick={() => setActiveTab('other')}>Other Info</button>
-                            {formData.assigned_job_no && (
+                    {(formData.assigned_job_no || formData.customer_po_no) && (
                         <div style={{ display: 'flex', gap: '4px' }}>
-                            <button className={`tab ${activeTab === 'workflow' ? 'active' : ''}`} onClick={() => setActiveTab('workflow')}>Workflow Suite</button>
-                             <button className={`tab ${activeTab === 'po' ? 'active' : ''}`} onClick={() => setActiveTab('po')}>PO Details</button>
+                            {formData.assigned_job_no && <button className={`tab ${activeTab === 'workflow' ? 'active' : ''}`} onClick={() => setActiveTab('workflow')}>Workflow Suite</button>}
+                            <button className={`tab ${activeTab === 'po' ? 'active' : ''}`} onClick={() => setActiveTab('po')}>PO Details</button>
                             <button className={`tab ${activeTab === 'costing' ? 'active' : ''}`} onClick={() => setActiveTab('costing')}>Project Costing</button>
                             <button className={`tab ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => setActiveTab('payments')}>Payments & GST</button>
                             <button className={`tab ${activeTab === 'gallery' ? 'active' : ''}`} onClick={() => setActiveTab('gallery')}>Job Gallery</button>
@@ -2401,8 +2419,18 @@ export default function WorkflowEditor() {
                     <div className="glass-panel other-info">
                         <div className="grid-2">
                             <div className="form-item">
-                                <label>Company Reference</label>
-                                <input type="text" className="form-input" name="customer_ref" value={formData.customer_ref} onChange={handleHeaderChange} placeholder="PO Reference from Customer..." />
+                                <label><Package size={14} /> Customer PO No</label>
+                                <input type="text" className="form-input" name="customer_po_no" value={formData.customer_po_no} onChange={handleHeaderChange} placeholder="PO-12345 (Bridge to Job)" />
+                            </div>
+
+                            <div className="form-item">
+                                <label>Customer PO Date</label>
+                                <input type="date" className="form-input" name="customer_po_date" value={formData.customer_po_date} onChange={handleHeaderChange} />
+                            </div>
+
+                            <div className="form-item">
+                                <label>Internal Company Reference</label>
+                                <input type="text" className="form-input" name="customer_ref" value={formData.customer_ref} onChange={handleHeaderChange} placeholder="Your internal tracking..." />
                             </div>
 
                             <div className="form-item">
@@ -3034,11 +3062,11 @@ export default function WorkflowEditor() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
                                 <div className="form-item">
                                     <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>Customer PO No.</label>
-                                    <input type="text" required className="form-input" name="po_no" placeholder="PO-12345" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }} />
+                                    <input type="text" required className="form-input" name="po_no" defaultValue={formData.customer_po_no} placeholder="PO-12345" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }} />
                                 </div>
                                 <div className="form-item">
                                     <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>PO Date</label>
-                                    <input type="date" required className="form-input" name="po_date" defaultValue={new Date().toISOString().split('T')[0]} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }} />
+                                    <input type="date" required className="form-input" name="po_date" defaultValue={formData.customer_po_date || new Date().toISOString().split('T')[0]} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem' }} />
                                 </div>
                                 <div className="form-item">
                                     <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>PO Value ({formData.currency})</label>

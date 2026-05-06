@@ -12,6 +12,27 @@ export function useEnquiry(companyId, enquiryId) {
 
     const fetchData = useCallback(async () => {
         if (!companyId || !enquiryId) return;
+        
+        if (enquiryId === 'new') {
+            setEnquiry({
+                enquiry_no: 'Draft',
+                status: 'New Enquiry',
+                enquiry_date: new Date().toISOString().split('T')[0],
+                due_date: new Date(new Date().getTime() + 86400000).toISOString().split('T')[0],
+                catalog_items: [],
+                customer_id: '',
+                contact_id: '',
+                vessel_id: '',
+                work_location_id: '',
+                customer_ref: '',
+                description: '',
+                gdrive_file_link: null
+            });
+            setSelectedItems([]);
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         try {
             const [enqRes, catRes] = await Promise.all([
@@ -91,7 +112,9 @@ export function useEnquiry(companyId, enquiryId) {
 
         const updated = [...selectedItems, finalItem];
         setSelectedItems(updated);
-        await updateEnquiry(enquiryId, { catalog_items: updated });
+        if (enquiryId !== 'new') {
+            await updateEnquiry(enquiryId, { catalog_items: updated });
+        }
         setEnquiry(prev => ({ ...prev, catalog_items: updated }));
     };
 
@@ -110,7 +133,9 @@ export function useEnquiry(companyId, enquiryId) {
 
         updated[idx] = item;
         setSelectedItems(updated);
-        await updateEnquiry(enquiryId, { catalog_items: updated });
+        if (enquiryId !== 'new') {
+            await updateEnquiry(enquiryId, { catalog_items: updated });
+        }
         setEnquiry(prev => ({ ...prev, catalog_items: updated }));
     };
 
@@ -125,7 +150,7 @@ export function useEnquiry(companyId, enquiryId) {
         const updated = { ...enquiry, ...updates };
         setEnquiry(updated);
 
-        if (Object.keys(sanitizedUpdates).length > 0) {
+        if (enquiryId !== 'new' && Object.keys(sanitizedUpdates).length > 0) {
             const { error } = await updateEnquiry(enquiryId, sanitizedUpdates);
             if (error) {
                 console.error("Failed to update enquiry header:", error);
@@ -137,7 +162,9 @@ export function useEnquiry(companyId, enquiryId) {
     const handleRemoveItem = async (idx) => {
         const updated = selectedItems.filter((_, i) => i !== idx);
         setSelectedItems(updated);
-        await updateEnquiry(enquiryId, { catalog_items: updated });
+        if (enquiryId !== 'new') {
+            await updateEnquiry(enquiryId, { catalog_items: updated });
+        }
         setEnquiry(prev => ({ ...prev, catalog_items: updated }));
     };
 
