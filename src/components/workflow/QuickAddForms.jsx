@@ -114,11 +114,11 @@ export const Modal = ({ isOpen, onClose, title, children, icon: Icon, size = 'md
 };
 
 // Quick Partner Add
-export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, hideActions = false, onDataChange }) => {
+export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, hideActions = false, onDataChange, title: propTitle, defaultType = 'Supplier' }) => {
     const [formData, setFormData] = useState(initialData || {
         name: '',
         uen: '',
-        types: ['Supplier'],
+        types: [defaultType],
         address: '',
         country: '',
         email1: '',
@@ -321,7 +321,7 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                 <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, #6366f1, #10b981)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', boxShadow: '0 4px 12px rgba(99, 102, 241, 0.2)' }}>
                     <Users size={20} />
                 </div>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', fontFamily: "'Outfit', sans-serif", margin: 0 }}>{initialData ? 'Edit Customer Details' : 'Add New Customer'}</h2>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#0f172a', fontFamily: "'Outfit', sans-serif", margin: 0 }}>{propTitle || (initialData ? 'Edit Customer Details' : 'Add New Customer')}</h2>
             </div>
 
             {/* AI Research Section */}
@@ -676,7 +676,7 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                         className="btn btn-primary"
                         style={{ flex: 1, height: '48px', borderRadius: '14px', fontSize: '1rem', fontWeight: 600, background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none' }}
                     >
-                        {loading ? <Loader2 className="animate-spin" /> : (initialData ? 'Update Customer Profile' : 'Create Customer Profile')}
+                        {loading ? <Loader2 className="animate-spin" /> : (initialData ? `Update ${defaultType} Profile` : `Create ${defaultType} Profile`)}
                     </button>
                     <button
                         onClick={onCancel}
@@ -949,7 +949,7 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
 };
 
 // NEW: Combined Partner & Contact Dual Add
-export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initialContact, partners, onSuccess, onCancel }) => {
+export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initialContact, partners, onSuccess, onCancel, title, defaultType = 'Supplier' }) => {
     const [activeTab, setActiveTab] = useState('details'); // 'details' | 'documents'
     const [partnerData, setPartnerData] = useState(initialPartner || {
         name: '',
@@ -1085,6 +1085,8 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
                                 initialData={partnerData} 
                                 hideActions={true} 
                                 onDataChange={setPartnerData} 
+                                title={title}
+                                defaultType={defaultType}
                             />
                         </div>
                         <div>

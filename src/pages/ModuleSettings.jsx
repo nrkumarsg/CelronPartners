@@ -275,11 +275,14 @@ export default function ModuleSettings() {
     const handleToolSubmit = async (e) => {
         e.preventDefault();
         try {
+            let result;
             if (editingTool) {
-                await updateUserTool(editingTool.id, toolForm);
+                result = await updateUserTool(editingTool.id, toolForm);
             } else {
-                await createUserTool(toolForm);
+                result = await createUserTool(toolForm);
             }
+            if (result.error) throw result.error;
+
             setShowToolModal(false);
             loadTools();
         } catch (error) {
@@ -290,8 +293,9 @@ export default function ModuleSettings() {
 
     const handleDeleteTool = async (id) => {
         if (confirm('Delete this tool?')) {
-            await deleteUserTool(id);
-            loadTools();
+            const { error } = await deleteUserTool(id);
+            if (error) alert('Failed to delete tool: ' + error.message);
+            else loadTools();
         }
     };
 
@@ -324,11 +328,14 @@ export default function ModuleSettings() {
     const handleCommSubmit = async (e) => {
         e.preventDefault();
         try {
+            let result;
             if (editingComm) {
-                await updateCommunicationAccount(editingComm.id, commForm);
+                result = await updateCommunicationAccount(editingComm.id, commForm);
             } else {
-                await createCommunicationAccount(commForm);
+                result = await createCommunicationAccount(commForm);
             }
+            if (result.error) throw result.error;
+
             setShowCommModal(false);
             loadComms();
         } catch (error) {
@@ -339,8 +346,9 @@ export default function ModuleSettings() {
 
     const handleDeleteComm = async (id) => {
         if (confirm('Delete this account?')) {
-            await deleteCommunicationAccount(id);
-            loadComms();
+            const { error } = await deleteCommunicationAccount(id);
+            if (error) alert('Failed to delete account: ' + error.message);
+            else loadComms();
         }
     };
 

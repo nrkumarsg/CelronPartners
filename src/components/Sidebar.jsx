@@ -183,10 +183,6 @@ export default function Sidebar() {
                     <span className="nav-text">Calibration Lab</span>
                 </NavLink>
 
-                <NavLink to="/certificates" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Certificates Tracking">
-                    <ShieldCheck size={20} color="#3b82f6" />
-                    <span className="nav-text">Certificates Tracking</span>
-                </NavLink>
 
                 <NavLink to="/manuals" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Manuals & Ref. Books">
                     <Book size={20} color="#f97316" />

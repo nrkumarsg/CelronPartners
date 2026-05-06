@@ -1,5 +1,6 @@
 const API_KEYS = [
-  import.meta.env.VITE_GOOGLE_API_KEY,
+  (typeof process !== 'undefined' && process.env.VITE_GOOGLE_API_KEY) || 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY),
   'AIzaSyA_HbU2knq-UMpUf7PY7jATfmFPdMwZU18' // Hardcoded backup for critical reliability
 ].filter(Boolean);
 

@@ -138,13 +138,29 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
                     </tbody>
                 </table>
 
-                <!-- Totals Badge -->
+                <!-- Totals Section -->
                 ${!isDeliveryDoc ? `
-                    <div style="display: flex; justify-content: flex-end; margin-top: -1px;">
-                        <div style="background: #1e3a8a; color: #fff; padding: 10px 20px; border-radius: 0 0 8px 8px; min-width: 150px; display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 700;">
-                            <span>Total</span>
-                            <span style="margin-left: 20px;">${currency === 'USD' ? '$' : currency === 'SGD' ? 'SGD' : currency} ${(total_amount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                        </div>
+                    <div style="display: flex; justify-content: flex-end; margin-top: 10px;">
+                        <table style="width: 250px; border-collapse: collapse; font-size: 12px;">
+                            <tr>
+                                <td style="padding: 5px 0; color: #64748b;">Subtotal</td>
+                                <td style="padding: 5px 0; text-align: right; font-weight: 600;">${currency} ${(subtotal || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                            ${documentData.discount_amount > 0 ? `
+                                <tr>
+                                    <td style="padding: 5px 0; color: #64748b;">Discount ${documentData.discount_percent > 0 ? `(${documentData.discount_percent}%)` : ''}</td>
+                                    <td style="padding: 5px 0; text-align: right; font-weight: 600; color: #ef4444;">- ${currency} ${(documentData.discount_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                </tr>
+                            ` : ''}
+                            <tr>
+                                <td style="padding: 5px 0; color: #64748b; border-bottom: 1px solid #e2e8f0;">Tax</td>
+                                <td style="padding: 5px 0; text-align: right; font-weight: 600; border-bottom: 1px solid #e2e8f0;">${currency} ${(tax_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                            <tr style="font-size: 15px; color: #1e3a8a;">
+                                <td style="padding: 10px 0; font-weight: 700;">Total</td>
+                                <td style="padding: 10px 0; text-align: right; font-weight: 800;">${currency} ${(total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            </tr>
+                        </table>
                     </div>
                 ` : ''}
             </div>

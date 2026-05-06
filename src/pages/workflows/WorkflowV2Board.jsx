@@ -443,7 +443,7 @@ export default function WorkflowV2Board() {
                             if (config[activeType]) {
                                 window.open(config[activeType].link, '_blank');
                             } else if (activeType === 'All') {
-                                window.open('/workflows/editor/certificate/new', '_blank');
+                                setShowEnquiryForm(true);
                             } else {
                                 setShowEnquiryForm(true);
                             }
@@ -461,7 +461,7 @@ export default function WorkflowV2Board() {
                                 'Proforma Invoice': 'New Proforma Invoice',
                                 'Tax Invoice': 'New Tax Invoice',
                                 'Statement of Account': 'SOA-Recall',
-                                'All': 'New Certificate'
+                                'All': 'New Enquiry'
                             };
                             return labelMap[activeType] || `New ${activeType}`;
                         })()}

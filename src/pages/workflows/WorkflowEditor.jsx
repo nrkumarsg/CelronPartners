@@ -94,6 +94,7 @@ export default function WorkflowEditor() {
     const [paymentQuarter, setPaymentQuarter] = useState('All'); // 'All' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
     const [isOCRLoading, setIsOCRLoading] = useState(false);
     const [showOCRModal, setShowOCRModal] = useState(false);
+    const [discountType, setDiscountType] = useState('percent'); // 'percent' | 'lumpsum'
 
     const [settings, setSettings] = useState(null);
     const [logoBase64, setLogoBase64] = useState('');
@@ -710,6 +711,9 @@ export default function WorkflowEditor() {
             alert('An unexpected error occurred while loading the document.');
         }
         setLoading(false);
+        // Set discount type based on existing data
+        if (formData.discount_percent > 0) setDiscountType('percent');
+        else if (formData.discount_amount > 0) setDiscountType('lumpsum');
     };
 
     const initNewDocument = async () => {
@@ -851,38 +855,46 @@ export default function WorkflowEditor() {
         }]);
     };
 
-    // Auto-calculate totals
+    // Auto-calculate totals with 2-decimal precision
     useEffect(() => {
         const sub = lineItems.reduce((acc, curr) => acc + (parseFloat(curr.amount) || 0), 0);
+        const roundedSub = Math.round(sub * 100) / 100;
         
         // Calculate Discount
-        let discAmt = parseFloat(formData.discount_amount) || 0;
-        if (parseFloat(formData.discount_percent) > 0) {
-            discAmt = sub * (parseFloat(formData.discount_percent) / 100);
+        let discAmt = 0;
+        if (discountType === 'percent') {
+            const dPct = parseFloat(formData.discount_percent) || 0;
+            discAmt = roundedSub * (dPct / 100);
+        } else {
+            discAmt = parseFloat(formData.discount_amount) || 0;
         }
+        const roundedDiscAmt = Math.round(discAmt * 100) / 100;
         
-        const discountedSub = sub - discAmt;
+        const discountedSub = roundedSub - roundedDiscAmt;
 
         const tax = lineItems.reduce((acc, curr) => {
             if (curr.is_section || curr.is_note) return acc;
             if (curr.tax_enabled === false) return acc;
             const tRate = parseFloat(curr.tax_rate ?? 9) || 0;
             // Apply tax on discounted proportional amount
-            const itemWeight = sub > 0 ? (parseFloat(curr.amount) || 0) / sub : 0;
-            const itemDiscountedAmount = (parseFloat(curr.amount) || 0) - (discAmt * itemWeight);
+            const itemAmount = parseFloat(curr.amount) || 0;
+            const itemWeight = roundedSub > 0 ? itemAmount / roundedSub : 0;
+            const itemDiscountedAmount = itemAmount - (roundedDiscAmt * itemWeight);
             return acc + (itemDiscountedAmount * (tRate / 100));
         }, 0);
         
-        const total = discountedSub + tax;
+        const roundedTax = Math.round(tax * 100) / 100;
+        const total = discountedSub + roundedTax;
+        const roundedTotal = Math.round(total * 100) / 100;
 
         setFormData(prev => ({
             ...prev,
-            subtotal: sub,
-            tax_amount: tax,
-            total_amount: total,
-            discount_amount: discAmt
+            subtotal: roundedSub,
+            tax_amount: roundedTax,
+            total_amount: roundedTotal,
+            discount_amount: roundedDiscAmt
         }));
-    }, [lineItems, formData.discount_percent, formData.discount_amount]);
+    }, [lineItems, formData.discount_percent, formData.discount_amount, discountType]);
 
     const handleHeaderChange = (e) => {
         const { name, value } = e.target;
@@ -988,7 +1000,7 @@ export default function WorkflowEditor() {
         if (field === 'quantity' || field === 'unit_price') {
             const qty = parseFloat(updated[index].quantity) || 0;
             const price = parseFloat(updated[index].unit_price) || 0;
-            updated[index].amount = qty * price;
+            updated[index].amount = Math.round(qty * price * 100) / 100;
         }
 
         setLineItems(updated);
@@ -1415,14 +1427,25 @@ export default function WorkflowEditor() {
                 })
             });
 
-            const data = await response.json();
-            if (!response.ok) throw new Error(data.error);
-
-            alert(`Email dispatched successfully with high-fidelity PDF attachment!`);
-            setEmailPreview(null);
+            // Check if response is JSON
+            const contentType = response.headers.get("content-type");
+            if (contentType && contentType.indexOf("application/json") !== -1) {
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Server error');
+                alert(`Email dispatched successfully!`);
+                setEmailPreview(null);
+            } else {
+                // Not JSON - probably a 500 error from Vercel/Server
+                const text = await response.text();
+                console.error('Non-JSON response:', text);
+                if (text.includes('Payload Too Large') || response.status === 413) {
+                    throw new Error('The PDF attachment is too large for the server. Try removing some photos or notes.');
+                }
+                throw new Error('The email server encountered a critical error. Please check your SMTP settings in Company Settings.');
+            }
         } catch (err) {
             console.error('Failed to send email:', err);
-            alert(`Failed to send email: ${err.message || 'Please try again.'}`);
+            alert(`Failed to send email: ${err.message}`);
         } finally {
             setSaving(false);
         }
@@ -1576,7 +1599,7 @@ export default function WorkflowEditor() {
                                             <option value="">Choose {formData.document_type === 'Purchase Order' ? 'supplier' : 'partner'}...</option>
                                             <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New {formData.document_type === 'Purchase Order' ? 'Supplier' : 'Customer'}</option>
                                             {partners
-                                                .filter(p => formData.document_type !== 'Purchase Order' || p.category === 'Supplier')
+                                                .filter(p => formData.document_type !== 'Purchase Order' || (p.types && p.types.includes('Supplier')) || p.category === 'Supplier')
                                                 .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                         </select>
                                         <button 
@@ -1603,7 +1626,7 @@ export default function WorkflowEditor() {
                                             <option value="">Choose contact...</option>
                                             <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New Contact</option>
                                             {contacts
-                                                .filter(c => !formData.partner_id || c.partnerId === formData.partner_id)
+                                                .filter(c => formData.partner_id && c.partnerId === formData.partner_id)
                                                 .map(c => {
                                                     const pName = partners.find(p => p.id === c.partnerId)?.name;
                                                     return <option key={c.id} value={c.id}>{c.name} {pName ? `(${pName})` : ''}</option>;
@@ -2287,16 +2310,38 @@ export default function WorkflowEditor() {
                                     <div className="summary-row" style={{ color: 'var(--accent)', fontWeight: 600 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                             <span>Discount:</span>
-                                            <input 
-                                                type="number" 
-                                                className="table-input" 
-                                                style={{ width: '50px', padding: '2px', borderBottom: '1px solid #ddd' }}
-                                                value={formData.discount_percent}
-                                                onChange={(e) => setFormData(prev => ({ ...prev, discount_percent: e.target.value, discount_amount: 0 }))}
-                                                placeholder="%"
-                                            /> %
+                                            <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', borderRadius: '8px', padding: '2px 6px', border: '1px solid #e2e8f0' }}>
+                                                <input 
+                                                    type="number" 
+                                                    className="table-input" 
+                                                    style={{ width: discountType === 'percent' ? '50px' : '80px', padding: '2px', border: 'none', background: 'transparent', textAlign: 'right', fontWeight: 700 }}
+                                                    value={discountType === 'percent' ? formData.discount_percent : (discountType === 'lumpsum' ? formData.discount_amount : 0)}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (discountType === 'percent') {
+                                                            setFormData(prev => ({ ...prev, discount_percent: val, discount_amount: 0 }));
+                                                        } else {
+                                                            setFormData(prev => ({ ...prev, discount_amount: val, discount_percent: 0 }));
+                                                        }
+                                                    }}
+                                                    placeholder="0"
+                                                />
+                                                <select 
+                                                    value={discountType}
+                                                    onChange={(e) => {
+                                                        const newType = e.target.value;
+                                                        setDiscountType(newType);
+                                                        // Reset values on toggle to avoid confusion
+                                                        setFormData(prev => ({ ...prev, discount_percent: 0, discount_amount: 0 }));
+                                                    }}
+                                                    style={{ border: 'none', background: 'transparent', fontSize: '0.75rem', fontWeight: 800, color: '#475569', cursor: 'pointer', outline: 'none' }}
+                                                >
+                                                    <option value="percent">%</option>
+                                                    <option value="lumpsum">{formData.currency}</option>
+                                                </select>
+                                            </div>
                                         </div>
-                                        <span>- {formData.currency} {(formData.discount_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                        <span>- {formData.currency} {(formData.discount_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                     </div>
                                     <div className="summary-row">
                                         <span>Taxes:</span>

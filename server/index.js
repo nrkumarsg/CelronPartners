@@ -1,4 +1,5 @@
 import './loadEnv.js';
+import nodemailer from 'nodemailer';
 import express from 'express';
 import cors from 'cors';
 import { runUniversalSearch } from '../src/lib/universalFinder.js';
@@ -6,7 +7,8 @@ import { supabase } from '../src/lib/supabase.js';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // ---- 1️⃣ Search endpoint -------------------------------------------------
 app.post('/api/universal-finder/search', async (req, res) => {
@@ -214,8 +216,74 @@ app.post('/api/universal-finder/chat', async (req, res) => {
 
         res.json({ response: aiResponse });
     } catch (e) {
-        console.error("[Chat Error]:", e);
+        console.error("[Backend] Chat Error:", e);
         res.status(500).json({ error: e.message });
+    }
+});
+
+// ---- 5️⃣ Email Dispatch ----------------------------------------------------
+app.post('/api/send-email', async (req, res) => {
+    const { to, cc, bcc, subject, body, attachments, company_id, from_email } = req.body;
+
+    try {
+        console.log(`[Backend] Email request to: ${to} from company: ${company_id}`);
+        // Fetch SMTP Credentials securely straight from company settings
+        const { data: settings, error: settingsErr } = await supabase
+            .from('document_settings')
+            .select('*')
+            .eq('company_id', company_id)
+            .single();
+
+        if (settingsErr || !settings) {
+            console.error("[Backend] SMTP Error: Settings not found", settingsErr);
+            return res.status(400).json({ error: 'Company settings not found. Please configure SMTP in the Company Settings tab.' });
+        }
+
+        const isAccountsEmail = from_email?.toLowerCase() === settings.accounts_email?.toLowerCase();
+
+        const senderEmail = isAccountsEmail ? settings.accounts_email : settings.sales_email;
+        const smtpPassword = isAccountsEmail ? settings.accounts_password : settings.sales_password;
+        const smtpHost = settings.smtp_host || 'smtp.zoho.com';
+        const smtpPort = parseInt(settings.smtp_port) || 465;
+
+        if (!senderEmail || !smtpPassword) {
+            console.warn(`[Backend] SMTP Error: Credentials missing for ${from_email}`);
+            return res.status(400).json({ error: `App Password or Sender Email missing for ${from_email}. Please configure it in the Communications section of Company Settings.` });
+        }
+
+        const transporter = nodemailer.createTransport({
+            host: smtpHost,
+            port: smtpPort,
+            secure: smtpPort === 465,
+            auth: {
+                user: senderEmail,
+                pass: smtpPassword,
+            },
+        });
+
+        // Convert attached base64 files back to buffer form
+        const mailAttachments = (attachments || []).map(file => ({
+            filename: file.name,
+            content: Buffer.from(file.content.split('base64,')[1] || file.content, 'base64'),
+            contentType: file.type
+        }));
+
+        const mailOptions = {
+            from: `"Celron Hub" <${senderEmail}>`,
+            to,
+            cc,
+            bcc,
+            subject,
+            text: body,
+            attachments: mailAttachments
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        console.log(`[Backend] Email sent successfully: ${info.messageId}`);
+        res.json({ success: true, messageId: info.messageId });
+    } catch (e) {
+        console.error("[Backend] Email Send Error:", e);
+        res.status(500).json({ error: e.message || 'Failed to send email' });
     }
 });
 

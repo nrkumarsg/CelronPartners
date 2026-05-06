@@ -319,7 +319,9 @@ app.post('/api/send-email', async (req, res) => {
     const { to, cc, bcc, subject, body, attachments, company_id, from_email } = req.body;
 
     try {
-        // Fetch SMTP Credentials securely straight from company settings
+        console.log(`[EmailAPI] Request to send email from ${from_email} for company ${company_id}`);
+
+        // 1. Fetch SMTP Credentials
         const { data: settings, error: settingsErr } = await supabase
             .from('document_settings')
             .select('*')
@@ -327,39 +329,46 @@ app.post('/api/send-email', async (req, res) => {
             .single();
 
         if (settingsErr || !settings) {
+            console.error(`[EmailAPI] Settings error:`, settingsErr);
             return res.status(400).json({ error: 'Company settings not found. Please configure SMTP in the Company Settings tab.' });
         }
 
         const isAccountsEmail = from_email?.toLowerCase() === settings.accounts_email?.toLowerCase();
-
         const senderEmail = isAccountsEmail ? settings.accounts_email : settings.sales_email;
         const smtpPassword = isAccountsEmail ? settings.accounts_password : settings.sales_password;
         const smtpHost = settings.smtp_host || 'smtp.zoho.com';
         const smtpPort = parseInt(settings.smtp_port) || 465;
 
         if (!senderEmail || !smtpPassword) {
-            return res.status(400).json({ error: `App Password or Sender Email missing for ${from_email}. Please configure it in the Communications section of Company Settings.` });
+            console.error(`[EmailAPI] Missing credentials for ${from_email}`);
+            return res.status(400).json({ error: `App Password or Sender Email missing for ${from_email}. Please configure it in Company Settings.` });
         }
 
-
-
+        // 2. Configure Transporter
         const transporter = nodemailer.createTransport({
             host: smtpHost,
             port: smtpPort,
-            secure: smtpPort === 465, // true for 465, false for other ports
+            secure: smtpPort === 465,
             auth: {
                 user: senderEmail,
                 pass: smtpPassword,
             },
+            connectionTimeout: 10000, // 10s timeout
+            greetingTimeout: 10000,
+            socketTimeout: 20000
         });
 
-        // Convert attached base64 files back to buffer form
-        const mailAttachments = (attachments || []).map(file => ({
-            filename: file.name,
-            content: Buffer.from(file.content.split('base64,')[1] || file.content, 'base64'),
-            contentType: file.type
-        }));
+        // 3. Process Attachments
+        const mailAttachments = (attachments || []).map(file => {
+            const content = file.content.includes('base64,') ? file.content.split('base64,')[1] : file.content;
+            return {
+                filename: file.name,
+                content: Buffer.from(content, 'base64'),
+                contentType: file.type
+            };
+        });
 
+        // 4. Send Mail
         const mailOptions = {
             from: `"Celron Hub" <${senderEmail}>`,
             to,
@@ -370,11 +379,25 @@ app.post('/api/send-email', async (req, res) => {
             attachments: mailAttachments
         };
 
+        console.log(`[EmailAPI] Sending mail via ${smtpHost}:${smtpPort}...`);
         const info = await transporter.sendMail(mailOptions);
+        console.log(`[EmailAPI] Success! Message ID: ${info.messageId}`);
+        
         res.json({ success: true, messageId: info.messageId });
     } catch (e) {
-        console.error("[Vercel API] Email Send Error:", e);
-        res.status(500).json({ error: e.message || 'Failed to send email' });
+        console.error("[EmailAPI] Detailed Error:", e);
+        
+        // Provide specific error messages for common SMTP issues
+        let userMessage = e.message || 'Failed to send email';
+        if (e.code === 'EAUTH') userMessage = 'Authentication failed. Please check your App Password.';
+        if (e.code === 'ESOCKET') userMessage = 'Connection to SMTP server timed out. Check your host and port.';
+        if (e.code === 'EENVELOPE') userMessage = 'Invalid recipient email address.';
+
+        res.status(500).json({ 
+            error: userMessage,
+            details: e.code,
+            raw: process.env.NODE_ENV === 'development' ? e.stack : undefined
+        });
     }
 });
 

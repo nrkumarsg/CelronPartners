@@ -1,6 +1,6 @@
 -- Create user_tools table
 CREATE TABLE IF NOT EXISTS public.user_tools (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES auth.users(id) NOT NULL,
     company_id UUID REFERENCES public.companies(id),
     name TEXT NOT NULL,
@@ -12,6 +12,9 @@ CREATE TABLE IF NOT EXISTS public.user_tools (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure id default is set correctly even if table existed
+ALTER TABLE public.user_tools ALTER COLUMN id SET DEFAULT gen_random_uuid();
 
 -- Enable RLS
 ALTER TABLE public.user_tools ENABLE ROW LEVEL SECURITY;

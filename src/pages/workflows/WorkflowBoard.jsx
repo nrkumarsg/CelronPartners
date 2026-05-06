@@ -178,16 +178,16 @@ export default function WorkflowBoard() {
                                     const stStyle = getStatusStyle(enq.status);
                                     return (
                                         <tr key={enq.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                            <td style={{ padding: '16px 24px', fontWeight: 600, color: '#1e293b' }}>{enq.enquiry_no}</td>
+                                            <td style={{ padding: '16px 24px', fontWeight: 600, color: '#1e293b' }}>{enq?.enquiry_no}</td>
                                             <td style={{ padding: '16px 24px', color: '#475569' }}>
                                                 <div>{enq.customer?.name || 'Walk-in / Unknown'}</div>
-                                                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Source: {enq.source_type}</div>
+                                                <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Source: {enq?.source_type}</div>
                                             </td>
-                                            <td style={{ padding: '16px 24px', color: '#64748b' }}>{enq.source_type}</td>
-                                            <td style={{ padding: '16px 24px', color: '#64748b' }}>{formatDate(enq.created_at)}</td>
+                                            <td style={{ padding: '16px 24px', color: '#64748b' }}>{enq?.source_type}</td>
+                                            <td style={{ padding: '16px 24px', color: '#64748b' }}>{formatDate(enq?.created_at)}</td>
                                             <td style={{ padding: '16px 24px' }}>
                                                 <span style={{ background: stStyle.bg, color: stStyle.color, padding: '4px 12px', borderRadius: '16px', fontSize: '0.8rem', fontWeight: 500 }}>
-                                                    {enq.status}
+                                                    {enq?.status}
                                                 </span>
                                             </td>
                                             <td style={{ padding: '16px 24px', textAlign: 'right' }}>
@@ -216,16 +216,16 @@ export default function WorkflowBoard() {
                                     const stStyle = getStatusStyle(job.status);
                                     return (
                                         <tr key={job.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                            <td style={{ padding: '16px 24px', fontWeight: 600, color: '#10b981' }}>{job.job_no}</td>
+                                            <td style={{ padding: '16px 24px', fontWeight: 600, color: '#10b981' }}>{job?.job_no}</td>
                                             <td style={{ padding: '16px 24px', color: '#475569' }}>
                                                 <div>{job.enquiries?.partners?.name || 'Customer'}</div>
                                                 <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>From: {job.enquiries?.enquiry_no}</div>
                                             </td>
-                                            <td style={{ padding: '16px 24px', color: '#64748b' }}>{job.type} Job</td>
-                                            <td style={{ padding: '16px 24px', color: '#64748b' }}>{formatDate(job.created_at)}</td>
+                                            <td style={{ padding: '16px 24px', color: '#64748b' }}>{job?.type} Job</td>
+                                            <td style={{ padding: '16px 24px', color: '#64748b' }}>{formatDate(job?.created_at)}</td>
                                             <td style={{ padding: '16px 24px' }}>
                                                 <span style={{ background: stStyle.bg, color: stStyle.color, padding: '4px 12px', borderRadius: '16px', fontSize: '0.8rem', fontWeight: 500 }}>
-                                                    {job.status}
+                                                    {job?.status}
                                                 </span>
                                             </td>
                                             <td style={{ padding: '16px 24px', textAlign: 'right' }}>

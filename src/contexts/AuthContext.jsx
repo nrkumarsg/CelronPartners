@@ -131,13 +131,14 @@ export const AuthProvider = ({ children }) => {
             }
 
             // Filter companies if not superadmin (logic actually in service but to be safe)
-            const myComps = profileData?.role === 'superadmin' 
-                ? companiesRes.data 
-                : companiesRes.data?.filter(c => c.id === profileData.company_id);
+            const allComps = companiesRes?.data || [];
+            const myComps = (profileData && profileData.role === 'superadmin') 
+                ? allComps 
+                : allComps.filter(c => c.id === (profileData?.company_id));
 
             const storedCompany = localStorage.getItem('active_company_id');
-            const defaultCompany = (storedCompany && (myComps || []).some(c => c.id === storedCompany))
-                ? storedCompany : (myComps?.[0]?.id || profileData.company_id);
+            const defaultCompany = (storedCompany && myComps.some(c => c.id === storedCompany))
+                ? storedCompany : (myComps[0]?.id || profileData?.company_id);
 
             const activeComp = myComps?.find(c => c.id === defaultCompany);
             if (activeComp?.enabled_modules && profileData.role !== 'superadmin') {
@@ -169,6 +170,8 @@ export const AuthProvider = ({ children }) => {
             console.log('Auth: Workspace ready.');
         } catch (err) {
             console.warn('Auth: Profile refresh error', err);
+            // Even on error, we must stop loading so the app can attempt to render with cached/default data
+            setLoading(false);
         } finally {
             isRefreshingRef.current = false;
             setLoading(false);
@@ -261,6 +264,12 @@ export const AuthProvider = ({ children }) => {
             redirectTo: `${window.location.origin}/reset-password`,
         }),
         updatePassword: (newPassword) => supabase.auth.updateUser({ password: newPassword }),
+        signInWithGoogle: () => supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: `${window.location.origin}/oauth-callback`
+            }
+        }),
         refreshProfile: async () => {
             if (user) {
                 const { data } = await getProfile(user.id);

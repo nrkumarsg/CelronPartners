@@ -209,20 +209,41 @@ export default function CalibrationLab() {
         if (!companyId) return;
         setLoading(true);
         try {
-            const [recRes, insRes, jobRes, parRes, wfRes] = await Promise.all([
+            const [recRes, insRes, jobRes, parRes, wfRes, vRes, wfJobRes] = await Promise.all([
                 getCalibrationRecords(),
                 getInstruments(),
                 getJobs(companyId),
                 getPartners(),
                 getWorkflowDocuments(companyId, 'Certificate'),
-                fetchVessels()
+                fetchVessels(),
+                getWorkflowDocuments(companyId, 'Job')
             ]);
+            
             if (recRes?.data) setRecords(recRes.data);
             if (insRes?.data) setInstruments(insRes.data);
-            if (jobRes?.data) setJobs(jobRes.data);
+            
+            // Unify Jobs: Merge legacy jobs table with unified workflow documents (type=Job)
+            const legacyJobs = jobRes?.data || [];
+            const unifiedJobs = (wfJobRes?.data || []).map(j => ({
+                id: j.id,
+                job_no: j.document_no,
+                vessel_id: j.vessel_id,
+                customer_id: j.partner_id,
+                customer_name: j.partners?.name || '',
+                vessel_name: j.vessels?.vessel_name || '',
+                created_at: j.created_at
+            }));
+            
+            const mergedJobs = [...legacyJobs, ...unifiedJobs].sort((a, b) => 
+                new Date(b.created_at) - new Date(a.created_at)
+            );
+            setJobs(mergedJobs);
+            
             if (parRes?.data) setPartners(parRes.data);
             if (wfRes?.data) setWorkflowDocs(wfRes.data);
             else if (wfRes?.error) setWorkflowDocs([]); // Safety fallback
+            
+            // fetchVessels() updates the zustand store automatically, no need to set state here
         } catch (err) {
             console.error("Error fetching calibration data:", err);
         } finally {
@@ -866,7 +887,9 @@ export default function CalibrationLab() {
                                             setFormData({
                                                 ...formData,
                                                 job_id: val,
-                                                job_no: selectedJob ? selectedJob.job_no : ''
+                                                job_no: selectedJob ? selectedJob.job_no : '',
+                                                vessel_id: selectedJob?.vessel_id || '',
+                                                customer_id: selectedJob?.customer_id || ''
                                             });
                                         }
                                     }}

@@ -6,7 +6,7 @@ import { useWorkLocationsStore } from '../lib/workLocationsStore';
 import { connectGoogleAPI } from '../lib/googleAuthService';
 import { createEnquiry, generateEnquiryNo, updateEnquiry } from '../lib/workflowService';
 import { uploadFileToDrive, checkFileExists } from '../lib/driveService';
-import { X, Upload, Save, FileText, ImageIcon, Crop as CropIcon, Copy, Loader2, Sparkles, ExternalLink, AlertCircle } from 'lucide-react';
+import { X, Upload, Save, FileText, ImageIcon, Crop as CropIcon, Copy, Loader2, Sparkles, ExternalLink, AlertCircle, Ship, ChevronDown } from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
@@ -17,7 +17,7 @@ import { isTokenValid, validateToken } from '../lib/googleAuthService';
 import { getCatalogItems, createCatalogItem, updateCatalogItem } from '../lib/catalogService';
 import GDriveConnectionModal from './common/GDriveConnectionModal';
 import { Search, Plus, Trash, Database, Edit, Pencil } from 'lucide-react';
-import { QuickPartnerAdd, QuickContactAdd, QuickVesselAdd, QuickWorkLocationAdd } from './workflow/QuickAddForms';
+import { Modal, QuickPartnerAdd, QuickContactAdd, QuickVesselAdd, QuickWorkLocationAdd } from './workflow/QuickAddForms';
 import { supabase } from '../lib/supabase';
 
 const ENQUIRY_SOURCES = [
@@ -31,6 +31,8 @@ const ENQUIRY_SOURCES = [
 
 export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = null, inline = false }) {
     const { profile } = useAuth();
+    if (!profile) return null; // Defensive check to prevent crashes
+
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -116,7 +118,7 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
     const loadCustomers = async () => {
         try {
             const data = await getPartners(profile);
-            setCustomers(data.filter(p => p.types && p.types.includes('Customer')));
+            setCustomers(data.filter(p => Array.isArray(p.types) && p.types.includes('Customer')));
         } catch (err) {
             console.error(err);
         }
@@ -380,9 +382,9 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
 
     const handleSaveVessel = async (vesselName) => {
         if (!vesselName) return;
-        const res = await addVessel({ vessel_name: vesselName, company_id: profile.company_id });
-        if (res.success) {
-            setFormData(prev => ({ ...prev, vessel_id: res.data.id }));
+        const res = await saveVessel({ vessel_name: vesselName, company_id: profile.company_id });
+        if (res.success || res.id) {
+            setFormData(prev => ({ ...prev, vessel_id: res.id }));
             setShowNewVesselModal(false);
         } else {
             alert("Failed to save vessel: " + res.error);
@@ -391,9 +393,9 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
 
     const handleSaveWorkLocation = async (locationName) => {
         if (!locationName) return;
-        const res = await addWorkLocation({ location_name: locationName, company_id: profile.company_id });
-        if (res.success) {
-            setFormData(prev => ({ ...prev, work_location_id: res.data.id }));
+        const res = await saveWorkLocation({ location_name: locationName, company_id: profile.company_id });
+        if (res.success || res.id) {
+            setFormData(prev => ({ ...prev, work_location_id: res.id }));
             setShowNewLocationModal(false);
         } else {
             alert("Failed to save location: " + res.error);
@@ -621,9 +623,13 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                                     >
                                         <option value="" disabled>Select a customer...</option>
                                         <option value="new_customer" style={{ fontWeight: 'bold', color: 'var(--accent)' }}>+ New Customer ↗</option>
-                                        {customers.map(c => (
-                                            <option key={c.id} value={c.id}>{c.name}</option>
-                                        ))}
+                                        {customers.length === 0 ? (
+                                            <option disabled>No customers found</option>
+                                        ) : (
+                                            customers.map(c => (
+                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                            ))
+                                        )}
                                     </select>
                                 </div>
 
@@ -1222,6 +1228,47 @@ export default function CustomerEnquiryForm({ onClose, onSave, editingEnquiry = 
                         </div>
                     </form>
                 </div>
+            )}
+            {editModal.isOpen && (
+                <Modal 
+                    isOpen={editModal.isOpen} 
+                    onClose={() => setEditModal({ isOpen: false, type: null, initialData: null })}
+                    title={`Edit ${editModal.type === 'customer_id' ? 'Customer' : editModal.type === 'contact_id' ? 'Contact' : editModal.type === 'vessel_id' ? 'Vessel' : 'Location'}`}
+                >
+                    {editModal.type === 'customer_id' && (
+                        <QuickPartnerAdd 
+                            company_id={profile.company_id}
+                            initialData={editModal.initialData}
+                            onSuccess={handleEditMasterSuccess}
+                            onCancel={() => setEditModal({ isOpen: false, type: null, initialData: null })}
+                            defaultType="Customer"
+                        />
+                    )}
+                    {editModal.type === 'contact_id' && (
+                        <QuickContactAdd 
+                            partner_id={formData.customer_id}
+                            initialData={editModal.initialData}
+                            onSuccess={handleEditMasterSuccess}
+                            onCancel={() => setEditModal({ isOpen: false, type: null, initialData: null })}
+                        />
+                    )}
+                    {editModal.type === 'vessel_id' && (
+                        <QuickVesselAdd 
+                            company_id={profile.company_id}
+                            initialData={editModal.initialData}
+                            onSuccess={handleEditMasterSuccess}
+                            onCancel={() => setEditModal({ isOpen: false, type: null, initialData: null })}
+                        />
+                    )}
+                    {editModal.type === 'work_location_id' && (
+                        <QuickWorkLocationAdd 
+                            company_id={profile.company_id}
+                            initialData={editModal.initialData}
+                            onSuccess={handleEditMasterSuccess}
+                            onCancel={() => setEditModal({ isOpen: false, type: null, initialData: null })}
+                        />
+                    )}
+                </Modal>
             )}
         </div>
     );

@@ -281,8 +281,8 @@ export default function EnquiryDetails() {
                             borderRadius: '10px', 
                             fontSize: '0.85rem', 
                             fontWeight: 700,
-                            background: enquiry.status === status ? '#eff6ff' : 'transparent',
-                            color: enquiry.status === status ? '#3b82f6' : '#94a3b8',
+                            background: enquiry?.status === status ? '#eff6ff' : 'transparent',
+                            color: enquiry?.status === status ? '#3b82f6' : '#94a3b8',
                             position: 'relative',
                             transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                             cursor: 'default'
@@ -339,7 +339,7 @@ export default function EnquiryDetails() {
                             <input 
                                 type="text"
                                 className="form-input"
-                                value={enquiry.customer_ref || ''}
+                                value={enquiry?.customer_ref || ''}
                                 onChange={(e) => handleUpdateHeader({ customer_ref: e.target.value })}
                                 placeholder={enquiry.enquiry_no ? `Ref: ${enquiry.enquiry_no}` : "E.g. Spares for MV Brave..."}
                                 style={{ borderRadius: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 12px' }}
@@ -607,7 +607,7 @@ export default function EnquiryDetails() {
                     <FileText size={16} color="#3b82f6" /> Notes & Comments
                 </h4>
                 <RichTextEditor 
-                    value={enquiry.notes || ''}
+                    value={enquiry?.notes || ''}
                     onChange={(val) => setEnquiry({ ...enquiry, notes: val })}
                     placeholder="Add additional notes here..."
                 />
@@ -823,9 +823,9 @@ export default function EnquiryDetails() {
                                 <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Internal Documents</h5>
                                 <DocumentManager referenceType="Enquiry" referenceId={id} />
                             </div>
-                            {enquiry.gdrive_file_link && !showLinkInput && (
+                            {enquiry?.gdrive_file_link && !showLinkInput && (
                                 <SafeDriveLink 
-                                    url={enquiry.gdrive_file_link} 
+                                    url={enquiry?.gdrive_file_link} 
                                     label="Open Project Drive"
                                     className="btn btn-block"
                                     style={{ 
@@ -1140,6 +1140,8 @@ export default function EnquiryDetails() {
                         setSupplierModalOpen(false);
                     }}
                     onCancel={() => setSupplierModalOpen(false)}
+                    title={editingSupplier ? "Edit Supplier Details" : "Add New Supplier"}
+                    defaultType="Supplier"
                 />
             </Modal>
 

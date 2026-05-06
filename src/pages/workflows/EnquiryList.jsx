@@ -15,6 +15,7 @@ import { validateToken, connectGoogleAPI } from '../../lib/googleAuthService';
 import CustomerEnquiryForm from '../../components/CustomerEnquiryForm';
 import EditJobModal from '../../components/workflows/EditJobModal';
 import { Folder } from 'lucide-react';
+import { getWorkflowDocuments, getWorkflowCounts, deleteWorkflowDocument } from '../../lib/workflowV2Service';
 
 export default function EnquiryList() {
     const { profile } = useAuth();
@@ -58,13 +59,11 @@ export default function EnquiryList() {
                 const { data } = await getJobs(profile.company_id);
                 if (data) setJobs(data);
             } else if (activeTab === 'rfqs') {
-                const { getWorkflowDocuments } = await import('../../lib/workflowV2Service');
                 const { data: rfqData } = await getWorkflowDocuments(profile.company_id, 'Enquiry');
                 if (rfqData) setRfqs(rfqData);
             }
 
             // Sync New Job Counts
-            const { getWorkflowCounts } = await import('../../lib/workflowV2Service');
             const { jobCount } = await getWorkflowCounts(profile.company_id);
             setNewJobCount(jobCount);
         } catch (error) {
@@ -309,9 +308,9 @@ export default function EnquiryList() {
                         <button
                             className="btn btn-primary"
                             style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                            onClick={() => window.open('/workflows/editor/certificate/new', '_blank')}
+                            onClick={() => setShowEnquiryForm(true)}
                         >
-                            <Plus size={18} /> New Certificate
+                            <Plus size={18} /> New Enquiry
                         </button>
                     </div>
                 </div>
@@ -508,9 +507,9 @@ export default function EnquiryList() {
                                 </tr>
                             ) : (
                                 filteredData.map((item) => {
-                                    const st = getStatusStyle(item.status);
-                                    const partner = activeTab === 'enquiries' ? item.customer : item.enquiries?.customer;
-                                    const contact = activeTab === 'enquiries' ? item.contact : null;
+                                    const st = getStatusStyle(item?.status) || { bg: '#f1f5f9', color: '#64748b', icon: null };
+                                    const partner = activeTab === 'enquiries' ? item?.customer : item?.enquiries?.customer;
+                                    const contact = activeTab === 'enquiries' ? item?.contact : null;
 
                                     return (
                                         <tr key={item.id} className="table-row">
@@ -523,21 +522,21 @@ export default function EnquiryList() {
                                                     }}
                                                     style={{ fontWeight: 700, color: 'var(--accent)', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline' }}
                                                 >
-                                                    {activeTab === 'enquiries' ? item.enquiry_no : 
-                                                     activeTab === 'rfqs' ? item.document_no :
-                                                     item.job_no}
+                                                    {activeTab === 'enquiries' ? item?.enquiry_no : 
+                                                     activeTab === 'rfqs' ? item?.document_no :
+                                                     item?.job_no}
                                                 </div>
 
                                                 {activeTab === 'jobs' && (
                                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                                                        From: {item.enquiries?.enquiry_no}
+                                                        From: {item?.enquiries?.enquiry_no || 'N/A'}
                                                     </div>
                                                 )}
                                             </td>
                                             <td style={{ padding: '12px 16px' }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.8rem' }}>
                                                     <Building2 size={12} color="var(--text-secondary)" />
-                                                    {activeTab === 'rfqs' ? (item.partners?.name || 'Supplier Not Set') : (partner?.name || 'Walk-in')}
+                                                    {activeTab === 'rfqs' ? (item?.partners?.name || 'Supplier Not Set') : (partner?.name || 'Walk-in')}
                                                 </div>
                                                 {contact && (
                                                     <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -554,24 +553,24 @@ export default function EnquiryList() {
                                             )}
                                             {activeTab === 'enquiries' && (
                                                 <td style={{ padding: '12px 16px' }}>
-                                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item.customer_ref || '-'}</div>
+                                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item?.customer_ref || '-'}</div>
                                                 </td>
                                             )}
                                             {activeTab === 'rfqs' && (
                                                 <td style={{ padding: '12px 16px' }}>
-                                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item.subject || '-'}</div>
+                                                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.75rem' }}>{item?.subject || '-'}</div>
                                                 </td>
                                             )}
                                             {(activeTab === 'enquiries' || activeTab === 'rfqs') && (
                                                 <td style={{ padding: '12px 16px' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#6366f1', fontWeight: 600 }}>
-                                                        {formatDate(activeTab === 'enquiries' ? item.due_date : item.expiry_date)}
+                                                        {formatDate(activeTab === 'enquiries' ? item?.due_date : item?.expiry_date)}
                                                     </div>
                                                 </td>
                                             )}
                                             {activeTab === 'jobs' && (() => {
-                                                const revenue = Number(item.po_amount || 0);
-                                                const cost = item.job_expenses?.reduce((sum, exp) => sum + Number(exp.amount || 0), 0) || 0;
+                                                const revenue = Number(item?.po_amount || 0);
+                                                const cost = item?.job_expenses?.reduce((sum, exp) => sum + Number(exp?.amount || 0), 0) || 0;
                                                 const profit = revenue - cost;
                                                 return (
                                                     <>
@@ -585,14 +584,14 @@ export default function EnquiryList() {
                                                             {(revenue > 0 || cost > 0) ? `$${profit.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '-'}
                                                         </td>
                                                         <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                                                            {item.payment_status ? (
+                                                            {item?.payment_status ? (
                                                                 <span style={{
                                                                     padding: '2px 6px', borderRadius: '10px', fontSize: '0.65rem', fontWeight: 600,
-                                                                    background: item.payment_status === 'Paid' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                                                                    color: item.payment_status === 'Paid' ? '#10b981' : '#f59e0b',
+                                                                    background: item?.payment_status === 'Paid' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
+                                                                    color: item?.payment_status === 'Paid' ? '#10b981' : '#f59e0b',
                                                                     whiteSpace: 'nowrap'
                                                                 }}>
-                                                                    {item.payment_status}
+                                                                    {item?.payment_status}
                                                                 </span>
                                                             ) : '-'}
                                                         </td>
@@ -627,17 +626,17 @@ export default function EnquiryList() {
                                                     style={{
                                                         background: 'none',
                                                         border: 'none',
-                                                        color: ((activeTab === 'enquiries' && item.gdrive_folder_id) || (activeTab === 'jobs' && item.enquiries?.gdrive_folder_id)) ? '#f59e0b' : '#6366f1',
+                                                        color: ((activeTab === 'enquiries' && item?.gdrive_folder_id) || (activeTab === 'jobs' && item?.enquiries?.gdrive_folder_id)) ? '#f59e0b' : '#6366f1',
                                                         cursor: 'pointer',
                                                         display: 'flex',
                                                         alignItems: 'center',
                                                         justifyContent: 'center',
                                                         width: '100%',
-                                                        opacity: ((activeTab === 'enquiries' && item.gdrive_folder_id) || (activeTab === 'jobs' && item.enquiries?.gdrive_folder_id)) ? 1 : 0.4
+                                                        opacity: ((activeTab === 'enquiries' && item?.gdrive_folder_id) || (activeTab === 'jobs' && item?.enquiries?.gdrive_folder_id)) ? 1 : 0.4
                                                     }}
                                                     title={((activeTab === 'enquiries' && item.gdrive_folder_id) || (activeTab === 'jobs' && item.enquiries?.gdrive_folder_id)) ? "Open Google Drive Folder" : "Click to Provision Folder"}
                                                 >
-                                                    <Folder size={20} fill={((activeTab === 'enquiries' && item.gdrive_folder_id) || (activeTab === 'jobs' && item.enquiries?.gdrive_folder_id)) ? "#f59e0b" : "currentColor"} fillOpacity={0.2} />
+                                                    <Folder size={20} fill={((activeTab === 'enquiries' && item?.gdrive_folder_id) || (activeTab === 'jobs' && item?.enquiries?.gdrive_folder_id)) ? "#f59e0b" : "currentColor"} fillOpacity={0.2} />
                                                 </button>
                                             </td>
                                             <td style={{ padding: '12px 16px', textAlign: 'right' }}>
@@ -714,7 +713,6 @@ export default function EnquiryList() {
                                                             else if (activeTab === 'jobs') handleDeleteJob(item.id, item.job_no);
                                                             else {
                                                                 if (window.confirm('Delete this RFQ?')) {
-                                                                    const { deleteWorkflowDocument } = await import('../../lib/workflowV2Service');
                                                                     await deleteWorkflowDocument(item.id);
                                                                     fetchData();
                                                                 }
