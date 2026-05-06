@@ -134,7 +134,7 @@ export const AuthProvider = ({ children }) => {
             const allComps = companiesRes?.data || [];
             const myComps = (profileData && profileData.role === 'superadmin') 
                 ? allComps 
-                : allComps.filter(c => c.id === (profileData?.company_id));
+                : allComps.filter(c => c.id === profileData?.company_id);
 
             const storedCompany = localStorage.getItem('active_company_id');
             const defaultCompany = (storedCompany && myComps.some(c => c.id === storedCompany))
