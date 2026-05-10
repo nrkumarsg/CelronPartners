@@ -7,7 +7,11 @@ import {
     MoreHorizontal, Search, Settings,
     ChevronDown, CreditCard, User, Users, MapPin, Paperclip, Pencil, Sparkles,
     FileCheck, Play, RefreshCw, AlertCircle, Loader2,
-    ExternalLink, Folder, File as FileIcon, HardDrive, Upload, MessageSquare
+    ExternalLink, Folder, File as FileIcon, HardDrive, Upload, MessageSquare,
+    ArrowRightLeft,
+    CheckCircle,
+    Copy,
+    Users2
 } from 'lucide-react';
 import { getExchangeRateWithGemini } from '../../lib/geminiService';
 import { listFolderContent, uploadFileToDrive, deleteFile, getOrCreateFolder, provisionFullProjectStructure, provisionPartnerStructure } from '../../lib/driveService';
@@ -16,12 +20,14 @@ import { extractLineItemsFromImage } from '../../lib/geminiService';
 import { useAuth } from '../../contexts/AuthContext';
 import {
     getWorkflowDocumentById,
+    getWorkflowDocuments,
     saveWorkflowDocument,
     generateDocNumber,
     createDocumentRevision,
     convertQuotationToJob,
     convertProformaToTaxInvoice,
-    getGDriveFolderIdForStage
+    getGDriveFolderIdForStage,
+    duplicateWorkflowDocument
 } from '../../lib/workflowV2Service';
 import { getPartners, getContacts, getDocumentSettings } from '../../lib/store';
 import { getCatalogItems } from '../../lib/catalogService';
@@ -40,6 +46,20 @@ import {
 import FloatingControlHub from '../../components/FloatingControlHub';
 import RichTextEditor from '../../components/common/RichTextEditor';
 import { ITEM_UNITS } from '../../utils/units';
+const TC_PRESETS = {
+    'Enquiry': `1. PLEASE QUOTE YOUR BEST PRICE AND EARLIEST DELIVERY.
+2. QUOTATION SHOULD BE VALID FOR AT LEAST 30 DAYS.
+3. SPECIFY LEAD TIME AND COUNTRY OF ORIGIN.
+4. PRICES SHOULD BE IN SGD/USD AS SPECIFIED.`,
+    'Quotation': `1. VALIDITY: 30 DAYS FROM DATE OF QUOTATION.
+2. DELIVERY: TO BE ADVISED UPON ORDER CONFIRMATION.
+3. PAYMENT TERMS: 30 DAYS FROM DATE OF INVOICE (SUBJECT TO CREDIT APPROVAL).
+4. WARRANTY: 6 MONTHS AGAINST MANUFACTURING DEFECTS.`,
+    'Purchase Order': `1. DELIVERY DATE MUST BE STRICTLY ADHERED TO.
+2. QUALITY MUST CONFORM TO SPECIFICATIONS PROVIDED.
+3. PACKING LIST AND INVOICE MUST ACCOMPANY THE GOODS.
+4. PAYMENT TERMS AS PER AGREED UPON TERMS.`
+};
 import WorkflowDocumentLayout from '../../components/workflow/WorkflowDocumentLayout';
 import html2pdf from 'html2pdf.js';
 import { generateSleekPDF } from '../../lib/pdfGeneratorV2';
@@ -63,7 +83,14 @@ export default function WorkflowEditor() {
     const [modal, setModal] = useState({ isOpen: false, type: null });
     const [whatsappShareModal, setWhatsappShareModal] = useState({ isOpen: false });
     const [emailPreview, setEmailPreview] = useState(null);
+    
+    // Stale closure protection for async handlers (id changes after save)
+    const currentIdRef = useRef(id);
+    useEffect(() => {
+        currentIdRef.current = id;
+    }, [id]);
     const [poModal, setPoModal] = useState({ isOpen: false });
+    const [poFile, setPoFile] = useState(null);
     const [lineItems, setLineItems] = useState([]);
     const [workflowDocs, setWorkflowDocs] = useState([]); // Documents in the same job suite
     const [expenses, setExpenses] = useState([]);
@@ -81,6 +108,7 @@ export default function WorkflowEditor() {
     const [paymentModal, setPaymentModal] = useState({ isOpen: false, type: null, data: null }); // type: 'customer' | 'supplier'
     const [signedProofs, setSignedProofs] = useState([]);
     const [loadingSignedProofs, setLoadingSignedProofs] = useState(false);
+    const [partnerInvoices, setPartnerInvoices] = useState([]);
 
     // Explorer State
     const [explorerFiles, setExplorerFiles] = useState([]);
@@ -101,6 +129,15 @@ export default function WorkflowEditor() {
     const [signatureBase64, setSignatureBase64] = useState('');
     const [paynowBase64, setPaynowBase64] = useState('');
     const printRef = useRef();
+
+    const [showFloatModal, setShowFloatModal] = useState(false);
+    const [selectedSuppliers, setSelectedSuppliers] = useState([]);
+    const [floatingProcess, setFloatingProcess] = useState({
+        isActive: false,
+        suppliers: [],
+        currentIndex: 0
+    });
+    const [isFetchingRate, setIsFetchingRate] = useState(false);
 
     const toBase64 = url => fetch(url, { mode: 'cors' })
         .then(response => response.blob())
@@ -168,6 +205,8 @@ export default function WorkflowEditor() {
         original_document_id: '',
         revision_no: 0,
         attachment_urls: [],
+        payment_method: 'Bank Transfer',
+        payment_ref: '',
         delivery_verification: {}
     };
     });
@@ -181,6 +220,19 @@ export default function WorkflowEditor() {
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id, type]);
+
+    useEffect(() => {
+        if (formData.partner_id && formData.document_type === 'Payment Received') {
+            fetchPartnerInvoices();
+        }
+    }, [formData.partner_id, formData.document_type]);
+
+    const fetchPartnerInvoices = async () => {
+        const { data } = await getWorkflowDocuments(profile.company_id, ['Tax Invoice', 'Proforma Invoice']);
+        if (data) {
+            setPartnerInvoices(data.filter(d => d.partner_id === formData.partner_id));
+        }
+    };
 
     const fetchMasterData = async () => {
         const [pRes, vRes, wlRes, cRes, sRes, allContacts] = await Promise.all([
@@ -359,6 +411,37 @@ export default function WorkflowEditor() {
             alert('Upload failed: ' + err.message);
         } finally {
             setLoadingSignedProofs(false);
+        }
+    };
+
+    const handleUploadPODirect = async (file) => {
+        if (!file || !formData.assigned_job_no) return;
+        setSaving(true);
+        try {
+            const token = getStoredToken();
+            const year = new Date(formData.issue_date).getFullYear().toString();
+            const rootId = settings?.gdrive_celron_root_id || settings?.google_drive_folder_id;
+            
+            const projectFolderId = await provisionFullProjectStructure(token, rootId, year, formData.assigned_job_no);
+            const targetFolderId = await getOrCreateFolder(token, '1. Enquiries & Quotations', projectFolderId);
+            
+            const result = await uploadFileToDrive(token, file, { folderId: targetFolderId });
+            const poUrl = `https://drive.google.com/file/d/${result.id}/view`;
+
+            // Update state and DB
+            setFormData(prev => ({ ...prev, customer_po_attachment_url: poUrl }));
+            
+            await supabase.from('workflow_documents').update({ 
+                customer_po_attachment_url: poUrl,
+                attachment_urls: [...(formData.attachment_urls || []), poUrl]
+            }).eq('assigned_job_no', formData.assigned_job_no);
+
+            alert('Purchase Order uploaded and synced across job suite!');
+        } catch (err) {
+            console.error('PO upload failed:', err);
+            alert('Upload failed: ' + err.message);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -723,16 +806,46 @@ export default function WorkflowEditor() {
         let initialContactId = '';
 
         const docType = formData.document_type?.toUpperCase();
-        const DEFAULT_TERMS = `<ul>
-            <li><strong>Availability:</strong> Ex-stock, subject to prior sale.</li>
-            <li><strong>Product Type:</strong> Maker's genuine spare parts | OEM spare parts | Equivalent spare parts</li>
-            <li><strong>Delivery Time:</strong> Ex-stock | 1-2 days | 4-6 weeks</li>
-            <li><strong>Quote Validity:</strong> As per stated due date</li>
-            <li><strong>Payment Terms:</strong> Advance payment | 50% advance & 50% on COD | 7 days | 14 days | 30 days</li>
-        </ul>
-        <p><strong>Warranty:</strong> Manufacturer's standard warranty against manufacturing defects only. This warranty does not cover workmanship errors, misuse, or improper handling.</p>`;
         
         const defaultNotes = '';
+
+        const sourceEnquiryId = searchParams.get('sourceEnquiryId');
+        if (sourceEnquiryId) {
+            const { data: enq } = await supabase.from('customer_enquiries').select('*').eq('id', sourceEnquiryId).single();
+            if (enq) {
+                setFormData(prev => ({
+                    ...prev,
+                    document_no: newNo,
+                    partner_id: enq.customer_id || '',
+                    contact_id: enq.contact_id || '',
+                    vessel_id: enq.vessel_id || '',
+                    work_location_id: enq.work_location_id || '',
+                    subject: enq.subject || `Ref: ${enq.enquiry_no}`,
+                    customer_ref: enq.customer_ref || '',
+                    currency: 'SGD',
+                    enquiry_id: enq.id,
+                    notes: enq.notes || defaultNotes,
+                    terms_conditions: TC_PRESETS[docType === 'QUOTATION' ? 'Quotation' : ''] || ''
+                }));
+
+                if (enq.catalog_items && enq.catalog_items.length > 0) {
+                    const inheritedItems = enq.catalog_items.map((item, idx) => ({
+                        id: 'src-' + idx + '-' + Date.now(),
+                        item_id: item.id,
+                        description: item.name,
+                        details: item.specification || '',
+                        quantity: 1,
+                        unit_price: item.selling_price || 0,
+                        amount: item.selling_price || 0,
+                        tax_enabled: true,
+                        tax_rate: 9,
+                        uom: 'UNIT(S)'
+                    }));
+                    setLineItems(inheritedItems);
+                }
+                return;
+            }
+        }
 
         if (sourceId) {
             const { data: sourceDoc } = await getWorkflowDocumentById(sourceId);
@@ -750,7 +863,7 @@ export default function WorkflowEditor() {
                     enquiry_id: sourceDoc.enquiry_id || '',
                     job_id: sourceDoc.job_id || '',
                     notes: sourceDoc.notes || defaultNotes,
-                    terms_conditions: sourceDoc.terms_conditions || (docType === 'QUOTATION' ? DEFAULT_TERMS : '')
+                    terms_conditions: sourceDoc.terms_conditions || (TC_PRESETS[docType === 'QUOTATION' ? 'Quotation' : ''] || '')
                 }));
 
                 if (sourceDoc.items && sourceDoc.items.length > 0) {
@@ -786,7 +899,7 @@ export default function WorkflowEditor() {
                     subject: prev.subject || job.subject || enq.subject || `Ref: ${job.job_no}`,
                     customer_ref: prev.customer_ref || job.customer_ref || enq.customer_ref || '',
                     notes: prev.notes || defaultNotes,
-                    terms_conditions: prev.terms_conditions || (docType === 'QUOTATION' ? DEFAULT_TERMS : '')
+                    terms_conditions: prev.terms_conditions || (TC_PRESETS[docType === 'QUOTATION' ? 'Quotation' : ''] || '')
                 }));
 
                 // Inherit line items if available
@@ -840,7 +953,7 @@ export default function WorkflowEditor() {
             partner_id: initialPartnerId || prev.partner_id,
             contact_id: initialContactId || prev.contact_id,
             notes: defaultNotesVal,
-            terms_conditions: prev.terms_conditions || (docTypeUpper === 'QUOTATION' ? DEFAULT_TERMS : '')
+            terms_conditions: prev.terms_conditions || (TC_PRESETS[docTypeUpper === 'QUOTATION' ? 'Quotation' : ''] || '')
         }));
 
         // Add one empty line
@@ -934,7 +1047,6 @@ export default function WorkflowEditor() {
         setFormData(prev => ({ ...prev, [name]: content }));
     };
 
-    const [isFetchingRate, setIsFetchingRate] = useState(false);
     const handleAiFetchExchangeRate = async () => {
         if (formData.currency === 'SGD') return;
         setIsFetchingRate(true);
@@ -1074,11 +1186,15 @@ export default function WorkflowEditor() {
             
             const { data, error } = await saveWorkflowDocument(dataToSave, uniqueItems);
             if (error) throw error;
-            if (isNew) navigate(`/workflows/editor/${type}/${data.id}`, { replace: true });
-            else {
+            
+            if (isNew) {
+                currentIdRef.current = data.id; // Update ref immediately for sequential async calls
+                navigate(`/workflows/editor/${type}/${data.id}`, { replace: true });
+            } else {
                 alert('Saved successfully');
                 fetchDocument();
             }
+            return data;
         } catch (err) {
             console.error(err);
             alert('Failed to save: ' + err.message);
@@ -1106,8 +1222,9 @@ export default function WorkflowEditor() {
         // Save first to ensure all current edits are captured
         setSaving(true);
         try {
-            await handleSave();
-            setPoModal({ isOpen: true });
+            const saved = await handleSave();
+            const activeId = saved?.id || currentIdRef.current;
+            setPoModal({ isOpen: true, activeSourceId: activeId });
         } catch (err) {
             console.error('Failed to save before conversion:', err);
             alert('Please save the document successfully before converting to job.');
@@ -1119,9 +1236,38 @@ export default function WorkflowEditor() {
     const confirmJobConversion = async (poData, options) => {
         setSaving(true);
         try {
-            const { jobNo } = await convertQuotationToJob(id, poData, options);
+            const sourceId = poModal.activeSourceId || currentIdRef.current;
+            const { jobNo } = await convertQuotationToJob(sourceId, poData, options);
+            
+            // Handle PO File Upload if present
+            if (poFile) {
+                try {
+                    const accessToken = localStorage.getItem('google_access_token');
+                    if (accessToken) {
+                        const currentYear = new Date(formData.issue_date).getFullYear().toString();
+                        const rootId = settings?.gdrive_celron_root_id || settings?.google_drive_folder_id;
+                        
+                        const projectFolderId = await provisionFullProjectStructure(accessToken, rootId, currentYear, jobNo);
+                        const targetFolderId = await getOrCreateFolder(accessToken, '1. Enquiries & Quotations', projectFolderId);
+                        
+                        const uploadResult = await uploadFileToDrive(accessToken, poFile, { folderId: targetFolderId });
+                        const poUrl = `https://drive.google.com/file/d/${uploadResult.id}/view`;
+
+                        // Update all documents associated with this job with the attachment URL
+                        await supabase.from('workflow_documents').update({ 
+                            customer_po_attachment_url: poUrl,
+                            attachment_urls: [poUrl]
+                        }).eq('assigned_job_no', jobNo);
+                    }
+                } catch (uploadErr) {
+                    console.error("PO Upload to Drive failed:", uploadErr);
+                    // Non-blocking error for main conversion
+                }
+            }
+
             alert(`Job ${jobNo} created successfully with all associated documents!`);
             setPoModal({ isOpen: false });
+            setPoFile(null);
             fetchDocument(); // Refresh to show job info
         } catch (err) {
             console.error(err);
@@ -1137,12 +1283,87 @@ export default function WorkflowEditor() {
         
         setSaving(true);
         try {
-            const savedInv = await convertProformaToTaxInvoice(id);
+            const activeId = currentIdRef.current;
+            const savedInv = await convertProformaToTaxInvoice(activeId);
             alert(`Tax Invoice ${savedInv.document_no} created successfully!`);
             navigate(`/workflows/editor/tax-invoice/${savedInv.id}`);
         } catch (err) {
             console.error(err);
             alert('Failed to convert to Tax Invoice: ' + (err.message || 'Unknown error'));
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleGenerateAssociatedDoc = async (targetType) => {
+        if (isNew || !formData.assigned_job_no) return;
+        
+        setSaving(true);
+        try {
+            const activeId = currentIdRef.current;
+            // 1. Generate Next Number for Target Type based on Job Number
+            const jobNoPart = formData.assigned_job_no.split('-').slice(1).join('-');
+            const prefixMap = {
+                'Order Acknowledgment': 'ORA',
+                'Delivery Order': 'DO',
+                'Packing List': 'PKL',
+                'Proforma Invoice': 'PRO',
+                'Tax Invoice': 'INV',
+                'Certificate': 'CERT',
+                'Service Report': 'SR'
+            };
+            const prefix = prefixMap[targetType] || 'DOC';
+            const nextNo = `${prefix}-${jobNoPart}`;
+
+            // 2. Prepare Header
+            const newDocData = {
+                ...formData,
+                id: undefined,
+                document_type: targetType,
+                document_no: nextNo,
+                status: 'Draft',
+                issue_date: new Date().toISOString().split('T')[0],
+                is_job: true,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            };
+
+            // 3. Save Document
+            const { data: savedDoc, error } = await saveWorkflowDocument(newDocData, lineItems);
+            if (error) throw error;
+
+            alert(`${targetType} ${savedDoc.document_no} generated successfully!`);
+
+            // 4. Automatic Archive to Drive (as requested)
+            try {
+                const token = getStoredToken();
+                if (token) {
+                    console.log('Archiving generated document to Drive...');
+                    const pdfBlob = await generateSleekPDF({
+                        ...savedDoc,
+                        items: lineItems,
+                        partners: partners.find(p => p.id === savedDoc.partner_id),
+                        vessels: vessels.find(v => v.id === savedDoc.vessel_id),
+                        work_locations: workLocations.find(wl => wl.id === savedDoc.work_location_id)
+                    }, settings, 'blob');
+
+                    const rootId = await ensureJobFolder();
+                    const stageFolder = await getGDriveFolderIdForStage(targetType, token, rootId);
+                    
+                    const filename = `${targetType}_${savedDoc.document_no}.pdf`;
+                    await uploadFileToDrive(token, new File([pdfBlob], filename, { type: 'application/pdf' }), { folderId: stageFolder });
+                }
+            } catch (archiveErr) {
+                console.warn('Auto-archive failed, but document record was created:', archiveErr);
+            }
+
+            // 5. Navigate to the new document
+            const slug = targetType.toLowerCase().replace(/ /g, '-');
+            navigate(`/workflows/editor/${slug}/${savedDoc.id}`);
+
+        } catch (err) {
+            console.error(err);
+            alert('Failed to generate document: ' + err.message);
         } finally {
             setSaving(false);
         }
@@ -1296,6 +1517,61 @@ export default function WorkflowEditor() {
         setWhatsappShareModal({ isOpen: true });
     };
 
+    const handleNextFloat = async (index, suppliersList = null, sourceDocId = null) => {
+        const list = suppliersList || floatingProcess.suppliers;
+        const activeSourceId = sourceDocId || currentIdRef.current;
+        const suppId = list[index];
+        if (!suppId) return;
+
+        setSaving(true);
+        try {
+            // 1. Create the RFQ document (Duplicate current enquiry)
+            // We pass the supplier ID to override the partner
+            const { data: newDoc, error } = await duplicateWorkflowDocument(activeSourceId, { 
+                partner_id: suppId, 
+                status: 'Draft',
+                document_type: 'Enquiry' 
+            });
+            
+            if (error) throw error;
+
+            // 2. Prepare the email preview for THIS supplier
+            const supplier = partners.find(p => p.id === suppId);
+            const recipient = supplier?.email1 || supplier?.email || '';
+            const subject = `RFQ: ${newDoc.document_no} | ${newDoc.subject || ''}`;
+            
+            const footer = `\n\nBest Regards,\n\n${formData.salesperson_name || 'CEL-RON Team'}\n${settings?.company_name || 'CEL-RON ENTERPRISES PTE LTD'}\n${settings?.address || ''}\nEmail: ${settings?.sales_email || 'sales@celron.net'} | Tel: ${settings?.phone || ''}`;
+            const body = `Dear ${supplier?.name || 'Supplier'},\n\nPlease find attached our Request for Quotation (${newDoc.document_no}) for your review.\n\nPlease provide your best pricing and lead time.\n\n${footer}`;
+
+            // We need to set the current document context for the PDF generator in sendEmail
+            // Since we are not navigating, we just pass the info to the email preview
+            setEmailPreview({ 
+                to: recipient, 
+                cc: '', 
+                bcc: 'celron.simlim0305@gmail.com; accounts@celron.net', 
+                subject, 
+                body, 
+                attachments: [],
+                isFloat: true,
+                floatDocId: newDoc.id,
+                floatDocNo: newDoc.document_no
+            });
+
+            setFloatingProcess({
+                isActive: true,
+                suppliers: list,
+                currentIndex: index
+            });
+            
+            setShowFloatModal(false);
+        } catch (err) {
+            console.error('Float error:', err);
+            alert('Failed to process float for supplier: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const performWhatsAppShare = async (customMessage, phone = null) => {
         setSaving(true);
         try {
@@ -1355,54 +1631,69 @@ export default function WorkflowEditor() {
     const sendEmail = async () => {
         setSaving(true);
         try {
-            const newStatus = formData.status === 'Draft' ? 'Sent' : formData.status;
-            const updatedData = { ...formData, status: newStatus };
-            setFormData(updatedData);
+            // Determine if we are in a floating process
+            const isFloat = emailPreview?.isFloat;
+            const targetDocId = isFloat ? emailPreview.floatDocId : id;
+            const targetDocNo = isFloat ? emailPreview.floatDocNo : formData.document_no;
+            const targetDocType = isFloat ? 'Enquiry' : formData.document_type;
 
-            if (!isNew) {
-                const dataToSave = { ...updatedData, company_id: profile.company_id };
-                await saveWorkflowDocument(dataToSave, lineItems);
+            if (!isFloat) {
+                const newStatus = formData.status === 'Draft' ? 'Sent' : formData.status;
+                const updatedData = { ...formData, status: newStatus };
+                setFormData(updatedData);
+
+                if (!isNew) {
+                    const dataToSave = { ...updatedData, company_id: profile.company_id };
+                    await saveWorkflowDocument(dataToSave, lineItems);
+                }
+            } else {
+                // Update status of the floated document to Sent
+                await supabase.from('workflow_documents').update({ status: 'Sent' }).eq('id', targetDocId);
             }
 
-            // High Fidelity PDF Generation from the unified layout
-            console.log('Generating high-fidelity PDF from layout...');
-            const element = printRef.current;
-            const opt = {
-                margin: [5, 5, 5, 5], // Reduced margin to avoid overflow
-                filename: `${formData.document_type}_${formData.document_no || 'Draft'}.pdf`,
-                image: { type: 'jpeg', quality: 0.92 }, // Balanced quality for memory efficiency
-                html2canvas: { 
-                    scale: 2, 
-                    useCORS: true, 
-                    logging: false,
-                    scrollY: 0,
-                    windowWidth: 1000 // Force a consistent width for rendering
-                },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
-                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-            };
+            // High Fidelity PDF Generation
+            let pdfBlob;
+            if (isFloat) {
+                console.log('Generating PDF for floated RFQ...');
+                const { data: floatDoc } = await getWorkflowDocumentById(targetDocId);
+                pdfBlob = await generateSleekPDF({
+                    ...floatDoc,
+                    partners: partners.find(p => p.id === floatDoc.partner_id),
+                    vessels: vessels.find(v => v.id === floatDoc.vessel_id),
+                    work_locations: workLocations.find(wl => wl.id === floatDoc.work_location_id)
+                }, settings, 'blob');
+            } else {
+                console.log('Generating high-fidelity PDF from layout...');
+                const element = printRef.current;
+                const opt = {
+                    margin: [5, 5, 5, 5],
+                    filename: `${targetDocType}_${targetDocNo || 'Draft'}.pdf`,
+                    image: { type: 'jpeg', quality: 0.92 },
+                    html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0, windowWidth: 1000 },
+                    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
+                    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+                };
+                pdfBlob = await html2pdf().set(opt).from(element).output('blob');
+            }
 
-            // Convert to Base64 via html2pdf blob
-            const pdfBlob = await html2pdf().set(opt).from(element).output('blob');
             const reader = new FileReader();
             const b64Pdf = await new Promise((resolve) => {
                 reader.onloadend = () => resolve(reader.result.split(',')[1]);
                 reader.readAsDataURL(pdfBlob);
             });
 
-            // Determine sender based on document type
-            const isAccountDoc = ['Invoice', 'Receipt', 'Credit Note'].includes(formData.document_type);
+            // Determine sender
+            const isAccountDoc = ['Invoice', 'Receipt', 'Credit Note'].includes(targetDocType);
             const fallbackSalesEmail = settings?.sales_email || 'sales@celron.net';
             const fallbackAccountsEmail = settings?.accounts_email || 'accounts@celron.net';
             const fromEmail = isAccountDoc ? fallbackAccountsEmail : fallbackSalesEmail;
 
             const systemPdf = {
-                name: `${formData.document_type}_${formData.document_no || 'Draft'}.pdf`,
+                name: `${targetDocType}_${targetDocNo || 'Draft'}.pdf`,
                 content: `base64,${b64Pdf}`,
                 type: 'application/pdf'
             };
 
-            // Format custom attachments
             const customAttachments = await Promise.all((emailPreview.attachments || []).map(async (file) => {
                 return new Promise((resolve) => {
                     const reader = new FileReader();
@@ -1411,7 +1702,6 @@ export default function WorkflowEditor() {
                 });
             }));
 
-            // Call real backend API
             const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/send-email`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1427,21 +1717,28 @@ export default function WorkflowEditor() {
                 })
             });
 
-            // Check if response is JSON
             const contentType = response.headers.get("content-type");
             if (contentType && contentType.indexOf("application/json") !== -1) {
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Server error');
+                
                 alert(`Email dispatched successfully!`);
                 setEmailPreview(null);
-            } else {
-                // Not JSON - probably a 500 error from Vercel/Server
-                const text = await response.text();
-                console.error('Non-JSON response:', text);
-                if (text.includes('Payload Too Large') || response.status === 413) {
-                    throw new Error('The PDF attachment is too large for the server. Try removing some photos or notes.');
+
+                // Handle sequential floating
+                if (isFloat && floatingProcess.isActive) {
+                    const nextIndex = floatingProcess.currentIndex + 1;
+                    if (nextIndex < floatingProcess.suppliers.length) {
+                        handleNextFloat(nextIndex);
+                    } else {
+                        alert(`Finished floating enquiry to ${floatingProcess.suppliers.length} suppliers.`);
+                        setFloatingProcess({ isActive: false, suppliers: [], currentIndex: 0 });
+                        navigate('/workflows');
+                    }
                 }
-                throw new Error('The email server encountered a critical error. Please check your SMTP settings in Company Settings.');
+            } else {
+                const text = await response.text();
+                throw new Error('Email server error: ' + text.substring(0, 100));
             }
         } catch (err) {
             console.error('Failed to send email:', err);
@@ -1534,6 +1831,15 @@ export default function WorkflowEditor() {
                                 </div>
                             )}
                         </div>
+                        {formData.document_type === 'Enquiry' && (
+                            <button 
+                                className="btn-vibrant" 
+                                onClick={() => setShowFloatModal(true)}
+                                style={{ background: '#f59e0b', marginTop: '8px' }}
+                            >
+                                <ArrowRightLeft size={18} /> Float to Suppliers
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -1573,6 +1879,24 @@ export default function WorkflowEditor() {
                             {formData.is_job ? 'Already Job' : (saving ? 'Processing...' : 'Convert to Job')}
                         </button>
                     )}
+
+                    {!isNew && formData.is_job && (
+                        <div className="dropdown">
+                            <button className="btn-vibrant-secondary" style={{ background: '#8b5cf6', color: '#fff', border: 'none' }}>
+                                <Plus size={18} /> Generate Suite Document <ChevronDown size={14} />
+                            </button>
+                            <div className="dropdown-content">
+                                <button onClick={() => handleGenerateAssociatedDoc('Order Acknowledgment')}>Order Acknowledgment (ORA)</button>
+                                <button onClick={() => handleGenerateAssociatedDoc('Delivery Order')}>Delivery Order (DO)</button>
+                                <button onClick={() => handleGenerateAssociatedDoc('Packing List')}>Packing List (PKL)</button>
+                                <button onClick={() => handleGenerateAssociatedDoc('Proforma Invoice')}>Proforma Invoice (PRO)</button>
+                                <button onClick={() => handleGenerateAssociatedDoc('Tax Invoice')}>Tax Invoice (INV)</button>
+                                <button onClick={() => handleGenerateAssociatedDoc('Certificate')}>Certificate (CERT)</button>
+                                <button onClick={() => handleGenerateAssociatedDoc('Service Report')}>Service Report (SR)</button>
+                            </div>
+                        </div>
+                    )}
+
                     {!isNew && formData.document_type === 'Proforma Invoice' && (
                         <button 
                             className="btn-vibrant" 
@@ -2381,6 +2705,22 @@ export default function WorkflowEditor() {
                                         <FileText size={18} color="#2563eb" />
                                     </div>
                                     <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e3a8a', letterSpacing: '-0.01em' }}>Terms & Conditions</span>
+                                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                                        <select 
+                                            className="form-select-sm"
+                                            onChange={(e) => {
+                                                if (e.target.value) {
+                                                    handleEditorChange('terms_conditions', TC_PRESETS[e.target.value]);
+                                                }
+                                            }}
+                                            style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: '8px' }}
+                                        >
+                                            <option value="">Load Preset...</option>
+                                            <option value="Enquiry">Enquiry Terms</option>
+                                            <option value="Quotation">Quotation Terms</option>
+                                            <option value="Purchase Order">P.O. Terms</option>
+                                        </select>
+                                    </div>
                                 </label>
                                 <div style={{ background: '#fff', borderRadius: '12px', padding: '8px', border: '1px solid #e2e8f0' }}>
                                     <RichTextEditor
@@ -2447,6 +2787,52 @@ export default function WorkflowEditor() {
                                 <label>Salesperson Email</label>
                                 <input type="text" className="form-input" name="salesperson_email" value={formData.salesperson_email} onChange={handleHeaderChange} placeholder="your@email.com" />
                             </div>
+
+                            {formData.document_type === 'Payment Received' && (
+                                <div className="form-item" style={{ gridColumn: 'span 2', marginTop: '16px', padding: '20px', background: '#f0f9ff', borderRadius: '12px', border: '1px solid #bae6fd' }}>
+                                    <h4 style={{ margin: '0 0 16px 0', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <CreditCard size={18} /> Payment Details
+                                    </h4>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                        <div className="form-item" style={{ margin: 0 }}>
+                                            <label>Payment Mode</label>
+                                            <select className="form-input" name="payment_method" value={formData.payment_method} onChange={handleHeaderChange}>
+                                                <option value="Bank Transfer">Bank Transfer</option>
+                                                <option value="PayNow">PayNow</option>
+                                                <option value="Cheque">Cheque</option>
+                                                <option value="Cash">Cash</option>
+                                                <option value="Credit Card">Credit Card</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-item" style={{ margin: 0 }}>
+                                            <label>Transaction / Cheque Ref</label>
+                                            <input type="text" className="form-input" name="payment_ref" value={formData.payment_ref} onChange={handleHeaderChange} placeholder="e.g. TXN-123456" />
+                                        </div>
+                                        <div className="form-item" style={{ gridColumn: 'span 2', margin: 0 }}>
+                                            <label>Link to Specific Invoice (1:1)</label>
+                                            <select 
+                                                className="form-input" 
+                                                name="related_document_id" 
+                                                value={formData.related_document_id || ''} 
+                                                onChange={handleHeaderChange}
+                                                style={{ border: formData.related_document_id ? '2px solid var(--accent)' : '1px solid var(--border-color)' }}
+                                            >
+                                                <option value="">-- Unallocated / General Payment --</option>
+                                                {partnerInvoices.map(inv => (
+                                                    <option key={inv.id} value={inv.id}>
+                                                        {inv.document_no} - {inv.subject} (SGD {inv.total_amount?.toLocaleString()})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            {formData.related_document_id && (
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--accent)', marginTop: '4px', fontWeight: 600 }}>
+                                                    ✓ This payment will be precisely matched to {partnerInvoices.find(i => i.id === formData.related_document_id)?.document_no}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                             
                             <div className="form-item" style={{ gridColumn: '1 / -1' }}>
                                 <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -2478,35 +2864,6 @@ export default function WorkflowEditor() {
                                     )}
                                 </div>
                             </div>
-
-                            {(formData.document_type === 'Active Job' || formData.document_type === 'Delivery Order') && (
-                                <div className="form-item" style={{ gridColumn: '1 / -1' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f1f5f9', padding: '10px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                        <Ship size={18} className="text-accent" />
-                                        <span style={{ fontWeight: 700 }}>Mobile Delivery & POD Verification (Future App Integration)</span>
-                                    </label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '12px' }}>
-                                        <div className="form-item">
-                                            <label>GPS Coordinates (Stored on Sign-off)</label>
-                                            <input type="text" className="form-input" value={formData.gps_coordinates || ''} readOnly placeholder="0.000000, 0.000000" />
-                                        </div>
-                                        <div className="form-item">
-                                            <label>Device ID & Network Timestamp</label>
-                                            <input type="text" className="form-input" value={formData.device_id ? `${formData.device_id} @ ${formData.mobile_signed_at}` : ''} readOnly placeholder="Tracking details..." />
-                                        </div>
-                                        <div style={{ gridColumn: '1 / -1' }}>
-                                            <label>Delivery Proof Photos (2-4 required)</label>
-                                            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                                                {[1, 2, 3, 4].map(idx => (
-                                                    <div key={idx} style={{ width: '120px', height: '90px', background: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', overflow: 'hidden' }}>
-                                                        {formData.signature_image_url ? <Package size={24} color="#cbd5e1" /> : <Plus size={24} color="#cbd5e1" />}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
                         </div>
                     </div>
                 )}
@@ -2618,31 +2975,71 @@ export default function WorkflowEditor() {
                             </div>
                         </div>
 
-                        {formData.customer_po_attachment_url && (
-                            <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
-                                <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '12px' }}>PO Attachment</label>
-                                <a 
-                                    href={formData.customer_po_attachment_url} 
-                                    target="_blank" 
-                                    rel="noreferrer"
-                                    style={{ 
-                                        display: 'inline-flex', 
-                                        alignItems: 'center', 
-                                        gap: '8px', 
-                                        padding: '10px 16px', 
-                                        background: '#eff6ff', 
-                                        color: '#2563eb', 
-                                        borderRadius: '8px', 
-                                        textDecoration: 'none',
-                                        fontWeight: 600,
-                                        fontSize: '0.9rem',
-                                        border: '1px solid #bfdbfe'
-                                    }}
-                                >
-                                    <FileText size={18} /> View Signed Purchase Order
-                                </a>
+                        <div style={{ marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '12px' }}>
+                                        PO Repository & Attachments
+                                    </label>
+                                    
+                                    {formData.customer_po_attachment_url ? (
+                                        <div style={{ display: 'flex', gap: '12px' }}>
+                                            <a 
+                                                href={formData.customer_po_attachment_url} 
+                                                target="_blank" 
+                                                rel="noreferrer"
+                                                style={{ 
+                                                    display: 'inline-flex', 
+                                                    alignItems: 'center', 
+                                                    gap: '8px', 
+                                                    padding: '10px 20px', 
+                                                    background: '#eff6ff', 
+                                                    color: '#2563eb', 
+                                                    borderRadius: '10px', 
+                                                    textDecoration: 'none',
+                                                    fontWeight: 600,
+                                                    fontSize: '0.9rem',
+                                                    border: '1px solid #bfdbfe',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onMouseOver={(e) => e.currentTarget.style.background = '#dbeafe'}
+                                                onMouseOut={(e) => e.currentTarget.style.background = '#eff6ff'}
+                                            >
+                                                <FileText size={18} /> View Current PO File
+                                            </a>
+                                            
+                                            <button 
+                                                className="btn btn-secondary"
+                                                onClick={() => document.getElementById('po-direct-upload').click()}
+                                                style={{ borderRadius: '10px', padding: '10px 20px', fontSize: '0.9rem' }}
+                                            >
+                                                <RefreshCw size={18} style={{ marginRight: '8px' }} /> Update PO File
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div 
+                                            onClick={() => document.getElementById('po-direct-upload').click()}
+                                            style={{ 
+                                                border: '2px dashed #cbd5e1', 
+                                                borderRadius: '12px', 
+                                                padding: '24px', 
+                                                textAlign: 'center', 
+                                                cursor: 'pointer',
+                                                background: '#f8fafc',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            onMouseOver={(e) => e.currentTarget.style.borderColor = '#6366f1'}
+                                            onMouseOut={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
+                                        >
+                                            <Upload size={32} color="#64748b" style={{ marginBottom: '12px' }} />
+                                            <div style={{ fontWeight: 700, color: '#1e293b' }}>Upload Customer Purchase Order</div>
+                                            <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>Automatically syncs to Google Drive Project Folder</div>
+                                        </div>
+                                    )}
+                                    <input id="po-direct-upload" type="file" hidden onChange={(e) => handleUploadPODirect(e.target.files[0])} />
+                                </div>
                             </div>
-                        )}
+                        </div>
                     </div>
                 )}
 
@@ -2652,7 +3049,7 @@ export default function WorkflowEditor() {
                         <div style={{ marginBottom: '32px', background: '#f8fafc', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                                 <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.1rem', fontWeight: 700, color: '#1e293b' }}>
-                                    <FileCheck2 size={22} color="#059669" /> Signed Proofs of Delivery / Service
+                                    <FileCheck size={22} color="#059669" /> Signed Proofs of Delivery / Service
                                 </h3>
                                 <button 
                                     className="btn btn-sm btn-primary" 
@@ -3085,7 +3482,42 @@ export default function WorkflowEditor() {
 
                             <div className="form-item" style={{ marginBottom: '24px' }}>
                                 <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>PO Description / Project Scope</label>
-                                <textarea className="form-input" name="po_description" rows="3" placeholder="Briefly describe the PO scope..." style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem', resize: 'none' }}></textarea>
+                                <textarea className="form-input" name="po_description" rows="2" placeholder="Briefly describe the PO scope..." style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem', resize: 'none' }}></textarea>
+                            </div>
+
+                            <div className="form-item" style={{ marginBottom: '24px' }}>
+                                <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>Upload Customer PO (File Repository)</label>
+                                <div style={{ 
+                                    border: '2px dashed #e5e7eb', 
+                                    borderRadius: '12px', 
+                                    padding: '16px', 
+                                    textAlign: 'center',
+                                    background: poFile ? '#f0fdf4' : '#fafafa',
+                                    borderColor: poFile ? '#22c55e' : '#e5e7eb',
+                                    transition: 'all 0.2s'
+                                }}>
+                                    <input 
+                                        type="file" 
+                                        id="po-upload-editor" 
+                                        hidden 
+                                        onChange={(e) => setPoFile(e.target.files[0])} 
+                                    />
+                                    <label htmlFor="po-upload-editor" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                        {poFile ? (
+                                            <>
+                                                <FileCheck size={24} color="#22c55e" />
+                                                <span style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: 600 }}>{poFile.name} selected</span>
+                                                <button type="button" onClick={(e) => { e.preventDefault(); setPoFile(null); }} style={{ fontSize: '0.75rem', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Remove</button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Upload size={24} color="#6366f1" />
+                                                <span style={{ fontSize: '0.85rem', color: '#4b5563' }}>Click to upload or drag and drop PO file</span>
+                                                <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>PDF, DOCX or Images (Max 10MB)</span>
+                                            </>
+                                        )}
+                                    </label>
+                                </div>
                             </div>
 
                             <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '12px', border: '1px solid #f3f4f6', marginBottom: '24px' }}>
@@ -3147,11 +3579,59 @@ export default function WorkflowEditor() {
                 </div>
             )}
 
+            {/* Float to Suppliers Modal */}
+            {showFloatModal && (
+                <div className="modal-backdrop" style={{ zIndex: 10000 }}>
+                    <div className="modal-content" style={{ maxWidth: '600px', width: '95%', background: '#fff', borderRadius: '16px', padding: '32px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>Float Enquiry to Suppliers</h3>
+                            <button onClick={() => setShowFloatModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <p style={{ color: '#64748b', marginBottom: '24px' }}>Select multiple suppliers to receive this enquiry. A separate RFQ document will be created for each.</p>
+                        
+                        <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '24px', border: '1px solid #e2e8f0', borderRadius: '12px' }}>
+                            {partners.filter(p => p.types?.includes('Supplier') || p.category === 'Supplier').map(supplier => (
+                                <label key={supplier.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderBottom: '1px solid #f1f5f9', cursor: 'pointer', transition: 'background 0.2s' }} className="hover:bg-slate-50">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={selectedSuppliers.includes(supplier.id)}
+                                        onChange={(e) => {
+                                            if (e.target.checked) setSelectedSuppliers([...selectedSuppliers, supplier.id]);
+                                            else setSelectedSuppliers(selectedSuppliers.filter(id => id !== supplier.id));
+                                        }}
+                                        style={{ width: '18px', height: '18px' }}
+                                    />
+                                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{supplier.name}</span>
+                                </label>
+                            ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <button className="btn btn-secondary flex-1" onClick={() => setShowFloatModal(false)}>Cancel</button>
+                            <button 
+                                className="btn btn-primary flex-2" 
+                                disabled={selectedSuppliers.length === 0 || saving}
+                                onClick={async () => {
+                                    // Save current doc first
+                                    const saved = await handleSave();
+                                    const activeId = saved?.id || currentIdRef.current;
+                                    // Start floating process one-by-one
+                                    handleNextFloat(0, selectedSuppliers, activeId);
+                                }}
+                            >
+                                {saving ? 'Initializing...' : `Float to ${selectedSuppliers.length} Suppliers`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Email Preview Modal */}
             {emailPreview && (
                 <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-                    <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)', width: '100%', maxWidth: '600px', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+                    <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)', width: '100%', maxWidth: '850px', display: 'flex', flexDirection: 'column', maxHeight: '95vh', overflow: 'hidden' }}>
 
                         <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
                             <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -3175,21 +3655,23 @@ export default function WorkflowEditor() {
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                        <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cc</label>
-                                        <input
-                                            type="email"
-                                            style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
+                                        <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cc (Separate with semicolon)</label>
+                                        <textarea
+                                            rows="2"
+                                            style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box', resize: 'none' }}
                                             value={emailPreview.cc}
                                             onChange={(e) => setEmailPreview(prev => ({ ...prev, cc: e.target.value }))}
+                                            placeholder="email1@example.com; email2@example.com"
                                         />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                         <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bcc</label>
-                                        <input
-                                            type="email"
-                                            style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
+                                        <textarea
+                                            rows="2"
+                                            style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box', resize: 'none' }}
                                             value={emailPreview.bcc}
                                             onChange={(e) => setEmailPreview(prev => ({ ...prev, bcc: e.target.value }))}
+                                            placeholder="bcc1@example.com; bcc2@example.com"
                                         />
                                     </div>
                                 </div>
@@ -3220,20 +3702,33 @@ export default function WorkflowEditor() {
                                 </div>
 
                                 {/* SUGGESTED ATTACHMENTS (Linked Documents) */}
-                                {workflowDocs.length > 1 && (
+                                {workflowDocs.length > 0 && (
                                     <div style={{ marginTop: '16px', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
                                         <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '12px' }}>
                                             Quick Attach Linked Documents (Job Suite)
                                         </label>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                            {workflowDocs.filter(d => {
-                                                if (d.id === id) return false;
-                                                // If current doc is an Invoice, only show Delivery Order
-                                                if (formData.document_type?.includes('Invoice')) {
-                                                    return d.document_type === 'Delivery Order';
-                                                }
-                                                return true;
-                                            }).map(doc => {
+                                            {/* Root Job Reference Button (If not current) */}
+                                            {formData.assigned_job_no && formData.document_type !== 'Job' && !workflowDocs.some(d => d.document_type === 'Job') && (
+                                                <div
+                                                    style={{
+                                                        padding: '6px 12px',
+                                                        borderRadius: '6px',
+                                                        background: '#f8fafc',
+                                                        border: '1px solid #e2e8f0',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: 600,
+                                                        color: '#64748b',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px'
+                                                    }}
+                                                >
+                                                    <Package size={12} /> Job: {formData.assigned_job_no}
+                                                </div>
+                                            )}
+
+                                            {workflowDocs.filter(d => d.id !== id).map(doc => {
                                                 const isAttached = emailPreview.attachments?.some(a => a.name.includes(doc.document_no));
                                                 return (
                                                     <button
@@ -3447,7 +3942,6 @@ export default function WorkflowEditor() {
                     </div>
                 </div>
             )}
-
 
             <style dangerouslySetInnerHTML={{
                 __html: `

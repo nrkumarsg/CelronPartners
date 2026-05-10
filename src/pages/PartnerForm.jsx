@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import { Save, ArrowLeft, X, Plus, ExternalLink, Globe, Building2, MessageSquare, Sparkles, Search, Loader2, Check, RotateCcw, UserPlus, Mail, Phone, MapPin } from 'lucide-react';
-import { getPartners, savePartner, getContactsByPartner, deleteContact, uploadFile, saveContact } from '../lib/store';
+import { getPartners, savePartner, getContactsByPartner, deleteContact, uploadFile, saveContact, getCategories } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
 import { smartSearchCompany } from '../lib/geminiService';
 import BusinessCardUpload from '../components/common/BusinessCardUpload';
@@ -62,6 +62,7 @@ export default function PartnerForm() {
     const [typeInput, setTypeInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('details'); // 'details' or 'documents'
+    const [dbCategories, setDbCategories] = useState([]);
 
     const modules = {
         toolbar: [
@@ -152,15 +153,20 @@ export default function PartnerForm() {
 
     useEffect(() => {
         async function load() {
+            setLoading(true);
+            const [partners, catData] = await Promise.all([
+                getPartners(),
+                getCategories()
+            ]);
+            
             if (!isNew) {
-                setLoading(true);
-                const partners = await getPartners();
                 const existing = partners.find(p => p.id === id);
                 if (existing) {
                     setFormData(existing);
                 }
-                setLoading(false);
             }
+            setDbCategories(catData.map(c => c.name));
+            setLoading(false);
         }
         load();
     }, [id, isNew]);
@@ -193,12 +199,24 @@ export default function PartnerForm() {
         }));
     };
 
-    const handleAddCustomCategory = () => {
-        if (typeInput.trim() && !(formData.types || []).includes(typeInput.trim())) {
+    const handleAddCustomCategory = async () => {
+        const newCat = typeInput.trim();
+        if (newCat && !(formData.types || []).includes(newCat)) {
             setFormData(prev => ({
                 ...prev,
-                types: [...(prev.types || []), typeInput.trim()]
+                types: [...(prev.types || []), newCat]
             }));
+            
+            // Also save to system-wide categories if it's new
+            if (!dbCategories.includes(newCat)) {
+                try {
+                    await saveCategory({ name: newCat });
+                    setDbCategories(prev => Array.from(new Set([...prev, newCat])).sort());
+                } catch (err) {
+                    console.error("Error saving new category to system list:", err);
+                }
+            }
+            
             setTypeInput('');
         }
     };
@@ -577,7 +595,7 @@ export default function PartnerForm() {
                                 <div className="form-group">
                                     <label className="form-label">Categories</label>
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
-                                        {PARTNER_CATEGORIES.map(cat => (
+                                        {Array.from(new Set([...PARTNER_CATEGORIES, ...dbCategories])).sort().map(cat => (
                                             <div
                                                 key={cat}
                                                 onClick={() => handleCategoryToggle(cat)}

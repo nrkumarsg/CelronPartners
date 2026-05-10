@@ -238,7 +238,14 @@ export default function Sidebar() {
                 </NavLink>
 
                 <div className="nav-separator" />
-                <span className="nav-group-header">Jobs Control</span>
+                <span className="nav-group-header">High-Efficiency Workflow</span>
+                <NavLink to="/unified-supplier-hub" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Unified Supplier Hub">
+                    <Sparkles size={20} color="#f59e0b" />
+                    <span className="nav-text" style={{ fontWeight: 800, color: '#f59e0b' }}>Unified Supplier Hub</span>
+                </NavLink>
+
+                <div className="nav-separator" />
+                <span className="nav-group-header">Jobs Control (Legacy)</span>
 
                 {/* 1. Enquiries & Supplier Management */}
                 <div style={{ padding: '0 8px 0 16px', fontSize: '0.65rem', fontWeight: 700, color: '#f97316', opacity: 0.85, marginTop: '8px', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }} title="Phase 1: Enquiry & Supplier Management">
@@ -323,10 +330,6 @@ export default function Sidebar() {
                 </NavLink>
 
                 {/* 4. Finance */}
-                <div style={{ padding: '0 8px 0 16px', fontSize: '0.65rem', fontWeight: 700, color: '#f97316', opacity: 0.85, marginTop: '8px', marginBottom: '2px', textTransform: 'uppercase', letterSpacing: '0.05em' }} title="Phase 4: Billing & Finance">
-                    {isPinned ? "4. Billing" : "4."}
-                </div>
-
                 <NavLink to="/proforma-invoices" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Proforma Invoices">
                     <Receipt size={20} color="#ef4444" />
                     <span className="nav-text">Proforma Invoices</span>
@@ -337,14 +340,19 @@ export default function Sidebar() {
                     <span className="nav-text">Tax Invoices</span>
                 </NavLink>
                 
+                <NavLink to="/soa" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Cust. Payments & S.O.A">
+                    <ClipboardList size={20} color="#3b82f6" />
+                    <span className="nav-text">Cust. Payments & S.O.A</span>
+                </NavLink>
+
                 <NavLink to="/payment-received" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Payment Received">
                     <CheckSquare size={20} color="#10b981" />
                     <span className="nav-text">Payment Received</span>
                 </NavLink>
 
-                <NavLink to="/soa" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="SOA list">
-                    <ClipboardList size={20} color="#3b82f6" />
-                    <span className="nav-text">SOA list</span>
+                <NavLink to="/accounts/bills" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Accounts Payable">
+                    <Receipt size={20} color="#f97316" />
+                    <span className="nav-text" style={{ fontWeight: 700, color: '#f97316' }}>Accounts Payable</span>
                 </NavLink>
 
                 <NavLink to="/gst-reporting" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="GST Reporting">

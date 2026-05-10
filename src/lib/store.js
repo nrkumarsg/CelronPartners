@@ -1,7 +1,7 @@
 import { supabase } from './supabase';
 
 export const getPartners = async (profile = null) => {
-  let query = supabase.from('partners').select('*').order('name', { ascending: true });
+  let query = supabase.from('partners').select('*, contacts(*)').order('name', { ascending: true });
 
   // ONLY filter if user is NOT a superadmin. Superadmins should see global totals.
   if (profile?.company_id && profile.role !== 'superadmin') {
@@ -20,6 +20,7 @@ export const savePartner = async (partnerData) => {
   delete payload.updatedAt;
   delete payload.created_at;
   delete payload.updated_at;
+  delete payload.contacts;
 
   // Fix empty strings for Supabase
   if (payload.customerCredit === '') payload.customerCredit = null;

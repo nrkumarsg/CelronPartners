@@ -27,3 +27,8 @@ dist-ssr
 
 .vercel
 .env*.local
+
+# Scratch & Logs
+scratch/
+*.txt
+*.timestamp*

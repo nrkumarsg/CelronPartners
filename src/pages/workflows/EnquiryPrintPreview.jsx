@@ -58,15 +58,33 @@ export default function EnquiryPrintPreview() {
                 if (l) locationData = l;
             }
 
-            // 3. Map V1 to V2-like structure for the layout
+            const stripHtml = (html) => {
+                const tmp = document.createElement("DIV");
+                tmp.innerHTML = html;
+                return tmp.textContent || tmp.innerText || "";
+            };
+
+            // 3. Fetch Documents (Attachments)
+            const { data: docs } = await supabase
+                .from('documents')
+                .select('*')
+                .eq('company_id', profile.company_id)
+                .eq('reference_type', 'Enquiry')
+                .eq('reference_id', id);
+
+            const attachments = (docs || [])
+                .filter(d => d.url && (d.url.match(/\.(jpeg|jpg|gif|png|webp)$/i) || d.url.includes('googleusercontent.com')))
+                .map(d => d.url);
+
+            // 4. Map V1 to V2-like structure for the layout
             const mappedDoc = {
-                document_type: 'Delivery Order', // Default to DO to match user request for "replica"
+                document_type: 'REQUEST FOR QUOTATION', 
                 document_no: enq.enquiry_no,
                 issue_date: enq.enquiry_date,
                 expiry_date: enq.due_date,
-                customer_ref: enq.customer_ref,
-                subject: enq.subject || `Ref: ${enq.enquiry_no}`,
-                salesperson_name: profile?.name || 'ADMIN',
+                customer_ref: stripHtml(enq.customer_ref || ''),
+                subject: stripHtml(enq.subject || `Ref: ${enq.enquiry_no}`),
+                salesperson_name: profile?.full_name || 'ADMIN',
                 partners: enq.partners,
                 vessels: vesselData,
                 work_locations: locationData,
@@ -78,12 +96,13 @@ export default function EnquiryPrintPreview() {
                     uom: item.unit || item.uom || 'UNIT(S)',
                     sort_order: idx
                 })),
-                notes: enq.notes
+                notes: enq.description, // Use description for notes area
+                attachments: attachments
             };
 
             setDoc(mappedDoc);
 
-            // 3. Fetch Settings
+            // 5. Fetch Settings
             const settingsRes = await getDocumentSettings(profile?.company_id);
             if (settingsRes) {
                 setSettings(settingsRes);

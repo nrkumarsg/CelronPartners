@@ -6,7 +6,7 @@ import { convertEnquiryToV2Document } from '../../lib/workflowV2Service';
 
 import { getPartners, getDocumentSettings, saveVessel, saveWorkLocation } from '../../lib/store';
 import { getCatalogItems, createCatalogItem, updateCatalogItem } from '../../lib/catalogService';
-import { ArrowLeft, ArrowRight, Send, Ship, Mail, Phone, ExternalLink, Database, FolderPlus, ArrowRightLeft, FileText, CheckCircle2, Clock, DollarSign, BadgeDollarSign, ShieldCheck, Plus, Search, Trash, Save, Edit, AlertTriangle, Users, Eye, MailCheck, Download, Calendar, ChevronDown, PlusCircle, MapPin, MessageSquare, Sparkles, Building2, Upload, ImageIcon, Copy, Loader2, Crop as CropIcon } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Send, Ship, Mail, Phone, ExternalLink, Database, FolderPlus, ArrowRightLeft, FileText, CheckCircle2, Clock, DollarSign, BadgeDollarSign, ShieldCheck, Plus, Search, Trash, Save, Edit, AlertTriangle, Users, Eye, MailCheck, Download, Calendar, ChevronDown, PlusCircle, MapPin, MessageSquare, Sparkles, Building2, Upload, ImageIcon, Copy, Loader2, Hash, X, Crop as CropIcon } from 'lucide-react';
 import UploadOverlay from '../../components/common/UploadOverlay';
 import SafeDriveLink from '../../components/common/SafeDriveLink';
 import EmailPreviewModal from '../../components/workflows/EmailPreviewModal';
@@ -319,6 +319,14 @@ export default function EnquiryDetails() {
                 gdrive_folder_id: projectFolderId
             };
 
+            // Sanitize UUID fields - force null if empty string
+            const uuidFields = ['customer_id', 'contact_id', 'vessel_id', 'work_location_id'];
+            uuidFields.forEach(field => {
+                if (!payload[field] || payload[field] === '') {
+                    payload[field] = null;
+                }
+            });
+
             // Remove non-schema fields
             const invalidColumns = ['vessels', 'work_locations', 'customer', 'contact', 'vessel_name', 'location_name'];
             invalidColumns.forEach(p => delete payload[p]);
@@ -343,15 +351,12 @@ export default function EnquiryDetails() {
             setIsSavingMaster(false);
         }
     };
-
     if (loading) return <div className="loading-state">Loading details...</div>;
     if (!enquiry) return <div className="page-container"><h2>Enquiry Not Found</h2></div>;
 
     return (
-        <>
-            <div className="page-container" style={{ background: '#f8fafc', minHeight: '100vh', padding: '24px' }}>
-                <div style={{ display: 'flex', gap: '24px', alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="page-container" style={{ background: '#f8fafc', minHeight: '100vh', padding: '24px' }}>
+            <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
             {/* 1. Status Navigation Bar */}
             <div style={{ display: 'flex', background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '24px', overflow: 'hidden' }}>
                 {['New Enquiry', 'RFQ Floated', 'Quotation Sent', 'Job Created'].map((status) => (
@@ -418,7 +423,7 @@ export default function EnquiryDetails() {
 
             {/* 3. Info Grid (Enquiry Template) */}
             <div className="glass-panel" style={{ padding: '24px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', marginBottom: '24px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: '20px', marginBottom: '20px' }}>
                         <div className="form-group">
                             <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.6 }}>Customer *</label>
                             <div style={{ position: 'relative' }}>
@@ -448,11 +453,30 @@ export default function EnquiryDetails() {
                                     disabled={!enquiry.customer_id}
                                 >
                                     <option value="">{enquiry.customer_id ? 'Select a contact...' : 'Select a customer first...'}</option>
-                                    {allPartners.find(p => p.id === enquiry.customer_id)?.contacts?.map(cnt => (
+                                    {(allPartners.find(p => p.id === enquiry.customer_id)?.contacts || []).map(cnt => (
                                         <option key={cnt.id} value={cnt.id}>{cnt.name}</option>
                                     ))}
                                 </select>
                                 <Users size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                            </div>
+                        </div>
+                        <div className="form-group">
+                            <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 700, opacity: 0.6 }}>Mode of Enquiry</label>
+                            <div style={{ position: 'relative' }}>
+                                <select 
+                                    className="form-select"
+                                    value={enquiry.source_type || 'Email'}
+                                    onChange={(e) => handleUpdateHeader({ source_type: e.target.value })}
+                                    style={{ width: '100%', borderRadius: '8px', padding: '10px 12px 10px 36px', appearance: 'none', background: '#f8fafc', border: '1px solid #e2e8f0', color: '#3b82f6', fontWeight: 600 }}
+                                >
+                                    <option value="Email">Email</option>
+                                    <option value="WhatsApp">WhatsApp</option>
+                                    <option value="Portal">Supplier Portal</option>
+                                    <option value="Verbal">Verbal / Phone</option>
+                                    <option value="Website">Website Form</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                <Hash size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#3b82f6' }} />
                             </div>
                         </div>
                     </div>
@@ -514,7 +538,6 @@ export default function EnquiryDetails() {
                                         {vessels.map(v => (
                                             <option key={v.id} value={v.id}>{v.vessel_name}</option>
                                         ))}
-                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: '#10b981' }}>+ Add New Vessel</option>
                                     </select>
                                     <Ship size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#10b981' }} />
                                     <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
@@ -536,7 +559,6 @@ export default function EnquiryDetails() {
                                         {locations.map(l => (
                                             <option key={l.id} value={l.id}>{l.location_name}</option>
                                         ))}
-                                        <option value="ADD_NEW" style={{ fontWeight: 700, color: '#64748b' }}>+ Add New Location</option>
                                     </select>
                                     <Database size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                                     <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', opacity: 0.5 }} />
@@ -724,251 +746,95 @@ export default function EnquiryDetails() {
                 </div>
             
 
-            {/* Notes & Comments Section (Moved Up) */}
-            <div style={{ marginTop: '24px', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px' }}>
-                <h4 style={{ margin: '0 0 16px 0', fontSize: '0.9rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <FileText size={16} color="#3b82f6" /> Notes & Comments
-                </h4>
-                <RichTextEditor 
-                    value={enquiry?.notes || ''}
-                    onChange={(val) => setEnquiry({ ...enquiry, notes: val })}
-                    placeholder="Add additional notes here..."
-                />
-            </div>
 
-            {/* Enquiry Floating Module (Supplier Management) */}
-            <div style={{ marginTop: '24px', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>Floating Module</h4>
-                        <span style={{ fontSize: '0.75rem', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '10px' }}>Supplier Management</span>
+
+            {/* 6. Advanced Workflow Section (50/50 Split) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '24px', alignItems: 'start' }}>
+                
+                {/* Left: Enquiry Floating Module (Supplier Management) */}
+                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px', display: 'flex', flexDirection: 'column', height: '100%' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>Floating Module</h4>
+                            <span style={{ fontSize: '0.75rem', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '10px' }}>Supplier Management</span>
+                        </div>
+                        <button 
+                            onClick={() => { setEditingSupplier(null); setSupplierModalOpen(true); }}
+                            className="btn-vibrant"
+                            style={{ 
+                                padding: '6px 12px', 
+                                borderRadius: '10px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '6px',
+                                background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
+                                border: 'none',
+                                color: 'white',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                fontSize: '0.8rem'
+                            }}
+                        >
+                            <Plus size={14} /> Add Supplier
+                        </button>
                     </div>
-                    <button 
-                        onClick={() => { setEditingSupplier(null); setSupplierModalOpen(true); }}
-                        className="btn-vibrant"
-                        style={{ 
-                            padding: '8px 16px', 
-                            borderRadius: '12px', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '8px',
-                            background: 'linear-gradient(135deg, #6366f1 0%, #4338ca 100%)',
-                            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)',
-                            border: 'none',
-                            color: 'white',
-                            fontWeight: 700,
-                            cursor: 'pointer'
-                        }}
-                    >
-                        <Plus size={16} /> Add Supplier
-                    </button>
-                </div>
 
-                <div style={{ position: 'relative', marginBottom: '12px' }}>
-                    <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                    <input 
-                        type="text"
-                        placeholder="Search suppliers..."
-                        value={supplierSearch}
-                        onChange={(e) => setSupplierSearch(e.target.value)}
-                        style={{ width: '100%', padding: '8px 8px 8px 32px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                    />
-                </div>
-                <div className="custom-scrollbar" style={{ maxHeight: '350px', overflowY: 'auto', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).map(supplier => {
-                        const isSelected = selectedSuppliers.some(s => s.id === supplier.id);
-                        const contacts = supplierContacts[supplier.id] || [];
-                        const isEditingPartner = editingPartnerId === supplier.id;
-                        
-                        return (
-                            <div key={supplier.id} style={{ 
-                                border: isSelected ? '1px solid #6366f1' : '1px solid #f1f5f9', 
-                                borderRadius: '16px', 
-                                padding: isSelected ? '16px' : '10px 16px', 
-                                background: isSelected ? '#f8faff' : '#fff', 
-                                transition: 'all 0.2s',
-                                boxShadow: isSelected ? '0 4px 6px -1px rgba(99, 102, 241, 0.1)' : 'none'
-                            }}>
-                                {/* Row 1: Header/Name */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isSelected ? '12px' : 0 }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', flex: 1 }}>
-                                        <input 
-                                            type="checkbox" 
-                                            checked={isSelected}
-                                            onChange={() => handleToggleSupplier(supplier)}
-                                            style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#6366f1' }}
-                                        />
-                                        <span style={{ fontSize: '1rem', fontWeight: 700, color: isSelected ? '#4f46e5' : '#1e293b' }}>{supplier.name}</span>
-                                    </label>
-                                    {isSelected && (
+                    <div style={{ position: 'relative', marginBottom: '12px' }}>
+                        <Search size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                        <input 
+                            type="text"
+                            placeholder="Search suppliers..."
+                            value={supplierSearch}
+                            onChange={(e) => setSupplierSearch(e.target.value)}
+                            style={{ width: '100%', padding: '8px 8px 8px 32px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                        />
+                    </div>
+                    <div className="custom-scrollbar" style={{ maxHeight: '400px', overflowY: 'auto', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                        {suppliers.filter(s => s.name.toLowerCase().includes(supplierSearch.toLowerCase())).map(supplier => {
+                            const isSelected = selectedSuppliers.some(s => s.id === supplier.id);
+                            return (
+                                <div key={supplier.id} style={{ 
+                                    border: isSelected ? '1px solid #6366f1' : '1px solid #f1f5f9', 
+                                    borderRadius: '12px', 
+                                    padding: '12px', 
+                                    background: isSelected ? '#f8faff' : '#fff', 
+                                    transition: 'all 0.2s'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', flex: 1 }}>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={isSelected}
+                                                onChange={() => handleToggleSupplier(supplier)}
+                                                style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#6366f1' }}
+                                            />
+                                            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: isSelected ? '#4f46e5' : '#1e293b' }}>{supplier.name}</span>
+                                        </label>
                                         <div style={{ display: 'flex', gap: '8px' }}>
-                                            <button 
-                                                onClick={() => { setEditingSupplier(supplier); setSupplierModalOpen(true); }}
-                                                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
-                                                onMouseOver={e => e.currentTarget.style.color = '#6366f1'}
-                                                onMouseOut={e => e.currentTarget.style.color = '#94a3b8'}
-                                            >
-                                                <Edit size={14} />
-                                            </button>
-                                            <button 
-                                                onClick={async () => { if(confirm(`Delete supplier ${supplier.name}?`)) await handleDeletePartner(supplier.id); }}
-                                                style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
-                                                onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
-                                                onMouseOut={e => e.currentTarget.style.color = '#94a3b8'}
-                                            >
-                                                <Trash size={14} />
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                                
-                                {isSelected && (
-                                    <div className="animate-fade-in" style={{ paddingLeft: '28px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                        {/* Row 2: Address */}
-                                        <div style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.4 }}>
-                                            {supplier.address || supplier.city || supplier.pincode || supplier.country ? (
-                                                `${supplier.address || ''}${supplier.city ? `, ${supplier.city}` : ''}${supplier.pincode ? `, ${supplier.pincode}` : ''}${supplier.country ? `, ${supplier.country}` : ''}`
-                                            ) : (
-                                                <span style={{ fontStyle: 'italic', color: '#94a3b8' }}>No address provided</span>
-                                            )}
-                                        </div>
-                                        
-                                        {/* Row 3: Phone/Email */}
-                                        <div style={{ display: 'flex', gap: '16px', fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>
-                                            {supplier.phone1 && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Phone size={12} /> T: {supplier.phone1}</span>}
-                                            {supplier.email1 && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Mail size={12} /> E: {supplier.email1}</span>}
-                                        </div>
-                                        
-                                        {/* Attn List with CRUD */}
-                                        <div style={{ marginTop: '12px', borderTop: '1px dashed #e2e8f0', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Attention To:</span>
-                                                <button 
-                                                    onClick={() => { setAddingContactToPartnerId(supplier.id); setEditForm({ name: '', phone: '', email: '' }); }}
-                                                    style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '0.7rem', fontWeight: 700, cursor: 'pointer', padding: 0 }}
-                                                >+ Add New</button>
-                                            </div>
-                                            
-                                            {addingContactToPartnerId === supplier.id && (
-                                                <div style={{ background: '#fff', border: '1px solid #6366f1', borderRadius: '10px', padding: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                    <input autoFocus value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} placeholder="Name" style={{ padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.75rem' }} />
-                                                    <div style={{ display: 'flex', gap: '4px' }}>
-                                                        <input value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} placeholder="Phone" style={{ flex: 1, padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.75rem' }} />
-                                                        <input value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} placeholder="Email" style={{ flex: 1, padding: '6px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '0.75rem' }} />
-                                                    </div>
-                                                    <div style={{ display: 'flex', gap: '4px' }}>
-                                                        <button onClick={async () => { await handleSaveNewContact(supplier.id, editForm); setAddingContactToPartnerId(null); }} style={{ flex: 1, padding: '4px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600 }}>Save</button>
-                                                        <button onClick={() => setAddingContactToPartnerId(null)} style={{ flex: 1, padding: '4px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 600 }}>Cancel</button>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {contacts.length > 0 ? (
-                                                contacts.map(c => (
-                                                    <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.8rem', color: '#475569', background: '#fff', padding: '8px 10px', borderRadius: '10px' }}>
-                                                        {editingContactId === c.id ? (
-                                                            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                                                <input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} style={{ padding: '4px', fontSize: '0.75rem' }} />
-                                                                <div style={{ display: 'flex', gap: '4px' }}>
-                                                                    <button onClick={async () => { await handleUpdateContact(c.id, { ...editForm, partnerId: supplier.id }); setEditingContactId(null); }} style={{ height: '20px', padding: '0 8px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '4px', fontSize: '0.65rem' }}>Save</button>
-                                                                    <button onClick={() => setEditingContactId(null)} style={{ height: '20px', padding: '0 8px', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: '4px', fontSize: '0.65rem' }}>X</button>
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <>
-                                                                <div style={{ flex: 1, overflow: 'hidden' }}>
-                                                                    <span style={{ fontWeight: 700, color: '#6366f1' }}>Attn:</span> {c.name} / {c.handphone || c.phone || '-'} / {c.email || '-'}
-                                                                </div>
-                                                                <div style={{ display: 'flex', gap: '8px', marginLeft: '12px' }}>
-                                                                    <Edit size={12} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={() => { setEditingContactId(c.id); setEditForm(c); }} />
-                                                                    <Trash size={12} style={{ cursor: 'pointer', color: '#94a3b8' }} onClick={async () => { if(confirm("Delete contact?")) await handleDeleteContact(c.id, supplier.id); }} />
-                                                                </div>
-                                                            </>
-                                                        )}
-                                                    </div>
-                                                ))
-                                            ) : !addingContactToPartnerId && (
-                                                <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontStyle: 'italic' }}>No contacts found.</div>
-                                            )}
+                                            <button onClick={() => { setEditingSupplier(supplier); setSupplierModalOpen(true); }} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}><Edit size={14} /></button>
                                         </div>
                                     </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </div>
-
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => setIsPreviewModalOpen(true)} className="btn btn-sm btn-outline" style={{ flex: 1 }}>Preview</button>
-                    <button onClick={handlePrepareFloat} disabled={selectedSuppliers.length === 0} className="btn btn-sm btn-primary" style={{ flex: 1, background: '#4f46e5' }}>Float RFQ</button>
-                </div>
-            </div>
-
-            {/* Workspace & Documents Section */}
-            <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <Database size={18} color="#3b82f6" /> Project Workspace & Documents
-                        </h4>
-                        {enquiry.gdrive_file_link && !showLinkInput && (
-                            <button onClick={() => setShowLinkInput(true)} style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' }}>Edit Drive Link</button>
-                        )}
+                                </div>
+                            );
+                        })}
                     </div>
 
-                    {(!enquiry.gdrive_file_link || showLinkInput) && (
-                        <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px dashed #cbd5e1', marginBottom: '20px' }}>
-                            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '12px' }}>Paste a Google Drive folder link to sync with this enquiry.</p>
-                            <div style={{ display: 'flex', gap: '10px' }}>
-                                <input
-                                    type="text"
-                                    placeholder="Paste Google Drive URL..."
-                                    value={driveLink}
-                                    onChange={(e) => setDriveLink(e.target.value)}
-                                    style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', fontSize: '0.9rem' }}
-                                />
-                                <button onClick={updateDriveLink} style={{ background: '#4f46e5', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Link</button>
-                                {showLinkInput && <button onClick={() => setShowLinkInput(false)} style={{ background: '#f1f5f9', color: '#64748b', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>}
-                            </div>
-                        </div>
-                    )}
-
-                    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 350px', gap: '24px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                            <CommunicationWall 
-                                referenceType="Enquiry" 
-                                referenceId={id} 
-                                folderId={enquiry?.gdrive_inventory_photos_id || enquiry?.gdrive_file_link?.split('/')?.pop()} 
-                            />
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                            <div style={{ background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '16px' }}>
-                                <h5 style={{ margin: '0 0 12px 0', fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>Internal Documents</h5>
-                                <DocumentManager referenceType="Enquiry" referenceId={id} />
-                            </div>
-                            {enquiry?.gdrive_file_link && !showLinkInput && (
-                                <SafeDriveLink 
-                                    url={enquiry?.gdrive_file_link} 
-                                    label="Open Project Drive"
-                                    className="btn btn-block"
-                                    style={{ 
-                                        width: '100%', 
-                                        background: '#fff', 
-                                        color: '#334155', 
-                                        border: '1px solid #cbd5e1', 
-                                        padding: '12px', 
-                                        borderRadius: '8px', 
-                                        display: 'flex', 
-                                        alignItems: 'center', 
-                                        justifyContent: 'center', 
-                                        gap: '8px', 
-                                        fontWeight: 600, 
-                                        cursor: 'pointer'
-                                    }}
-                                />
-                            )}
-                        </div>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: 'auto' }}>
+                        <button onClick={() => setIsPreviewModalOpen(true)} className="btn btn-sm btn-outline" style={{ flex: 1 }}>Preview</button>
+                        <button onClick={handlePrepareFloat} disabled={selectedSuppliers.length === 0} className="btn btn-sm btn-primary" style={{ flex: 1, background: '#4f46e5' }}>Float RFQ</button>
                     </div>
+                </div>
+
+                {/* Right: Notes & Comments Section */}
+                <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    <h4 style={{ margin: '0 0 16px 0', fontSize: '0.9rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <FileText size={16} color="#3b82f6" /> Notes & Comments
+                    </h4>
+                    <RichTextEditor 
+                        value={enquiry?.description || ''} 
+                        onChange={(val) => handleUpdateHeader({ description: val })}
+                        placeholder="Please submit your best competitive offer for the attached purchase inquiry by return."
+                    />
                 </div>
             </div>
 
@@ -1139,7 +1005,7 @@ export default function EnquiryDetails() {
                 onConfirm={confirmFloat}
                 data={emailPreviewData || {}}
             />
-        </div>
+
             {/* Modals for Inline creation */}
             {showNewVesselModal && (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1228,39 +1094,27 @@ export default function EnquiryDetails() {
                     </form>
                 </div>
             )}
-            <WhatsAppShareModal 
-                isOpen={whatsappShareModal.isOpen}
-                onClose={() => setWhatsappShareModal({ isOpen: false })}
-                contacts={supplierContacts[selectedSuppliers[0]?.id] || []}
-                partner={selectedSuppliers[0]}
-                documentData={{
-                    document_type: 'Enquiry',
-                    document_no: enquiry.enquiry_no,
-                    subject: enquiry.customer_ref,
-                    currency: 'SGD',
-                    total_amount: 0,
-                    salesperson_name: profile?.full_name || 'CEL-RON Team'
-                }}
-            />
-            </div> {/* End of main column */}
 
-            <div style={{ width: '380px', display: 'flex', flexDirection: 'column', gap: '24px', position: 'sticky', top: '24px' }}>
+
+
+            {/* 7. Unified Functional Area (Vault & OCR) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '40px' }}>
                 {/* Vault / Project Attachment */}
                 <div className="glass-panel" style={{ padding: '24px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '24px', boxShadow: '0 10px 25px -5px rgba(0,0,0,0.05)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
                         <div style={{ padding: '8px', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent)', borderRadius: '10px' }}>
                             <FolderPlus size={20} />
                         </div>
-                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800 }}>Project Vault</h3>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Project Vault</h3>
                     </div>
-                    <p style={{ fontSize: '0.8rem', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
-                        Documents uploaded here are saved into the <b>Vault</b> for central tracking and transparency.
+                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
+                        Manage enquiry documents here. All files are synced to your central **GDrive Repository**.
                     </p>
                     
-                    <div style={{ border: '2px dashed #e2e8f0', borderRadius: '16px', padding: '24px', textAlign: 'center', background: '#f8fafc', transition: 'all 0.2s' }}>
-                        <Upload size={32} color="#94a3b8" style={{ marginBottom: '12px' }} />
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '4px' }}>Upload Final Document</div>
-                        <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Supports PDF or Images</div>
+                    <div style={{ border: '2px dashed #e2e8f0', borderRadius: '16px', padding: '32px', textAlign: 'center', background: '#f8fafc', transition: 'all 0.2s' }}>
+                        <Upload size={40} color="#94a3b8" style={{ marginBottom: '16px' }} />
+                        <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: '6px' }}>Enquiry Document</div>
+                        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '20px' }}>Drag & drop or browse for PDF/Images</div>
                         <input 
                             type="file" 
                             style={{ display: 'none' }} 
@@ -1271,18 +1125,18 @@ export default function EnquiryDetails() {
                                 setAttachment(file);
                             }}
                         />
-                        <label htmlFor="vault-upload" className="btn btn-sm btn-primary" style={{ marginTop: '16px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                            {attachment ? <CheckCircle2 size={14} /> : <Plus size={14} />} 
-                            {attachment ? attachment.name.substring(0, 15) + '...' : 'Select File'}
+                        <label htmlFor="vault-upload" className="btn btn-primary" style={{ padding: '10px 24px', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                            {attachment ? <CheckCircle2 size={16} /> : <Plus size={16} />} 
+                            {attachment ? attachment.name.substring(0, 20) + '...' : 'Select Document'}
                         </label>
                     </div>
 
                     {enquiry.gdrive_file_link && (
                         <div style={{ marginTop: '20px', padding: '16px', background: '#f0f9ff', borderRadius: '12px', border: '1px solid #bae6fd' }}>
-                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <CheckCircle2 size={14} /> Linked from Vault
+                            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <CheckCircle2 size={14} /> Synced from Vault
                             </div>
-                            <SafeDriveLink href={enquiry.gdrive_file_link} />
+                            <SafeDriveLink url={enquiry.gdrive_file_link} label="Open Synced File" />
                         </div>
                     )}
                 </div>
@@ -1293,22 +1147,149 @@ export default function EnquiryDetails() {
                         <div style={{ padding: '8px', background: 'rgba(139, 92, 246, 0.1)', color: '#8b5cf6', borderRadius: '10px' }}>
                             <Sparkles size={20} />
                         </div>
-                        <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#1e293b' }}>AI OCR Assistant</h3>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#1e293b' }}>AI OCR Assistant</h3>
                     </div>
+                    <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
+                        Automatically convert photos of enquiry lists into system line items using AI.
+                    </p>
                     
                     <div 
                         onClick={() => setShowOCRModal(true)}
-                        style={{ border: '2px dashed #ddd6fe', borderRadius: '16px', padding: '32px', textAlign: 'center', background: 'rgba(255,255,255,0.5)', cursor: 'pointer', transition: 'all 0.2s' }}
+                        style={{ border: '2px dashed #ddd6fe', borderRadius: '16px', padding: '32px', textAlign: 'center', background: 'rgba(255,255,255,0.5)', cursor: 'pointer', transition: 'all 0.2s', minHeight: '180px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}
                         onMouseOver={e => e.currentTarget.style.borderColor = '#8b5cf6'}
                         onMouseOut={e => e.currentTarget.style.borderColor = '#ddd6fe'}
                     >
-                        <ImageIcon size={32} color="#8b5cf6" style={{ marginBottom: '12px' }} />
-                        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1e293b' }}>Upload Scratch Image</div>
-                        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>AI will extract line items from photos</div>
+                        <ImageIcon size={48} color="#8b5cf6" style={{ marginBottom: '16px' }} />
+                        <div style={{ fontWeight: 700, fontSize: '1rem', color: '#1e293b' }}>Process Image to Text</div>
+                        <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '6px' }}>Supports hand-written lists</div>
                     </div>
                 </div>
             </div>
-        </div>
+
+            {/* 8. Project Workspace & Documents (Full Width) */}
+            <div style={{ background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0', padding: '24px', marginBottom: '40px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <div>
+                        <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Database size={18} color="#3b82f6" /> Project Workspace
+                        </h4>
+                        <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>Technical Photos, Datasheets & Communication history</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <button 
+                            onClick={() => {
+                                // Trigger file input of CommunicationWall if possible, or just scroll to it
+                                document.querySelector('.communication-wall-input')?.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className="btn btn-sm btn-vibrant" 
+                            style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '8px',
+                                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                                color: 'white',
+                                border: 'none',
+                                padding: '8px 16px',
+                                borderRadius: '10px',
+                                fontWeight: 700
+                            }}
+                        >
+                            <ImageIcon size={14} /> Add Technical Photo
+                        </button>
+                        {enquiry.gdrive_file_link && !showLinkInput && (
+                            <button onClick={() => setShowLinkInput(true)} style={{ background: 'none', border: 'none', color: '#6366f1', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Edit Drive Link</button>
+                        )}
+                    </div>
+                </div>
+
+                {(!enquiry.gdrive_file_link || showLinkInput) && (
+                    <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px dashed #cbd5e1', marginBottom: '16px' }}>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                                type="text"
+                                placeholder="Paste GDrive URL..."
+                                value={driveLink}
+                                onChange={(e) => setDriveLink(e.target.value)}
+                                style={{ flex: 1, padding: '6px 10px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                            />
+                            <button onClick={updateDriveLink} style={{ background: '#4f46e5', color: '#fff', border: 'none', padding: '6px 12px', borderRadius: '6px', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>Link</button>
+                        </div>
+                    </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 400px', gap: '24px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        {/* Internal Documents Table */}
+                        <div style={{ background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '16px' }}>
+                            <h5 style={{ margin: '0 0 12px 0', fontSize: '0.8rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <FileText size={14} /> Internal Documents Wall
+                            </h5>
+                            <DocumentManager referenceType="Enquiry" referenceId={id} />
+                        </div>
+
+                        {/* Quick Gallery View for Technical Images */}
+                        <div style={{ background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '16px' }}>
+                            <h5 style={{ margin: '0 0 12px 0', fontSize: '0.8rem', fontWeight: 700, color: '#475569', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <ImageIcon size={14} /> Technical Gallery Preview
+                            </h5>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '12px' }}>
+                                {/* Logic to show thumbnails from documents table would go here, 
+                                    but for now we provide a placeholder or instructions */}
+                                <div style={{ border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '20px', textAlign: 'center', background: '#fff', gridColumn: '1 / -1' }}>
+                                    <p style={{ margin: 0, fontSize: '0.75rem', color: '#94a3b8' }}>
+                                        Images uploaded to the Communication Wall will automatically appear here and in your RFQ attachments.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }} className="communication-wall-input">
+                         <CommunicationWall 
+                            referenceType="Enquiry" 
+                            referenceId={id} 
+                            folderId={enquiry?.gdrive_inventory_photos_id || enquiry?.gdrive_file_link?.split('/')?.pop()} 
+                        />
+                        {enquiry?.gdrive_file_link && !showLinkInput && (
+                            <SafeDriveLink 
+                                url={enquiry?.gdrive_file_link} 
+                                label="Open Project Drive"
+                                className="btn btn-block"
+                                style={{ 
+                                    width: '100%', 
+                                    background: '#fff', 
+                                    color: '#334155', 
+                                    border: '1px solid #cbd5e1', 
+                                    padding: '10px', 
+                                    borderRadius: '8px', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'center', 
+                                    gap: '8px', 
+                                    fontWeight: 600, 
+                                    fontSize: '0.85rem',
+                                    cursor: 'pointer'
+                                }}
+                            />
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            <WhatsAppShareModal 
+                isOpen={whatsappShareModal.isOpen}
+                onClose={() => setWhatsappShareModal({ isOpen: false })}
+                contacts={allPartners.find(p => p.id === enquiry.customer_id)?.contacts || []}
+                partner={allPartners.find(p => p.id === enquiry.customer_id)}
+                documentData={{
+                    document_type: 'Enquiry',
+                    document_no: enquiry.enquiry_no,
+                    subject: enquiry.customer_ref,
+                    currency: 'SGD',
+                    total_amount: 0,
+                    salesperson_name: profile?.full_name || 'CEL-RON Team'
+                }}
+            />
 
             {/* Supplier Management Modal (Image 2 style) */}
             <Modal 
@@ -1396,6 +1377,7 @@ export default function EnquiryDetails() {
                     </div>
                 </div>
             )}
-        </>
+            </div>
+        </div>
     );
 }

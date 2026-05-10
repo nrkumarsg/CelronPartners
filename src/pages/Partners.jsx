@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, MapPin, Globe, Building2, Mail, Phone, Star, Filter, ChevronDown, CheckCircle2, Circle, X, UploadCloud, Upload, Download, Printer, MoreVertical, Edit, Trash2, Loader2, ExternalLink, Settings, Paperclip, FileX, HardDrive, User, Users } from 'lucide-react';
+import { Plus, Search, MapPin, Globe, Building2, Mail, Phone, Star, Filter, ChevronDown, CheckCircle2, Circle, X, UploadCloud, Upload, Download, Printer, MoreVertical, Edit, Trash2, Loader2, ExternalLink, Settings, Paperclip, FileX, HardDrive, User, Users, ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import Papa from 'papaparse';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
-import { getPartners, deletePartner, savePartner, purgeCategoryGlobally } from '../lib/store';
+import { getPartners, deletePartner, savePartner, purgeCategoryGlobally, getCategories } from '../lib/store';
 import { useAuth } from '../contexts/AuthContext';
 import Pagination from '../components/Pagination';
 import BusinessCardUpload from '../components/common/BusinessCardUpload';
@@ -23,6 +24,7 @@ export default function Partners() {
     const [selectedCountry, setSelectedCountry] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [dbCategories, setDbCategories] = useState([]);
     const itemsPerPage = 8;
     const navigate = useNavigate();
     const fileInputRef = useRef(null);
@@ -80,9 +82,13 @@ export default function Partners() {
 
     const loadPartners = React.useCallback(async () => {
         setLoading(true);
-        const data = await getPartners(profile);
+        const [data, catData] = await Promise.all([
+            getPartners(profile),
+            getCategories()
+        ]);
         const sorted = data.sort((a, b) => a.name.localeCompare(b.name));
         setPartners(sorted);
+        setDbCategories(catData.map(c => c.name));
         setLoading(false);
     }, [profile]);
 
@@ -320,7 +326,7 @@ export default function Partners() {
         currentPage * itemsPerPage
     );
 
-    const availableCategories = Array.from(new Set([...PARTNER_CATEGORIES, ...partners.flatMap(p => p.types || [])])).filter(Boolean).sort();
+    const availableCategories = Array.from(new Set([...PARTNER_CATEGORIES, ...dbCategories, ...partners.flatMap(p => p.types || [])])).filter(Boolean).sort();
 
     const handleCategoryToggle = (cat) => {
         setNewPartner(prev => ({
@@ -419,6 +425,57 @@ export default function Partners() {
                         <Settings size={18} />
                     </button>
                 </div>
+            </div>
+
+            {/* Quick Filter Chips */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '32px', overflowX: 'auto', paddingBottom: '8px', alignItems: 'center' }} className="hide-on-print no-scrollbar">
+                <div style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '8px' }}>Quick Filters:</div>
+                {[
+                    { label: 'All', cat: '', country: '' },
+                    { label: 'Suppliers', cat: 'Supplier', country: '' },
+                    { label: 'Customers', cat: 'Customer', country: '' },
+                    { label: 'Singapore', cat: '', country: 'Singapore' },
+                    { label: 'Spare Parts', cat: 'Spare Parts', country: '' },
+                    { label: 'Service', cat: 'Service', country: '' },
+                    { label: 'Instrumentation', cat: 'Instrumentation', country: '' }
+                ].map(chip => {
+                    const isActive = (chip.cat === selectedCategory && chip.country === selectedCountry);
+                    return (
+                        <button
+                            key={chip.label}
+                            onClick={() => {
+                                setSelectedCategory(chip.cat);
+                                setSelectedCountry(chip.country);
+                                setCurrentPage(1);
+                            }}
+                            className="filter-chip"
+                            style={{
+                                padding: '8px 20px',
+                                borderRadius: '100px',
+                                border: '1px solid',
+                                borderColor: isActive ? '#6366f1' : '#e2e8f0',
+                                background: isActive ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : '#fff',
+                                color: isActive ? '#fff' : '#64748b',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap',
+                                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                boxShadow: isActive ? '0 4px 12px rgba(99, 102, 241, 0.35)' : '0 2px 4px rgba(0,0,0,0.02)'
+                            }}
+                        >
+                            {chip.label}
+                        </button>
+                    );
+                })}
+                {(selectedCategory || selectedCountry || searchTerm) && (
+                    <button 
+                        onClick={() => { setSelectedCategory(''); setSelectedCountry(''); setSearchTerm(''); }}
+                        style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                    >
+                        <X size={14} /> Clear All
+                    </button>
+                )}
             </div>
 
             {loading ? (
@@ -618,12 +675,27 @@ export default function Partners() {
                             ))}
                         </div>
 
-                        <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end' }}>
+                        <div style={{ marginTop: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Link to="/categories" onClick={() => setShowCategoryMgr(false)} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6366f1', fontSize: '0.9rem', fontWeight: 600 }}>
+                                Go to System Categories <ArrowRight size={14} />
+                            </Link>
                             <button onClick={() => setShowCategoryMgr(false)} className="btn btn-secondary">Close</button>
                         </div>
                     </div>
                 </div>
             )}
+            <style>{`
+                .filter-chip:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.15);
+                    border-color: #6366f1 !important;
+                }
+                .filter-chip:active {
+                    transform: translateY(0);
+                }
+                .no-scrollbar::-webkit-scrollbar { display: none; }
+                .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+            `}</style>
         </div>
     );
 }

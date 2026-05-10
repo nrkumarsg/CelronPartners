@@ -25,6 +25,7 @@ export function useEnquiry(companyId, enquiryId) {
                 vessel_id: '',
                 work_location_id: '',
                 customer_ref: '',
+                source_type: 'Email',
                 description: '',
                 gdrive_file_link: null
             });

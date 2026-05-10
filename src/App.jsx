@@ -26,9 +26,11 @@ import WorkflowBoard from './pages/workflows/WorkflowBoard';
 import UniversalFinder from './pages/workflows/UniversalFinder';
 import EnquiryDetails from './pages/workflows/EnquiryDetails';
 import JobDetails from './pages/workflows/JobDetails';
+import UnifiedSupplierHub from './pages/workflows/UnifiedSupplierHub';
 import WorkflowV2Board from './pages/workflows/WorkflowV2Board';
 import EnquiryList from './pages/workflows/EnquiryList';
 import WorkflowEditor from './pages/workflows/WorkflowEditor';
+import StatementOfAccount from './pages/workflows/StatementOfAccount';
 import WorkflowPrintPreview from './pages/workflows/WorkflowPrintPreview';
 import EnquiryPrintPreview from './pages/workflows/EnquiryPrintPreview';
 import CategoriesDirectory from './pages/CategoriesDirectory';
@@ -55,6 +57,7 @@ import FloatSupplierOrder from './pages/workflows/FloatSupplierOrder';
 import CommercialWallPage from './pages/CommercialWallPage';
 import SearchResults from './pages/SearchResults';
 import ApkManagement from './pages/admin/ApkManagement';
+import BillsPortal from './pages/accounts/BillsPortal';
 
 
 // Authentication & RBAC Components
@@ -151,6 +154,7 @@ function App() {
               <Route path="/catalog/labels" element={<ProtectedRoute requiredModule="catalog"><PrintLabels /></ProtectedRoute>} />
 
               {/* Workflows & Universal Finder Module */}
+              <Route path="/unified-supplier-hub" element={<ProtectedRoute><UnifiedSupplierHub /></ProtectedRoute>} />
               <Route path="/workflows" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
               <Route path="/enquiries" element={<ProtectedRoute><EnquiryList /></ProtectedRoute>} />
               <Route path="/quotations" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
@@ -162,7 +166,7 @@ function App() {
               <Route path="/packing-lists" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
               <Route path="/certificates" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
               <Route path="/payment-received" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
-              <Route path="/soa" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
+              <Route path="/soa" element={<ProtectedRoute><StatementOfAccount /></ProtectedRoute>} />
               <Route path="/payments" element={<ProtectedRoute><WorkflowV2Board /></ProtectedRoute>} />
               <Route path="/workflows/legacy" element={<ProtectedRoute><WorkflowBoard /></ProtectedRoute>} />
               <Route path="/workflows/enquiry/print/:id" element={<ProtectedRoute><EnquiryPrintPreview /></ProtectedRoute>} />
@@ -187,6 +191,7 @@ function App() {
               {/* Reports */}
               <Route path="/reports" element={<ProtectedRoute requiredModule="reports"><Reports /></ProtectedRoute>} />
               <Route path="/gst-reporting" element={<ProtectedRoute><GstReporting /></ProtectedRoute>} />
+              <Route path="/accounts/bills" element={<ProtectedRoute><BillsPortal /></ProtectedRoute>} />
 
               <Route path="/todo" element={<ProtectedRoute><TodoList /></ProtectedRoute>} />
 

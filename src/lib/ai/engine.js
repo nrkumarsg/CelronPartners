@@ -5,9 +5,9 @@ const API_KEYS = [
 ].filter(Boolean);
 
 const MODELS = {
-  FAST: "gemini-2.5-flash", 
-  SMART: "gemini-2.5-pro",
-  LATEST: "gemini-2.5-flash"
+  FAST: "gemini-1.5-flash", 
+  SMART: "gemini-1.5-pro",
+  LATEST: "gemini-1.5-flash"
 };
 
 const DEFAULT_CONFIG = {
@@ -115,9 +115,29 @@ export async function runAI(task, input, history = [], tools = null) {
       return runResearch(input, history, tools);
     case 'ocr':
       return runOCR(input, history);
+    case 'bill_ocr':
+      return runBillOCR(input, history);
     default:
       throw new Error(`Unknown AI task: ${task}`);
   }
+}
+
+async function runBillOCR(input, history) {
+  const prompt = `
+    TASK: Extract structured data from this Supplier Bill/Invoice.
+    Return ONLY JSON: { 
+      supplier_name: string, 
+      uen: string, 
+      invoice_no: string, 
+      invoice_date: string (YYYY-MM-DD), 
+      currency: string (e.g. SGD, USD),
+      subtotal: number, 
+      gst_amount: number, 
+      total_amount: number, 
+      items: [{ description: string, quantity: number, unit_price: number, amount: number }] 
+    }.
+  `;
+  return runWithFallback(prompt, false, history, null, input.image);
 }
 
 async function runAutofill(input, history, tools) {
@@ -126,11 +146,34 @@ async function runAutofill(input, history, tools) {
   }
   
   const isVerification = input.isVerification;
-  const prompt = `
-    TASK: ${isVerification ? 'VERIFY' : 'EXTRACT'} company data.
+    const prompt = `
+    TASK: ${isVerification ? 'DEEP VERIFY & COMPLETE' : 'EXTRACT'} structured business data.
     ENTITY: ${input.companyName}
+    WEBSITE: ${input.website || 'Search for official site'}
     CONTEXT: ${input.searchContext}
-    Return ONLY JSON: { uen, address, city, postal_code, email, phone, website, categories, brands, activity_summary, confidence: number (0-100) }.
+    
+    GUIDELINES:
+    1. UEN: Look for Singapore Unique Entity Number (UEN). This is CRITICAL. It usually looks like '201436227C' or 'T14LP0001B'. Prioritize data from uen.sg or ACRA.
+    2. CATEGORIZATION: Select 1-5 most relevant categories from: [Principal, International Supplier, Local Supplier, Freelancer, Service Company, Spare Parts, Service, Calibration, Automation, Electrical, Mechanical, Instrumentation, Safety Equipment, Industrial Supplies, Supplier, Customer].
+    3. ACTIVITY: Summarize the core business scope in 1-2 professional sentences. Mention key brands or specialized services.
+    4. ACCURACY: If UEN is found on an official source, confidence should be 95-100%. If only found on directory sites, 70-85%. If guessed, set < 50%.
+    
+    RETURN ONLY JSON:
+    { 
+      "uen": "string", 
+      "company_name": "string",
+      "address": "string",
+      "postal_code": "string",
+      "city": "string",
+      "country": "Singapore",
+      "email": "string", 
+      "phone": "string",
+      "website": "string",
+      "brands": "comma-separated strings",
+      "categories": ["array of strings"],
+      "activity_summary": "string",
+      "confidence": number
+    }
   `;
   return runWithFallback(prompt, isVerification, history, tools);
 }

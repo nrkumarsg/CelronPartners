@@ -528,3 +528,4 @@ export async function downloadApkByIdentifier(identifier) {
         window.open(`/apks/celron-${identifier}.apk`, '_blank');
     }
 }
+

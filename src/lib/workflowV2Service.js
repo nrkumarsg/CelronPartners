@@ -141,7 +141,7 @@ export const getWorkflowDocuments = async (companyId, type = null) => {
         // Fetch partners
         const partnerIds = [...new Set(data.map(d => d.partner_id).filter(Boolean))];
         if (partnerIds.length > 0) {
-            const { data: partners } = await supabase.from('partners').select('id, name').in('id', partnerIds);
+            const { data: partners } = await supabase.from('partners').select('id, name, address, phone, email, registration_no').in('id', partnerIds);
             const partnerMap = Object.fromEntries(partners?.map(p => [p.id, p]) || []);
             data.forEach(d => { d.partners = partnerMap[d.partner_id]; });
         }
@@ -164,6 +164,42 @@ export const getWorkflowDocuments = async (companyId, type = null) => {
     }
     
     return { data, error };
+};
+
+
+/**
+ * Fetch Statement of Account Data
+ */
+export const getStatementData = async (companyId, partnerId, startDate, endDate) => {
+    // Fetch all Invoices, Proformas, and Payments for this partner up to endDate
+    // We need earlier ones to calculate opening balance correctly
+    let query = supabase
+        .from('workflow_documents')
+        .select('*, partners(name), vessels!vessel_id(vessel_name), work_locations!work_location_id(location_name)')
+        .eq('company_id', companyId)
+        .in('document_type', ['Tax Invoice', 'Proforma Invoice', 'Payment Received'])
+        .lte('issue_date', endDate)
+        .order('issue_date', { ascending: true });
+
+    if (partnerId) {
+        query = query.eq('partner_id', partnerId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) return { data: null, error };
+
+    let partner = null;
+    if (partnerId) {
+        const { data: pData } = await supabase
+            .from('partners')
+            .select('*')
+            .eq('id', partnerId)
+            .single();
+        partner = pData;
+    }
+
+    return { data, partner, error: null };
 };
 
 /**
@@ -190,7 +226,7 @@ export const getWorkflowCounts = async (companyId) => {
 export const getWorkflowDocumentsByJob = async (jobId) => {
     const { data, error } = await supabase
         .from('workflow_documents')
-        .select(`*, partners(name), vessels(vessel_name), work_locations(location_name)`)
+        .select(`*, partners(name), vessels!vessel_id(vessel_name), work_locations!work_location_id(location_name)`)
         .eq('job_id', jobId)
         .order('created_at', { ascending: false });
     return { data, error };
@@ -202,7 +238,7 @@ export const getWorkflowDocumentsByJob = async (jobId) => {
 export const getWorkflowDocumentsByEnquiry = async (enquiryId) => {
     const { data, error } = await supabase
         .from('workflow_documents')
-        .select(`*, partners(name), vessels(vessel_name), work_locations(location_name)`)
+        .select(`*, partners(name), vessels!vessel_id(vessel_name), work_locations!work_location_id(location_name)`)
         .eq('enquiry_id', enquiryId)
         .order('created_at', { ascending: false });
     return { data, error };
@@ -260,6 +296,20 @@ export const getWorkflowDocumentById = async (id) => {
 };
 
 /**
+ * Delete Document and its Line Items
+ */
+export const deleteWorkflowDocument = async (id) => {
+    // Delete line items first due to FK constraints
+    const { error: itemError } = await supabase.from('workflow_line_items').delete().eq('document_id', id);
+    if (itemError) {
+        console.error("Error deleting items:", itemError);
+    }
+
+    const { error: docError } = await supabase.from('workflow_documents').delete().eq('id', id);
+    return { error: docError };
+};
+
+/**
  * Save Document (Create or Update) + Sync Line Items
  */
 export const saveWorkflowDocument = async (docData, lineItems) => {
@@ -276,7 +326,7 @@ export const saveWorkflowDocument = async (docData, lineItems) => {
         'discount_amount', 'discount_percent',
         'customer_po_no', 'customer_po_date', 'customer_po_by_id', 'customer_po_attachment_url',
         'is_job', 'assigned_job_no',
-        'original_document_id', 'revision_no',
+        'original_document_id', 'revision_no', 'enquiry_id', 'job_id',
         'attachment_urls', 'delivery_verification', 'gdrive_folder_id', 'drive_folder_id',
         'signature_url', 'signed_by', 'is_signed'
     ];
@@ -422,11 +472,6 @@ export const uploadJobAttachment = async (file, companyId) => {
         .getPublicUrl(filePath);
 
     return publicUrl;
-};
-
-export const deleteWorkflowDocument = async (id) => {
-    const { error } = await supabase.from('workflow_documents').delete().eq('id', id);
-    return { error };
 };
 
 /**
@@ -681,14 +726,15 @@ export const createDocumentRevision = async (docId) => {
 /**
  * Duplicate a Document (Creates a brand new copy with a new number)
  */
-export const duplicateWorkflowDocument = async (docId) => {
+export const duplicateWorkflowDocument = async (docId, overrides = {}) => {
     const { data: original, error: fetchErr } = await getWorkflowDocumentById(docId);
     if (fetchErr) throw fetchErr;
 
     const { items, id, created_at, updated_at, original_document_id, revision_no, document_no, ...cleanHeader } = original;
 
     // Generate new Document Number
-    const newNo = await generateDocNumber(original.company_id, original.document_type);
+    const targetType = overrides.document_type || original.document_type;
+    const newNo = await generateDocNumber(original.company_id, targetType);
 
     const newDocData = {
         ...cleanHeader,
@@ -701,7 +747,8 @@ export const duplicateWorkflowDocument = async (docId) => {
         customer_po_by_id: null,
         customer_po_attachment_url: null,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        ...overrides
     };
 
     // Clean up items for the new document (remove old IDs)
@@ -769,33 +816,13 @@ export const convertQuotationToJob = async (quotationId, poData, options = {}) =
     };
     await saveWorkflowDocument(qtnUpdate, qtn.items);
 
-    // 4. Batch Generate Associated Documents
+    // 4. Batch Generate Master Job Record
+    // (Previously this loop generated ORA, DO, PRO, INV, etc. Now it only generates the Job master)
     const docTypes = [
-        { type: 'Job', prefix: 'CEL' }, // Master Job Record
-        { type: 'Order Acknowledgment', prefix: 'ORA' }, 
-        { type: 'Delivery Order', prefix: 'DO' },
-        { type: 'Proforma Invoice', prefix: 'PRO' },
-        { type: 'Tax Invoice', prefix: 'INV' },
-        { type: 'Packing List', prefix: 'PKL' }
+        { type: 'Job', prefix: 'CEL' } // Master Job Record
     ];
 
-    if (options.includeCertificates) docTypes.push({ type: 'Certificate', prefix: 'CERT' });
-    if (options.includeServiceReport) docTypes.push({ type: 'Service Report', prefix: 'SR' });
-
     for (const doc of docTypes) {
-        const packageDetailsTemplate = `
-            <p><strong>Package Details</strong></p>
-            <ul>
-                <li>Size of the Package : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mm (L) x &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mm (B) x &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; mm (H)</li>
-                <li>Weight of the Package : &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Kgs</li>
-                <li>Origin of spares : Singapore</li>
-                <li>Total No. of Packages: </li>
-                <li>Package Type (Carton / Wooden Crate / Pallet / Drum): </li>
-                <li>Package Qty: </li>
-                <li>Description of Contents: </li>
-            </ul>
-        `;
-
         const newDocData = {
             ...qtn,
             id: undefined, // Force insert
@@ -808,7 +835,7 @@ export const convertQuotationToJob = async (quotationId, poData, options = {}) =
             customer_po_no: poData.po_no,
             customer_po_date: poData.po_date,
             customer_po_by_id: poData.contact_id || qtn.contact_id,
-            notes: (doc.type === 'Delivery Order' || doc.type === 'Packing List') ? packageDetailsTemplate : qtn.notes,
+            customer_po_attachment_url: poData.attachment_url,
             delivery_verification: qtnUpdate.delivery_verification
         };
         

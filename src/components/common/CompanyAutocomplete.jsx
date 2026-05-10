@@ -144,7 +144,7 @@ const CompanyAutocomplete = ({ value, onChange, onSelect, className }) => {
 
         if (onSelect && window.google && window.google.maps && window.google.maps.places) {
             const service = new window.google.maps.places.PlacesService(document.createElement('div'));
-            service.getDetails({ placeId: suggestion.place_id, fields: ['address_components', 'formatted_address', 'website', 'name', 'types'] }, (place, status) => {
+            service.getDetails({ placeId: suggestion.place_id, fields: ['address_components', 'formatted_address', 'website', 'name', 'types', 'formatted_phone_number'] }, (place, status) => {
                 if (status === window.google.maps.places.PlacesServiceStatus.OK) {
                     onSelect(place);
                 }

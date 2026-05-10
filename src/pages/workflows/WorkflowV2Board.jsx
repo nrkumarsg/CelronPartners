@@ -3,7 +3,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getWorkflowDocuments, deleteWorkflowDocument, duplicateWorkflowDocument, convertQuotationToJob, revertJobToQuotation, convertProformaToTaxInvoice, getDocumentHistory } from '../../lib/workflowV2Service';
 import {
     FileCheck, Play, Briefcase, X, Loader2, PlayCircle, Folder, Upload,
-    ArrowRightLeft, Filter, Eye, Printer, Search, Trash2, Plus, FileText, Copy, Clock
+    ArrowRightLeft, Filter, Eye, Printer, Search, Trash2, Plus, FileText, Copy, Clock,
+    ArrowUp, ArrowDown
 } from 'lucide-react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import CustomerEnquiryForm from '../../components/CustomerEnquiryForm';
@@ -36,6 +37,14 @@ export default function WorkflowV2Board() {
     const [historyDoc, setHistoryDoc] = useState(null);
     const [historyItems, setHistoryItems] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
+    
+    // SOA Aging View State
+    const [soaGroups, setSoaGroups] = useState([]);
+    const [sortDirection, setSortDirection] = useState('asc'); // 'asc' | 'desc'
+    const [selectedCustomerForSOA, setSelectedCustomerForSOA] = useState(null);
+    const [customerDocs, setCustomerDocs] = useState([]);
+    const [loadingCustomerDocs, setLoadingCustomerDocs] = useState(false);
+    const [poFile, setPoFile] = useState(null);
 
     const dropdownRef = useRef(null);
 
@@ -86,6 +95,12 @@ export default function WorkflowV2Board() {
         setLoading(true);
         // If activeType is "Job", we fetch ALL documents for the company and filter by is_job
         let typeFilter = (activeType === 'All' || activeType === 'Job') ? null : activeType;
+        
+        // Special fetch for SOA: we need all financial docs to calculate balances
+        if (activeType === 'Statement of Account') {
+            typeFilter = ['Tax Invoice', 'Proforma Invoice', 'Payment Received'];
+        }
+
         // Fetch both Quotation and Order Acknowledgment when either is selected to handle crossover
         if (activeType === 'Quotation' || activeType === 'Order Acknowledgment') {
             typeFilter = ['Quotation', 'Order Acknowledgment'];
@@ -106,6 +121,37 @@ export default function WorkflowV2Board() {
                     }
                 });
                 filtered = Object.values(jobGroups).sort((a, b) => b.assigned_job_no.localeCompare(a.assigned_job_no));
+            } else if (activeType === 'Statement of Account') {
+                // Group by Customer and calculate outstanding
+                const groups = {};
+                data.forEach(doc => {
+                    const pname = doc.partners?.name || 'Walk-in';
+                    if (!groups[pname]) {
+                        groups[pname] = { 
+                            partner_id: doc.partner_id, 
+                            name: pname, 
+                            outstanding: 0, 
+                            total_invoiced: 0, 
+                            total_paid: 0,
+                            last_transaction: doc.issue_date,
+                            doc_count: 0
+                        };
+                    }
+                    
+                    const amount = parseFloat(doc.total_amount) || 0;
+                    if (doc.document_type.includes('Invoice')) {
+                        groups[pname].outstanding += amount;
+                        groups[pname].total_invoiced += amount;
+                    } else if (doc.document_type === 'Payment Received') {
+                        groups[pname].outstanding -= amount;
+                        groups[pname].total_paid += amount;
+                    }
+                    groups[pname].doc_count++;
+                    if (doc.issue_date && (!groups[pname].last_transaction || new Date(doc.issue_date) > new Date(groups[pname].last_transaction))) {
+                        groups[pname].last_transaction = doc.issue_date;
+                    }
+                });
+                setSoaGroups(Object.values(groups));
             }
             setDocuments(filtered);
         }
@@ -169,8 +215,45 @@ export default function WorkflowV2Board() {
         setConversionLoading(true);
         try {
             const { jobNo } = await convertQuotationToJob(conversionTarget.id, poData, options);
+            
+            // Handle PO File Upload if present
+            if (poFile) {
+                try {
+                    const accessToken = localStorage.getItem('google_access_token');
+                    if (accessToken) {
+                        const { getDocumentSettings } = await import('../../lib/store');
+                        const { getOrCreateFolder, provisionFullProjectStructure, uploadFileToDrive } = await import('../../lib/driveService');
+                        
+                        const settings = await getDocumentSettings(profile.company_id);
+                        let celronRootId = settings?.gdrive_celron_root_id || settings?.google_drive_folder_id;
+                        if (celronRootId?.includes('drive.google.com')) {
+                            const match = celronRootId.match(/\/folders\/([a-zA-Z0-9_-]+)/) || celronRootId.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                            if (match) celronRootId = match[1];
+                        }
+
+                        const currentYear = new Date().getFullYear().toString();
+                        const projectFolderId = await provisionFullProjectStructure(accessToken, celronRootId, currentYear, jobNo);
+                        const targetFolderId = await getOrCreateFolder(accessToken, '1. Enquiries & Quotations', projectFolderId);
+                        
+                        const uploadResult = await uploadFileToDrive(accessToken, poFile, { folderId: targetFolderId });
+                        const poUrl = `https://drive.google.com/file/d/${uploadResult.id}/view`;
+
+                        // Update all documents associated with this job with the attachment URL
+                        const { supabase } = await import('../../lib/supabase');
+                        await supabase.from('workflow_documents').update({ 
+                            customer_po_attachment_url: poUrl,
+                            attachment_urls: [poUrl]
+                        }).eq('assigned_job_no', jobNo);
+                    }
+                } catch (uploadErr) {
+                    console.error("PO Upload to Drive failed:", uploadErr);
+                    // Non-blocking error for main conversion
+                }
+            }
+
             alert(`Job ${jobNo} created successfully with all associated documents!`);
             setShowConversionModal(false);
+            setPoFile(null);
             fetchDocs();
         } catch (error) {
             console.error("Conversion failed:", error);
@@ -438,7 +521,7 @@ export default function WorkflowV2Board() {
                                 'Packing List': { link: '/workflows/editor/packing-list/new' },
                                 'Tax Invoice': { link: '/workflows/editor/tax-invoice/new' },
                                 'Certificate': { link: '/workflows/editor/certificate/new' },
-                                'Statement of Account': { link: '/workflows/editor/soa-recall/new' }
+                                'Statement of Account': { link: '/soa' }
                             };
                             if (config[activeType]) {
                                 window.open(config[activeType].link, '_blank');
@@ -460,7 +543,7 @@ export default function WorkflowV2Board() {
                                 'Certificate': 'New Certificate',
                                 'Proforma Invoice': 'New Proforma Invoice',
                                 'Tax Invoice': 'New Tax Invoice',
-                                'Statement of Account': 'SOA-Recall',
+                                'Statement of Account': 'Generate SOA',
                                 'All': 'New Enquiry'
                             };
                             return labelMap[activeType] || `New ${activeType}`;
@@ -642,7 +725,18 @@ export default function WorkflowV2Board() {
                 <div className="table-container">
                     <table>
                         <thead>
-                            {activeType === 'Job' ? (
+                            {activeType === 'Statement of Account' ? (
+                                <tr>
+                                    <th style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }} onClick={() => setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc')}>
+                                        Customer Name {sortDirection === 'asc' ? <ArrowUp size={14} /> : <ArrowDown size={14} />}
+                                    </th>
+                                    <th>Outstanding Balance</th>
+                                    <th>Total Invoiced</th>
+                                    <th>Total Paid</th>
+                                    <th>Last Transaction</th>
+                                    <th style={{ textAlign: 'right' }}>Actions</th>
+                                </tr>
+                            ) : activeType === 'Job' ? (
                                 <tr>
                                     <th>CEL Job No</th>
                                     <th>Customer</th>
@@ -673,24 +767,57 @@ export default function WorkflowV2Board() {
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan="8" className="text-center py-12">Loading documents...</td></tr>
-                            ) : filteredDocs.length === 0 ? (
+                                <tr><td colSpan="11" className="text-center py-12">Loading documents...</td></tr>
+                            ) : (activeType === 'Statement of Account' ? soaGroups : filteredDocs).length === 0 ? (
                                 <tr>
-                                    <td colSpan="8" className="text-center py-12">
+                                    <td colSpan="11" className="text-center py-12">
                                         <div style={{ color: 'var(--text-secondary)' }}>
                                             <FileText size={48} style={{ opacity: 0.2, marginBottom: '16px' }} />
                                             <p>No documents found matching your criteria.</p>
                                         </div>
                                     </td>
                                 </tr>
+                            ) : activeType === 'Statement of Account' ? (
+                                soaGroups
+                                    .sort((a, b) => sortDirection === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name))
+                                    .map((group) => (
+                                        <tr key={group.name} className="table-row">
+                                            <td 
+                                                className="font-bold text-accent" 
+                                                style={{ cursor: 'pointer', color: 'var(--accent)' }}
+                                                onClick={() => {
+                                                    setSelectedCustomerForSOA(group);
+                                                    const docs = documents.filter(d => d.partner_id === group.partner_id);
+                                                    setCustomerDocs(docs);
+                                                }}
+                                            >
+                                                {group.name}
+                                            </td>
+                                            <td className="font-bold" style={{ color: group.outstanding > 0.01 ? '#ef4444' : (group.outstanding < -0.01 ? '#10b981' : 'var(--text-secondary)') }}>
+                                                SGD {group.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            </td>
+                                            <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>SGD {group.total_invoiced.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                            <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>SGD {group.total_paid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                            <td>{formatDate(group.last_transaction)}</td>
+                                            <td style={{ textAlign: 'right' }}>
+                                                <button 
+                                                    className="btn btn-sm btn-secondary" 
+                                                    style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: 'auto' }}
+                                                    onClick={() => window.open(`/soa?partner_id=${group.partner_id}`, '_blank')}
+                                                >
+                                                    <Printer size={14} /> Generate SOA
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))
                             ) : (
                                 filteredDocs.map((doc) => (
                                     activeType === 'Job' ? (
                                         <tr key={doc.id} className="table-row">
                                             <td className="font-bold" style={{ color: '#1e3a8a' }}>{doc.assigned_job_no || 'TBD'}</td>
                                             <td>
-                                                <div style={{ fontWeight: 500 }}>{doc.partners?.name || 'Walk-in'}</div>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{doc.subject || '-'}</div>
+                                                <div style={{ fontWeight: 700, color: '#1e3a8a' }}>{doc.delivery_verification?.po_description || doc.partners?.name || 'Walk-in'}</div>
+                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{doc.contacts?.first_name ? `Attn: ${doc.contacts.first_name}` : ''}</div>
                                             </td>
                                             <td>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -710,8 +837,8 @@ export default function WorkflowV2Board() {
                                             <td>{doc.customer_po_date ? formatDate(doc.customer_po_date) : '-'}</td>
                                             <td>{doc.contacts?.first_name || '-'}</td>
                                             <td>
-                                                <div style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.85rem' }} title={doc.delivery_verification?.po_description}>
-                                                    {doc.delivery_verification?.po_description || '-'}
+                                                <div style={{ maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.85rem' }} title={doc.subject}>
+                                                    {doc.subject || '-'}
                                                 </div>
                                             </td>
                                             <td className="font-bold">SGD {doc.delivery_verification?.po_value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '-'}</td>
@@ -1108,7 +1235,42 @@ export default function WorkflowV2Board() {
 
                             <div className="form-item" style={{ marginBottom: '24px' }}>
                                 <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>PO Description / Project Scope</label>
-                                <textarea className="form-input" name="po_description" rows="3" placeholder="Briefly describe the PO scope..." style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem', resize: 'none' }}></textarea>
+                                <textarea className="form-input" name="po_description" rows="2" placeholder="Briefly describe the PO scope..." style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '0.95rem', resize: 'none' }}></textarea>
+                            </div>
+
+                            <div className="form-item" style={{ marginBottom: '24px' }}>
+                                <label style={{ display: 'block', fontSize: '0.9rem', color: '#374151', marginBottom: '6px', fontWeight: 500 }}>Upload Customer PO (File Repository)</label>
+                                <div style={{ 
+                                    border: '2px dashed #e5e7eb', 
+                                    borderRadius: '12px', 
+                                    padding: '16px', 
+                                    textAlign: 'center',
+                                    background: poFile ? '#f0fdf4' : '#fafafa',
+                                    borderColor: poFile ? '#22c55e' : '#e5e7eb',
+                                    transition: 'all 0.2s'
+                                }}>
+                                    <input 
+                                        type="file" 
+                                        id="po-upload" 
+                                        hidden 
+                                        onChange={(e) => setPoFile(e.target.files[0])} 
+                                    />
+                                    <label htmlFor="po-upload" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                                        {poFile ? (
+                                            <>
+                                                <FileCheck size={24} color="#22c55e" />
+                                                <span style={{ fontSize: '0.85rem', color: '#15803d', fontWeight: 600 }}>{poFile.name} selected</span>
+                                                <button type="button" onClick={(e) => { e.preventDefault(); setPoFile(null); }} style={{ fontSize: '0.75rem', color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Remove</button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Upload size={24} color="#6366f1" />
+                                                <span style={{ fontSize: '0.85rem', color: '#4b5563' }}>Click to upload or drag and drop PO file</span>
+                                                <span style={{ fontSize: '0.7rem', color: '#9ca3af' }}>PDF, DOCX or Images (Max 10MB)</span>
+                                            </>
+                                        )}
+                                    </label>
+                                </div>
                             </div>
 
                             <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '12px', border: '1px solid #f3f4f6', marginBottom: '24px' }}>
@@ -1304,6 +1466,100 @@ export default function WorkflowV2Board() {
                                 </table>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+            
+            {/* SOA Drill-down Modal */}
+            {selectedCustomerForSOA && (
+                <div className="modal-overlay" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+                    <div className="modal-content" style={{ width: '1000px', maxWidth: '95%', maxHeight: '90vh', overflowY: 'auto', background: 'var(--bg-panel)', padding: '32px', borderRadius: '24px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', border: '1px solid var(--border-color)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <div>
+                                <h2 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800 }}>{selectedCustomerForSOA.name}</h2>
+                                <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', margin: '4px 0 0 0' }}>Detailed Outstanding Ledger</p>
+                            </div>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button 
+                                    className="btn btn-primary"
+                                    onClick={() => window.open(`/soa?partner_id=${selectedCustomerForSOA.partner_id}`, '_blank')}
+                                >
+                                    <Printer size={18} /> Generate Official Statement
+                                </button>
+                                <button onClick={() => setSelectedCustomerForSOA(null)} style={{ background: 'var(--bg-secondary)', border: 'none', cursor: 'pointer', color: 'var(--text-secondary)', padding: '8px', borderRadius: '50%' }}><X size={24} /></button>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '32px' }}>
+                            <div className="glass-panel" style={{ padding: '20px', borderLeft: '4px solid #ef4444' }}>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Total Outstanding</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#ef4444' }}>SGD {selectedCustomerForSOA.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                            </div>
+                            <div className="glass-panel" style={{ padding: '20px', borderLeft: '4px solid var(--accent)' }}>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Total Invoiced</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>SGD {selectedCustomerForSOA.total_invoiced.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                            </div>
+                            <div className="glass-panel" style={{ padding: '20px', borderLeft: '4px solid #10b981' }}>
+                                <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Total Payments</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#10b981' }}>SGD {selectedCustomerForSOA.total_paid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                            </div>
+                        </div>
+
+                        <div className="table-container">
+                            <table style={{ borderCollapse: 'separate', borderSpacing: '0 8px' }}>
+                                <thead>
+                                    <tr>
+                                        <th style={{ background: 'transparent' }}>Date</th>
+                                        <th style={{ background: 'transparent' }}>Type</th>
+                                        <th style={{ background: 'transparent' }}>Document No</th>
+                                        <th style={{ background: 'transparent' }}>Subject / Ref</th>
+                                        <th style={{ background: 'transparent' }}>Debit (+)</th>
+                                        <th style={{ background: 'transparent' }}>Credit (-)</th>
+                                        <th style={{ background: 'transparent', textAlign: 'right' }}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {customerDocs
+                                        .sort((a, b) => new Date(b.issue_date) - new Date(a.issue_date))
+                                        .map(doc => {
+                                            const isInvoice = doc.document_type.includes('Invoice');
+                                            return (
+                                                <tr key={doc.id} className="table-row" style={{ background: 'var(--bg-secondary)', borderRadius: '12px' }}>
+                                                    <td style={{ fontWeight: 500 }}>{formatDate(doc.issue_date)}</td>
+                                                    <td>
+                                                        <span style={{ 
+                                                            fontSize: '0.75rem', 
+                                                            padding: '4px 10px', 
+                                                            borderRadius: '20px', 
+                                                            background: isInvoice ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                            color: isInvoice ? '#3b82f6' : '#10b981',
+                                                            fontWeight: 600
+                                                        }}>
+                                                            {doc.document_type}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ fontWeight: 600 }}>{doc.document_no}</td>
+                                                    <td style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{doc.subject || doc.payment_ref || '-'}</td>
+                                                    <td style={{ fontWeight: 700, color: isInvoice ? 'var(--text-primary)' : 'transparent' }}>
+                                                        {isInvoice ? `+ ${doc.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '-'}
+                                                    </td>
+                                                    <td style={{ fontWeight: 700, color: !isInvoice ? '#10b981' : 'transparent' }}>
+                                                        {!isInvoice ? `- ${doc.total_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '-'}
+                                                    </td>
+                                                    <td style={{ textAlign: 'right' }}>
+                                                        <button 
+                                                            className="btn btn-sm btn-secondary"
+                                                            onClick={() => window.open(`/workflows/editor/${doc.document_type.toLowerCase().replace(/\s+/g, '-')}/${doc.id}`, '_blank')}
+                                                        >
+                                                            <Eye size={14} /> Open
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             )}

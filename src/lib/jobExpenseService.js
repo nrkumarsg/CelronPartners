@@ -65,3 +65,39 @@ export const deleteJobExpense = async (id) => {
         return { error };
     }
 };
+export const getGlobalExpenses = async (companyId) => {
+    try {
+        const { data, error } = await supabase
+            .from('job_expenses')
+            .select(`
+                *,
+                partner:supplier_id (id, name, registration_no),
+                job:job_id (id, job_no)
+            `)
+            .eq('company_id', companyId)
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        return { data, error: null };
+    } catch (error) {
+        console.error('Error fetching global expenses:', error);
+        return { data: null, error };
+    }
+};
+
+export const updateExpenseStatus = async (id, status) => {
+    try {
+        const { data, error } = await supabase
+            .from('job_expenses')
+            .update({ status })
+            .eq('id', id)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return { data, error: null };
+    } catch (error) {
+        console.error('Error updating expense status:', error);
+        return { data: null, error };
+    }
+};

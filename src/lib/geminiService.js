@@ -40,7 +40,9 @@ export async function smartSearchCompany(companyName, website = '', searchContex
         // STAGE 1: Raw Research (No JSON constraint, allows Tool usage)
         console.log('[AI Stage 1] Researching using Google Search Tool...');
         const researchSummary = await runAI('research', { 
-            query: `Find official UEN, address, email, phone, and brands for company: ${companyName}. Website: ${website}. Additional Context: ${searchContext}`,
+            query: `Find official Singapore UEN (Unique Entity Number), ACRA registration details, headquarters address, primary email, phone, and brands for the business: ${companyName}. 
+            Try searching on uen.sg, opencorpdata.com, or official ACRA records. 
+            Website: ${website}. ${searchContext ? 'Context: ' + searchContext : ''}`,
             useTools: true 
         }, [], tools);
 
@@ -54,15 +56,21 @@ export async function smartSearchCompany(companyName, website = '', searchContex
         
         // STAGE 3: Deep Verification (If needed)
         const confidence = extractData.confidence || 0;
-        if (confidence < 80 || !extractData.uen) {
-            console.log('[AI Stage 3] Deep Verifying...');
+        if (confidence < 85 || !extractData.uen) {
+            console.log('[AI Stage 3] Deep Verifying and finding missing links...');
             const verifyData = await runAI('autofill', { 
                 isVerification: true, 
                 extractedData: extractData, 
                 searchContext: typeof researchSummary === 'string' ? researchSummary : JSON.stringify(researchSummary)
             }, [], tools);
             
-            return formatResult({ ...extractData, ...verifyData }, companyName, website);
+            const merged = { ...extractData, ...verifyData };
+            // Ensure we don't lose data from stage 2 if stage 3 returned less
+            Object.keys(extractData).forEach(key => {
+                if (!merged[key] && extractData[key]) merged[key] = extractData[key];
+            });
+
+            return formatResult(merged, companyName, website);
         }
 
         return formatResult(extractData, companyName, website);

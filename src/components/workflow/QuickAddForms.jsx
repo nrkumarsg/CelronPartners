@@ -7,8 +7,11 @@ import BusinessCardUpload from '../common/BusinessCardUpload';
 import { COUNTRIES, PARTNER_CATEGORIES } from '../../lib/constants';
 import { smartSearchCompany, researchContactWithGemini, researchVesselWithGemini, parseOCRBusinessCard } from '../../lib/geminiService';
 import { runUniversalSearch } from '../../lib/universalFinder';
+import { parseSupplierBillWithAi } from '../../lib/BillOcrService';
 import RichTextEditor from '../common/RichTextEditor';
+import CompanyAutocomplete from '../common/CompanyAutocomplete';
 import PartnerDocuments from '../partners/PartnerDocuments';
+
 
 // Generic Modal Base
 export const Modal = ({ isOpen, onClose, title, children, icon: Icon, size = 'md' }) => {
@@ -140,6 +143,157 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
     const [isAiResearching, setIsAiResearching] = useState(false);
     const [aiPreview, setAiPreview] = useState(null);
     const [aiStatus, setAiStatus] = useState('');
+    const [isMapsResearching, setIsMapsResearching] = useState(false);
+
+    const handleCompanySelect = (place) => {
+        const address = place.formatted_address || '';
+        const name = place.name || '';
+        const weblink = place.website || '';
+        const phone = place.formatted_phone_number || '';
+
+        let country = '';
+        let city = '';
+        let pincode = '';
+        place.address_components?.forEach(c => {
+            if (c.types.includes('country')) country = c.long_name;
+            if (c.types.includes('locality')) city = c.long_name;
+            if (c.types.includes('postal_code')) pincode = c.long_name;
+        });
+
+        const updated = {
+            ...formData,
+            name,
+            address: address || formData.address,
+            city: city || formData.city,
+            pincode: pincode || formData.pincode,
+            country: country || formData.country,
+            weblink: weblink || formData.weblink,
+            phone1: phone || formData.phone1
+        };
+        setFormData(updated);
+        if (onDataChange) onDataChange(updated);
+    };
+
+    const handleGoogleMapsResearch = async () => {
+        if (!formData.name) return alert('Please enter a Company Name first.');
+        
+        setIsMapsResearching(true);
+        setAiStatus('🛰️ Connecting to Google Maps...');
+        
+        // Timeout handling
+        const timeoutId = setTimeout(() => {
+            if (isMapsResearching) {
+                setIsMapsResearching(false);
+                setAiStatus('');
+                alert('Google Maps research timed out. Please try again or check your connection.');
+            }
+        }, 15000);
+
+        try {
+            if (!window.google || !window.google.maps || !window.google.maps.places) {
+                throw new Error('Google Maps SDK not loaded');
+            }
+
+            const service = new window.google.maps.places.PlacesService(document.createElement('div'));
+            
+            service.findPlaceFromQuery({
+                query: formData.name,
+                fields: ['name', 'formatted_address', 'place_id', 'website', 'formatted_phone_number', 'address_components', 'types']
+            }, (results, status) => {
+                clearTimeout(timeoutId);
+                if (status === window.google.maps.places.PlacesServiceStatus.OK && results && results[0]) {
+                    setAiStatus('📍 Retrieving location intelligence...');
+                    service.getDetails({ 
+                        placeId: results[0].place_id, 
+                        fields: ['name', 'formatted_address', 'website', 'formatted_phone_number', 'address_components', 'types'] 
+                    }, async (place, detailsStatus) => {
+                        if (detailsStatus === window.google.maps.places.PlacesServiceStatus.OK) {
+                            const mapsData = {
+                                uen: '',
+                                address: place.formatted_address || '',
+                                phone1: place.formatted_phone_number || '',
+                                website: place.website || '',
+                                country: '',
+                                city: '',
+                                pincode: ''
+                            };
+
+                            place.address_components?.forEach(c => {
+                                if (c.types.includes('country')) mapsData.country = c.long_name;
+                                if (c.types.includes('locality')) mapsData.city = c.long_name;
+                                if (c.types.includes('postal_code')) mapsData.pincode = c.long_name;
+                            });
+
+                            const previewData = {
+                                ...mapsData,
+                                categories: place.types || [],
+                                brands: '',
+                                activity_summary: `Found via Google Maps: ${place.name}`,
+                                confidence: 95,
+                                manual_verification_required: false,
+                                source: 'Google Maps (Verified Location)'
+                            };
+
+                            setAiPreview(previewData);
+                            
+                            setFormData(prev => ({
+                                ...prev,
+                                address: mapsData.address || prev.address,
+                                phone1: mapsData.phone1 || prev.phone1,
+                                weblink: mapsData.website || prev.weblink,
+                                country: mapsData.country || prev.country,
+                                city: mapsData.city || prev.city,
+                                pincode: mapsData.pincode || prev.pincode
+                            }));
+
+                            if (place.website || formData.name) {
+                                setAiStatus('🤖 AI background enrichment for UEN & Brands...');
+                                smartSearchCompany(formData.name, place.website, `Verified Website: ${place.website}`)
+                                    .then(aiResult => {
+                                        if (aiResult && aiResult.uen) {
+                                            setAiPreview(prev => ({
+                                                ...prev,
+                                                uen: aiResult.uen || prev.uen,
+                                                brands: aiResult.brands || prev.brands,
+                                                activity_summary: aiResult.activity_summary || prev.activity_summary,
+                                                email1: aiResult.email || prev.email1,
+                                                confidence: 100,
+                                                source: 'Google Maps + AI Intelligence'
+                                            }));
+                                        }
+                                        setIsMapsResearching(false);
+                                        setAiStatus('');
+                                    })
+                                    .catch(aiErr => {
+                                        console.warn('Background AI enrichment failed:', aiErr);
+                                        setIsMapsResearching(false);
+                                        setAiStatus('');
+                                    });
+                            } else {
+                                setIsMapsResearching(false);
+                                setAiStatus('');
+                            }
+                        } else {
+                            alert('No details found for this company on Google Maps.');
+                            setIsMapsResearching(false);
+                            setAiStatus('');
+                        }
+                    });
+                } else {
+                    alert('Company not found on Google Maps.');
+                    setIsMapsResearching(false);
+                    setAiStatus('');
+                }
+            });
+        } catch (err) {
+            clearTimeout(timeoutId);
+            console.error('Maps Research Error:', err);
+            alert(`Maps Research failed: ${err.message}`);
+            setIsMapsResearching(false);
+            setAiStatus('');
+        }
+    };
+
 
     const handleOCR = async (text) => {
         if (!text) return;
@@ -170,14 +324,21 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
         if (!formData.name) return alert('Please enter a Company Name first.');
         
         setIsAiResearching(true);
-        setAiStatus('🔍 Searching official registries...');
+        setAiStatus('🔍 Deep web search for UEN & Registries...');
         try {
-            // 1. Gather live context using Google Custom Search
+            // 1. Gather live context with better queries
+            const queries = [
+                formData.name,
+                `${formData.name} Singapore UEN`,
+                `${formData.name} official website contact`
+            ];
+            
             let searchContext = '';
             try {
                 const { data: { user } } = await supabase.auth.getUser();
+                // Perform multiple searches or at least one very good one
                 const searchId = await runUniversalSearch({ 
-                    query: formData.name, 
+                    query: queries[1], // Focus on UEN search
                     userId: user?.id || '00000000-0000-0000-0000-000000000000',
                     skipAi: true
                 });
@@ -200,10 +361,60 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
             // 2. Use the new Smart Search with the gathered context
             const result = await smartSearchCompany(formData.name, formData.weblink, searchContext);
 
-            if (result.confidence < 70) {
-                setAiStatus('🛡️ Low confidence detected. Deep verifying...');
-                // Stage 2: Verification (Internal in smartSearchCompany already handles this logic if we pass needsVerification)
-                // Actually smartSearchCompany already does Stage 2 internally now.
+            if (result.confidence < 50 || !result.uen) {
+                setAiStatus('🛡️ Low confidence detected. Attempting Google Maps fallback...');
+                // Automatically try Google Maps if AI is uncertain
+                try {
+                    const service = new window.google.maps.places.PlacesService(document.createElement('div'));
+                    service.findPlaceFromQuery({
+                        query: formData.name,
+                        fields: ['name', 'formatted_address', 'place_id', 'website', 'formatted_phone_number', 'address_components', 'types']
+                    }, (results, status) => {
+                        if (status === window.google.maps.places.PlacesServiceStatus.OK && results && results[0]) {
+                            service.getDetails({ 
+                                placeId: results[0].place_id, 
+                                fields: ['name', 'formatted_address', 'website', 'formatted_phone_number', 'address_components', 'types'] 
+                            }, (place, detailsStatus) => {
+                                if (detailsStatus === window.google.maps.places.PlacesServiceStatus.OK) {
+                                    // Merge AI result with Maps result
+                                    const merged = {
+                                        ...result,
+                                        address: result.address || place.formatted_address || '',
+                                        phone: result.phone || place.formatted_phone_number || '',
+                                        website: result.website || place.website || '',
+                                        source: 'AI + Google Maps'
+                                    };
+                                    
+                                    // Fill in address components from Maps if missing
+                                    place.address_components?.forEach(c => {
+                                        if (c.types.includes('country') && !merged.country) merged.country = c.long_name;
+                                        if (c.types.includes('locality') && !merged.postal_code) merged.city = c.long_name;
+                                        if (c.types.includes('postal_code') && !merged.postal_code) merged.postal_code = c.long_name;
+                                    });
+
+                                    setAiPreview({
+                                        uen: merged.uen || '',
+                                        address: merged.address || '',
+                                        country: merged.country || '',
+                                        city: merged.city || '',
+                                        pincode: merged.postal_code || '',
+                                        email1: merged.email || '',
+                                        phone1: merged.phone || '',
+                                        website: merged.website || '',
+                                        categories: merged.categories || [],
+                                        brands: merged.brands || '',
+                                        activity_summary: merged.activity_summary || `Verified via Google Maps: ${place.name}`,
+                                        confidence: Math.max(merged.confidence, 85),
+                                        manual_verification_required: merged.manual_verification_required,
+                                        source: merged.source
+                                    });
+                                }
+                            });
+                        }
+                    });
+                } catch (mapsErr) {
+                    console.warn('Maps fallback failed:', mapsErr);
+                }
             }
 
             if (result) {
@@ -334,29 +545,53 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                         </div>
                         <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#4338ca', letterSpacing: '0.02em' }}>Intelligent Auto-fill</span>
                     </div>
-                    <button
-                        onClick={handleAiAutofill}
-                        disabled={isAiResearching || !formData.name}
-                        className="btn"
-                        style={{
-                            background: isAiResearching ? '#f1f5f9' : 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                            color: 'white',
-                            padding: '8px 16px',
-                            borderRadius: '12px',
-                            fontSize: '0.85rem',
-                            fontWeight: 600,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px',
-                            border: 'none',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease',
-                            boxShadow: isAiResearching ? 'none' : '0 4px 12px rgba(99, 102, 241, 0.2)'
-                        }}
-                    >
-                        {isAiResearching ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} />}
-                        {isAiResearching ? 'Agent Researching...' : 'Research with AI'}
-                    </button>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                            onClick={handleAiAutofill}
+                            disabled={isAiResearching || isMapsResearching || !formData.name}
+                            className="btn"
+                            style={{
+                                background: isAiResearching ? '#f1f5f9' : 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                                color: 'white',
+                                padding: '8px 16px',
+                                borderRadius: '12px',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                border: 'none',
+                                cursor: 'pointer',
+                                transition: 'all 0.3s ease',
+                                boxShadow: isAiResearching ? 'none' : '0 4px 12px rgba(99, 102, 241, 0.2)'
+                            }}
+                        >
+                            {isAiResearching ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
+                            {isAiResearching ? 'AI Researching...' : 'Research with AI'}
+                        </button>
+                        <button
+                            onClick={handleGoogleMapsResearch}
+                            disabled={isAiResearching || isMapsResearching || !formData.name}
+                            className="btn"
+                            style={{
+                                background: isMapsResearching ? '#f1f5f9' : '#fff',
+                                color: '#1e293b',
+                                padding: '8px 16px',
+                                borderRadius: '12px',
+                                fontSize: '0.85rem',
+                                fontWeight: 600,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px',
+                                border: '1px solid #e2e8f0',
+                                cursor: 'pointer',
+                                transition: 'all 0.3s ease'
+                            }}
+                        >
+                            {isMapsResearching ? <Loader2 className="animate-spin" size={16} /> : <MapPin size={16} color="#ef4444" />}
+                            {isMapsResearching ? 'Mapping...' : 'Search Google Maps'}
+                        </button>
+                    </div>
                 </div>
 
                 {/* AI Research Findings Card */}
@@ -367,7 +602,7 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <div style={{ padding: '4px 10px', background: aiPreview?.error ? '#fee2e2' : 'rgba(16, 185, 129, 0.1)', color: aiPreview?.error ? '#ef4444' : '#059669', borderRadius: '20px', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                    {aiPreview?.error ? 'Failure' : 'Research Findings'}
+                                    {aiPreview?.error ? 'Failure' : (aiPreview?.source || 'Research Findings')}
                                 </div>
                                 {aiPreview && !aiPreview.error && !isAiResearching && (
                                     <div style={{ 
@@ -425,40 +660,6 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                         )}
                     </div>
                 )}
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <div style={{ width: '48px', height: '48px', background: '#ffffff', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #e2e8f0', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
-                        <Globe size={24} color="#6366f1" />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.02em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>Company Website</span>
-                            <a 
-                                href={`https://www.google.com/search?q=${encodeURIComponent(formData.weblink || formData.name || '')}`} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
-                                style={{ color: '#6366f1', textTransform: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
-                            >
-                                Search <Search size={12} />
-                            </a>
-                        </div>
-                        <div style={{ position: 'relative' }}>
-                            <input
-                                type="text"
-                                className="premium-input"
-                                value={formData.weblink}
-                                onChange={(e) => setFormData({ ...formData, weblink: e.target.value })}
-                                placeholder="https://company.com"
-                                style={{ width: '100%', padding: '10px 14px', paddingRight: '60px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
-                            />
-                            {formData.weblink && (
-                                <a href={formData.weblink} target="_blank" rel="noopener noreferrer" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#6366f1', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    Visit <ExternalLink size={12} />
-                                </a>
-                            )}
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
@@ -476,15 +677,11 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                             </a>
                         )}
                     </div>
-                    <input
-                        type="text"
-                        className="premium-input"
-                        name="name"
+                    <CompanyAutocomplete
                         value={formData.name}
-                        onChange={handleChange}
-                        placeholder="Enter full legal name"
-                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
-                        required
+                        onChange={(val) => setFormData(prev => ({ ...prev, name: val }))}
+                        onSelect={handleCompanySelect}
+                        placeholder="Enter company name..."
                     />
                 </div>
                 <div className="form-group">
@@ -499,31 +696,19 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                         style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
                     />
                 </div>
-                <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Email *</label>
-                    <input
-                        type="email"
+
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>HQ Address</label>
+                    <textarea
                         className="premium-input"
-                        name="email1"
-                        value={formData.email1}
+                        name="address"
+                        value={formData.address}
                         onChange={handleChange}
-                        placeholder="sales@company.com"
-                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
-                        required
+                        placeholder="Full primary address"
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none', height: '60px', resize: 'vertical' }}
                     />
                 </div>
-                <div className="form-group">
-                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Phone</label>
-                    <input
-                        type="text"
-                        className="premium-input"
-                        name="phone1"
-                        value={formData.phone1}
-                        onChange={handleChange}
-                        placeholder="+65 6297 1011"
-                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
-                    />
-                </div>
+
                 <div className="form-group">
                     <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Country *</label>
                     <select
@@ -552,6 +737,7 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                         style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
                     />
                 </div>
+
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                     <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Pincode / Postal Code</label>
                     <input
@@ -564,23 +750,67 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                         style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
                     />
                 </div>
-                <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>HQ Address</label>
-                    <textarea
+
+                <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Phone</label>
+                    <input
+                        type="text"
                         className="premium-input"
-                        name="address"
-                        value={formData.address}
+                        name="phone1"
+                        value={formData.phone1}
                         onChange={handleChange}
-                        placeholder="Full primary address"
-                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none', height: '80px', resize: 'vertical' }}
+                        placeholder="+65 6297 1011"
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
                     />
+                </div>
+                <div className="form-group">
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>Email *</label>
+                    <input
+                        type="email"
+                        className="premium-input"
+                        name="email1"
+                        value={formData.email1}
+                        onChange={handleChange}
+                        placeholder="sales@company.com"
+                        style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
+                        required
+                    />
+                </div>
+
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px', letterSpacing: '0.02em', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span>Company Website</span>
+                        <a 
+                            href={`https://www.google.com/search?q=${encodeURIComponent(formData.weblink || formData.name || '')}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            style={{ color: '#6366f1', textTransform: 'none', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        >
+                            Search <Search size={12} />
+                        </a>
+                    </div>
+                    <div style={{ position: 'relative' }}>
+                        <input
+                            type="text"
+                            className="premium-input"
+                            value={formData.weblink}
+                            onChange={(e) => setFormData({ ...formData, weblink: e.target.value })}
+                            placeholder="https://company.com"
+                            style={{ width: '100%', padding: '10px 14px', paddingRight: '60px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
+                        />
+                        {formData.weblink && (
+                            <a href={formData.weblink} target="_blank" rel="noopener noreferrer" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#6366f1', fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                Visit <ExternalLink size={12} />
+                            </a>
+                        )}
+                    </div>
                 </div>
             </div>
 
             <div style={{ marginBottom: '32px' }}>
                 <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', marginBottom: '12px' }}>Categories</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                    {['Partner', 'Spare Parts', 'Service', 'Calibration', 'Automation', 'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment', 'Industrial Supplies', 'Supplier', 'Customer', 'Freelancer', 'Service Company'].map(cat => (
+                    {['Principal', 'International Supplier', 'Local Supplier', 'Freelancer', 'Service Company', 'Spare Parts', 'Service', 'Calibration', 'Automation', 'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment', 'Industrial Supplies', 'Supplier', 'Customer'].map(cat => (
                         <div
                             key={cat}
                             className={`category-chip ${formData.types.includes(cat) ? 'active' : ''}`}
@@ -623,24 +853,24 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                     {formData.types.includes('Customer') && (
                         <>
                             <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#4338ca' }}>Customer Credit Limit</label>
+                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#4338ca' }}>Customer Credit Limit (SGD)</label>
                                 <input className="premium-input" name="customerCredit" value={formData.customerCredit} onChange={handleChange} placeholder="e.g. 5000" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0' }} />
                             </div>
                             <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#4338ca' }}>Customer Credit Term (Days)</label>
-                                <input className="premium-input" name="customerCreditTime" value={formData.customerCreditTime} onChange={handleChange} placeholder="e.g. 30" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0' }} />
+                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#4338ca' }}>Customer Credit Terms (Days)</label>
+                                <input className="premium-input" name="customerCreditTime" type="number" value={formData.customerCreditTime} onChange={handleChange} placeholder="e.g. 30" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0' }} />
                             </div>
                         </>
                     )}
                     {formData.types.includes('Supplier') && (
                         <>
                             <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#059669' }}>Supplier Credit Limit</label>
+                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#059669' }}>Supplier Credit Limit (SGD)</label>
                                 <input className="premium-input" name="supplierCredit" value={formData.supplierCredit} onChange={handleChange} placeholder="e.g. 10000" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0' }} />
                             </div>
                             <div className="form-group">
-                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#059669' }}>Supplier Credit Term (Days)</label>
-                                <input className="premium-input" name="supplierCreditTime" value={formData.supplierCreditTime} onChange={handleChange} placeholder="e.g. 60" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0' }} />
+                                <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#059669' }}>Supplier Credit Terms (Days)</label>
+                                <input className="premium-input" name="supplierCreditTime" type="number" value={formData.supplierCreditTime} onChange={handleChange} placeholder="e.g. 60" style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1.5px solid #e2e8f0' }} />
                             </div>
                         </>
                     )}
@@ -1487,6 +1717,8 @@ export const QuickExpenseAdd = ({ job_id, partners, jobs, expense, onSuccess, on
     const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [isAiProcessing, setIsAiProcessing] = useState(false);
+    const [aiStatus, setAiStatus] = useState('');
 
     // Initial supplier name if editing
     React.useEffect(() => {
@@ -1569,14 +1801,66 @@ export const QuickExpenseAdd = ({ job_id, partners, jobs, expense, onSuccess, on
         const file = e.target.files[0];
         if (!file) return;
         setUploading(true);
+        setIsAiProcessing(true);
+        setAiStatus('📤 Uploading bill to cloud...');
         try {
             const url = await onUploadBill(file);
             if (url) {
                 setFormData(prev => ({ ...prev, bill_url: url }));
+                
+                // Trigger AI OCR
+                setAiStatus('🤖 Gemini AI is reading your bill...');
+                
+                // Convert file to base64
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    try {
+                        const base64 = reader.result.split(',')[1];
+                        const result = await parseSupplierBillWithAi(base64);
+                        
+                        if (result) {
+                            // Find supplier if possible
+                            let supplierId = formData.supplier_id;
+                            if (!supplierId && result.supplier_name) {
+                                const matched = partners.find(p => 
+                                    p.name.toLowerCase().includes(result.supplier_name.toLowerCase()) ||
+                                    (result.uen && p.registration_no === result.uen)
+                                );
+                                if (matched) {
+                                    supplierId = matched.id;
+                                    setSupplierSearch(matched.name);
+                                }
+                            }
+
+                            setFormData(prev => calculateTotals({
+                                ...prev,
+                                supplier_id: supplierId,
+                                invoice_no: result.invoice_no || prev.invoice_no,
+                                invoice_date: result.invoice_date || prev.invoice_date,
+                                description: result.supplier_name ? `Bill from ${result.supplier_name}` : prev.description,
+                                unit_price: result.subtotal || prev.unit_price,
+                                quantity: 1,
+                                gst_amount: result.gst_amount || prev.gst_amount,
+                                grand_total: result.total_amount || prev.grand_total,
+                                notes: `AI Extraction Source: ${result.supplier_name || 'Unknown'}. UEN: ${result.uen || 'N/A'}`
+                            }));
+                            setAiStatus('✅ Bill parsed successfully!');
+                            setTimeout(() => setAiStatus(''), 3000);
+                        }
+                    } catch (aiErr) {
+                        console.error('AI OCR failed:', aiErr);
+                        setAiStatus('⚠️ AI parsing failed, but file uploaded.');
+                    } finally {
+                        setIsAiProcessing(false);
+                    }
+                };
+                reader.readAsDataURL(file);
             }
         } catch (err) {
             console.error('Bill upload failed:', err);
             alert('Upload failed: ' + err.message);
+            setIsAiProcessing(false);
+            setAiStatus('');
         } finally {
             setUploading(false);
         }
@@ -1763,6 +2047,11 @@ export const QuickExpenseAdd = ({ job_id, partners, jobs, expense, onSuccess, on
                         {formData.bill_url ? 'Update Bill' : 'Upload Bill'}
                         <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={uploading} />
                     </label>
+                    {aiStatus && (
+                        <div style={{ fontSize: '0.7rem', color: '#6366f1', fontWeight: 700, animation: 'pulse 2s infinite' }}>
+                            {aiStatus}
+                        </div>
+                    )}
                     {formData.bill_url && (
                         <a 
                             href={formData.bill_url} 

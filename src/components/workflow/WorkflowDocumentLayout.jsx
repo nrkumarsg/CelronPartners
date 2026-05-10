@@ -79,13 +79,16 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
     const isORA = isEffectiveORA;
     const isInvoice = doc.document_type?.toUpperCase() === 'TAX INVOICE' || doc.document_type?.toUpperCase() === 'INVOICE';
     const isProforma = doc.document_type?.toUpperCase() === 'PROFORMA INVOICE' || doc.document_type === 'PRO';
-    const isFinancial = isInvoice || isProforma;
+    const isPayment = doc.document_type === 'Payment Received';
+    const isFinancial = isInvoice || isProforma || isPayment;
+    const isEnquiry = doc.document_type?.toUpperCase() === 'ENQUIRY';
 
     const docNoLabel = isQuotation ? 'Q.NO' : 
                        isJob ? 'JOB.NO' :
                        isORA ? 'ORA.NO' : 
                        isInvoice ? 'INV.NO' : 
                        isProforma ? 'PRO.NO' :
+                       isPayment ? 'RCPT.NO' :
                        isDeliveryDoc ? (doc.document_type === 'Packing List' ? 'PKL.NO' : 'DO.NO') : 
                        'DOC.NO';
 
@@ -163,14 +166,16 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                 borderBottom: '2px solid #1e3a8a', paddingBottom: '8px', marginBottom: '20px' 
             }}>
                 <div style={{ ...styles.h3, width: '30%' }}>{docNoLabel}: {doc.document_no}</div>
-                <h1 style={{ ...styles.h1, textAlign: 'center', width: '40%', margin: 0 }}>{isJob ? 'JOB DETAIL' : (isORA ? 'ORDER ACKNOWLEDGMENT' : doc.document_type?.toUpperCase())}</h1>
-                <div style={{ ...styles.h3, width: '30%', textAlign: 'right' }}>DATE: {todayFormatted}</div>
+                <h1 style={{ ...styles.h1, textAlign: 'center', width: '40%', margin: 0 }}>
+                    {isJob ? 'JOB DETAIL' : (isORA ? 'ORDER ACKNOWLEDGMENT' : (isPayment ? 'OFFICIAL RECEIPT' : doc.document_type?.toUpperCase()))}
+                </h1>
+                <div style={{ ...styles.h3, width: '30%', textAlign: 'right' }}>{isPayment ? 'RECEIPT DATE' : 'DATE'}: {todayFormatted}</div>
             </div>
 
             {/* Recipient & Metadata Grid (Balanced) */}
             <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'stretch' }}>
                 <div style={{ flex: 1, border: styles.border, borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column' }}>
-                    <div style={{ ...styles.h3, marginBottom: '4px' }}>TO:</div>
+                    <div style={{ ...styles.h3, marginBottom: '4px' }}>{isPayment ? 'RECEIVED FROM:' : 'TO:'}</div>
                     <div style={styles.bodyBold}>{doc.partners?.name || 'Walk-in Customer'}</div>
                     <div style={{ ...styles.small, marginTop: '2px' }}>{doc.partners?.address || ''}</div>
                     <div style={{ ...styles.small, marginTop: '4px' }}>
@@ -185,6 +190,15 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                             </div>
                         )}
                     </div>
+                    {isPayment && (
+                        <div style={{ marginTop: '12px', padding: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                            <div style={{ ...styles.h4, color: '#1e3a8a', fontSize: '10px', marginBottom: '4px' }}>PAYMENT INFO</div>
+                            <div style={{ ...styles.small, display: 'flex', justifyContent: 'space-between' }}>
+                                <span>MODE: <strong>{(doc.payment_method || 'N/A').toUpperCase()}</strong></span>
+                                <span>REF: <strong>{(doc.payment_ref || '-').toUpperCase()}</strong></span>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div style={{ flex: 1, border: styles.border, borderRadius: '10px', overflow: 'hidden' }}>
@@ -238,7 +252,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                             <th style={{ padding: '8px 10px', ...styles.h4, width: '6%', borderRight: styles.border }}>S/N</th>
                             <th style={{ padding: '8px 10px', ...styles.h4, width: '49%', borderRight: styles.border, textAlign: 'center' }}>DESCRIPTION</th>
                             <th style={{ padding: '8px 10px', ...styles.h4, width: '15%', borderRight: styles.border }}>QTY</th>
-                            {!isDeliveryDoc && (
+                            {!isDeliveryDoc && !isEnquiry && (
                                 <>
                                     <th style={{ padding: '8px 10px', ...styles.h4, width: '15%', borderRight: styles.border }}>UNIT PRICE</th>
                                     <th style={{ padding: '8px 10px', ...styles.h4, width: '15%', textAlign: 'right' }}>AMOUNT ({doc.currency || 'SGD'})</th>
@@ -251,14 +265,14 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                             if (item.is_section) {
                                 return (
                                     <tr key={idx} style={{ background: '#f8fafc', borderBottom: styles.border }}>
-                                        <td colSpan={!isDeliveryDoc ? 5 : 3} style={{ padding: '8px 10px', ...styles.bodyBold, color: '#1e3a8a' }}>{item.description?.toUpperCase()}</td>
+                                        <td colSpan={(!isDeliveryDoc && !isEnquiry) ? 5 : 3} style={{ padding: '8px 10px', ...styles.bodyBold, color: '#1e3a8a' }}>{item.description?.toUpperCase()}</td>
                                     </tr>
                                 );
                             }
                             if (item.is_note) {
                                 return (
                                     <tr key={idx} style={{ borderBottom: styles.border }}>
-                                        <td colSpan={!isDeliveryDoc ? 5 : 3} style={{ padding: '8px 10px', ...styles.small, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>{item.description}</td>
+                                        <td colSpan={(!isDeliveryDoc && !isEnquiry) ? 5 : 3} style={{ padding: '8px 10px', ...styles.small, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>{item.description}</td>
                                     </tr>
                                 );
                             }
@@ -271,7 +285,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                                         {item.details && <div style={{ ...styles.small, marginTop: '2px', whiteSpace: 'pre-wrap' }}>{item.details}</div>}
                                     </td>
                                     <td style={{ padding: '8px 10px', ...styles.bodyBold, borderRight: styles.border, textAlign: 'center' }}>{item.quantity} {item.uom || 'PC(S)'}</td>
-                                    {!isDeliveryDoc && (
+                                    {!isDeliveryDoc && !isEnquiry && (
                                         <>
                                             <td style={{ padding: '8px 10px', ...styles.body, borderRight: styles.border, textAlign: 'center' }}>{(parseFloat(item.unit_price) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                             <td style={{ padding: '8px 10px', ...styles.bodyBold, textAlign: 'right' }}>{(parseFloat(item.amount) || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -289,7 +303,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                 
                 {/* Totals Section - Separate Rounded Box */}
                 <div style={{ width: '100%', marginBottom: '15px' }}>
-                    {!isDeliveryDoc && (
+                    {!isDeliveryDoc && !isEnquiry && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             <div style={{ display: 'flex', border: styles.border, borderRadius: '10px', background: '#f8fafc', alignItems: 'stretch', width: '100%', overflow: 'hidden' }}>
                                 {/* Tax/Subtotal info - Stacked Vertically */}
@@ -444,7 +458,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                                     </div>
                                 </div>
                             </div>
-                        ) : (
+                        ) : !doc.document_type?.includes('QUOTATION') && (
                             <div style={{ 
                                 border: styles.border, 
                                 borderRadius: '10px', 
@@ -468,7 +482,22 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                     </div>
                 </div>
 
-                <div style={{ textAlign: 'center', borderTop: '1px solid #1e3a8a', paddingTop: '10px' }}>
+                {/* Attachments / Second Page Provision */}
+                {doc.attachments && doc.attachments.length > 0 && (
+                    <div style={{ pageBreakBefore: 'always', paddingTop: '20px' }}>
+                        <div style={{ ...styles.h3, borderBottom: '2px solid #1e3a8a', paddingBottom: '8px', marginBottom: '20px' }}>ATTACHMENT - 1: TECHNICAL PHOTOS / DATASHEETS</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                            {doc.attachments.map((img, idx) => (
+                                <div key={idx} style={{ border: styles.border, borderRadius: '12px', padding: '10px', background: '#fff' }}>
+                                    <img src={img} alt={`Attachment ${idx + 1}`} style={{ width: '100%', height: 'auto', borderRadius: '8px' }} />
+                                    <div style={{ ...styles.small, marginTop: '8px', textAlign: 'center', color: '#64748b' }}>Technical Image {idx + 1}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div style={{ textAlign: 'center', borderTop: '1px solid #1e3a8a', paddingTop: '10px', marginTop: '20px' }}>
                     <div style={{ ...styles.h2, letterSpacing: '2px' }}>WWW.CELRON.NET</div>
                 </div>
             </div>
