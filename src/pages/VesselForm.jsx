@@ -87,13 +87,20 @@ export default function VesselForm() {
     };
 
     const handleDelete = async () => {
+        if (!id || isNew) return;
         if (window.confirm('Are you sure you want to delete this vessel? This action cannot be undone.')) {
             setLoading(true);
-            const result = await deleteVessel(id);
-            if (result?.success) {
-                navigate('/vessels');
-            } else {
-                alert('Error deleting vessel.');
+            try {
+                const result = await deleteVessel(id);
+                if (result?.success) {
+                    navigate('/vessels');
+                } else {
+                    alert('Error deleting vessel: ' + (result?.error || 'Unknown Error'));
+                    setLoading(false);
+                }
+            } catch (err) {
+                console.error('Delete error:', err);
+                alert('An unexpected error occurred during deletion.');
                 setLoading(false);
             }
         }
@@ -146,7 +153,7 @@ export default function VesselForm() {
             try {
                 const query = `${formData.vessel_name || ''} ${formData.imo_number || ''} ${formData.mmsi || ''}`.trim();
                 const searchId = await runUniversalSearch({ 
-                    query: `${query} vessel details`, 
+                    query: `${query} vessel details (site:marinetraffic.com OR site:vesselfinder.com OR site:equasis.org)`, 
                     userId: profile?.id || '00000000-0000-0000-0000-000000000000' 
                 });
                 

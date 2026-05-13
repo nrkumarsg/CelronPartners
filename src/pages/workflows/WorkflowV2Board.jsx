@@ -741,9 +741,7 @@ export default function WorkflowV2Board() {
                                 <tr>
                                     <th>CEL Job No</th>
                                     <th>Customer</th>
-                                    <th>PO No</th>
-                                    <th>PO Date</th>
-                                    <th>PO By</th>
+                                    <th>Purchase Order Info</th>
                                     <th>Description</th>
                                     <th>Value (SGD)</th>
                                     <th>Signature</th>
@@ -818,10 +816,7 @@ export default function WorkflowV2Board() {
                                             <td className="font-bold" style={{ color: '#1e3a8a' }}>{doc.assigned_job_no || 'TBD'}</td>
                                             <td>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                    <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.5px' }}>CUSTOMER</div>
                                                     <div style={{ fontWeight: 600, color: '#1e3a8a', fontSize: '0.9rem' }}>{doc.delivery_verification?.po_description || doc.partners?.name || 'Walk-in'}</div>
-                                                    
-                                                    <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.5px', marginTop: '4px' }}>CONTACT PERSON</div>
                                                     <div style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600 }}>
                                                         {doc.contacts?.name || 'N/A'}
                                                     </div>
@@ -833,22 +828,29 @@ export default function WorkflowV2Board() {
                                                 </div>
                                             </td>
                                             <td>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                    <span style={{ fontWeight: 600, color: '#4f46e5', fontSize: '0.85rem' }}>{doc.customer_po_no || 'N/A'}</span>
-                                                    {doc.customer_po_attachment_url && (
-                                                        <a 
-                                                            href={doc.customer_po_attachment_url} 
-                                                            target="_blank" 
-                                                            rel="noreferrer"
-                                                            style={{ fontSize: '0.65rem', color: '#6366f1', textDecoration: 'underline', display: 'flex', alignItems: 'center', gap: '4px' }}
-                                                        >
-                                                            <FileText size={10} /> View PO
-                                                        </a>
-                                                    )}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                        <span style={{ fontWeight: 700, color: '#4f46e5', fontSize: '0.85rem' }}>{doc.customer_po_no || 'N/A'}</span>
+                                                        {doc.customer_po_attachment_url && (
+                                                            <a 
+                                                                href={doc.customer_po_attachment_url} 
+                                                                target="_blank" 
+                                                                rel="noreferrer"
+                                                                style={{ color: '#6366f1' }}
+                                                                title="View PO File"
+                                                            >
+                                                                <FileText size={12} />
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 500 }}>
+                                                        {doc.customer_po_date ? formatDate(doc.customer_po_date) : 'No Date'}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#64748b', fontStyle: 'italic' }}>
+                                                        By: {doc.contacts?.first_name || '-'}
+                                                    </div>
                                                 </div>
                                             </td>
-                                            <td>{doc.customer_po_date ? formatDate(doc.customer_po_date) : '-'}</td>
-                                            <td>{doc.contacts?.first_name || '-'}</td>
                                             <td>
                                                 <div style={{ maxWidth: '250px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.85rem' }} title={doc.subject}>
                                                     {doc.subject || '-'}
@@ -977,10 +979,7 @@ export default function WorkflowV2Board() {
                                             <td>{formatDate(doc.issue_date)}</td>
                                             <td>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                                    <div style={{ fontSize: '0.6rem', fontWeight: 800, color: 'var(--text-secondary)', letterSpacing: '0.5px', opacity: 0.7 }}>CUSTOMER</div>
                                                     <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{doc.partners?.name || 'Walk-in'}</div>
-                                                    
-                                                    <div style={{ fontSize: '0.6rem', fontWeight: 800, color: 'var(--text-secondary)', letterSpacing: '0.5px', marginTop: '4px', opacity: 0.7 }}>CONTACT PERSON</div>
                                                     <div style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600 }}>
                                                         {doc.contacts?.name || 'N/A'}
                                                     </div>

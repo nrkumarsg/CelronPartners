@@ -153,8 +153,23 @@ export async function researchCompanyWithGemini(companyName, searchContext = '')
  * Contact Profiling: Redirects to runAI('autofill')
  */
 export async function researchContactWithGemini(name, companyName) {
+    const prompt = `
+        TASK: Profile a professional contact and extract contact details.
+        NAME: ${name}
+        COMPANY: ${companyName}
+        
+        Return ONLY a JSON object:
+        {
+          "post": "string (Job Title)",
+          "email": "string",
+          "phone": "string",
+          "mobile": "string",
+          "address": "string"
+        }
+    `;
+
     try {
-        const data = await runAI('autofill', { contact_name: name, company_name: companyName });
+        const data = await runAI('autofill', { prompt });
         return {
             fields: {
                 post: data.post || data.designation || '',
@@ -174,29 +189,49 @@ export async function researchContactWithGemini(name, companyName) {
  * Vessel Intelligence: Redirects to runAI('autofill')
  */
 export async function researchVesselWithGemini(vesselName, imoNumber = '', mmsi = '', searchContext = '') {
-    try {
-        const data = await runAI('autofill', { 
-            vessel_name: vesselName, 
-            imo_number: imoNumber, 
-            mmsi: mmsi,
-            searchContext 
-        });
+    const prompt = `
+        TASK: Extract high-precision vessel identifiers and ownership data.
+        VESSEL: ${vesselName || ''} ${imoNumber || ''} ${mmsi || ''}
+        CONTEXT: ${searchContext}
         
+        Rules:
+        1. IMO: Must be 7 digits (e.g. 9709984).
+        2. MMSI: Must be 9 digits (e.g. 419001087).
+        3. VESSEL_TYPE: e.g. Oil Tanker, Bulk Carrier, Chemical Tanker.
+        4. MANAGEMENT/OWNER: Find the registered owner or manager (e.g. Great Eastern Shipping).
+        5. DO NOT return the string "null", "unknown", or "-" if not found. Leave the field empty "" instead.
+        
+        Return ONLY a JSON object:
+        {
+          "vessel_name": "string",
+          "imo_number": "string",
+          "mmsi": "string",
+          "vessel_type": "string",
+          "vessel_management": "string",
+          "vessel_owner": "string",
+          "confidence": "high|medium|low"
+        }
+    `;
+
+    try {
+        const data = await runAI('autofill', { prompt });
+        
+        const clean = (val) => (val && val !== 'null' && val !== 'undefined' && val !== 'unknown') ? val : '';
+
         return {
             fields: {
-                vessel_name: data.vessel_name || vesselName,
-                imo_number: data.imo_number || imoNumber || '',
-                mmsi: data.mmsi || mmsi || '',
-                vessel_type: data.vessel_type || '',
-                vessel_management: data.vessel_management || '',
-                vessel_owner: data.vessel_owner || ''
+                vessel_name: clean(data.vessel_name) || vesselName,
+                imo_number: clean(data.imo_number) || imoNumber || '',
+                mmsi: clean(data.mmsi) || mmsi || '',
+                vessel_type: clean(data.vessel_type) || '',
+                vessel_management: clean(data.vessel_management) || '',
+                vessel_owner: clean(data.vessel_owner) || ''
             },
             confidence: data.confidence || 'medium',
             manual_verification_required: data.manual_verification_required ?? true
         };
     } catch (err) {
         console.error('Gemini Vessel Error:', err);
-        // Fallback to manual entry if AI fails (e.g. quota or key leak)
         return {
             fields: {
                 vessel_name: vesselName,
@@ -348,5 +383,18 @@ export async function extractLineItemsFromImage(text) {
     } catch (err) {
         console.error('Line Item Extraction Error:', err);
         return [];
+    }
+}
+
+
+export async function researchLocationPincodeWithGemini(locationName) {
+    const prompt = `Find the postal code (pincode or zip code) for the following location: . Return ONLY a JSON object with a single field 'pincode'. Example: {"pincode": "138668"}`;
+    try {
+        const { runAI } = await import('./ai/engine.js');
+        const data = await runAI('autofill', { prompt });
+        return { pincode: data.pincode || '' };
+    } catch (err) {
+        console.error('Gemini Pincode Error:', err);
+        return { pincode: '' };
     }
 }

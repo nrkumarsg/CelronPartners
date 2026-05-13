@@ -25,6 +25,8 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
     const companyName = settings?.company_name || 'CELRON ENTERPRISES PTE LTD';
     const companyAddress = settings?.address || '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787';
     const companyUen = settings?.gst_uen || '201436227C';
+    const companySignature = settings?.signature_url;
+    const companyPaynow = settings?.paynow_url;
 
     const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-';
     
@@ -37,11 +39,34 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
     const effectiveEmail = (isAnithaType && (documentData.salesperson_email === 'sales@celron.net' || documentData.salesperson_email === 'kumar@celron.net' || !documentData.salesperson_email)) ? 'accounts@celron.net' : (documentData.salesperson_email || 'sales@celron.net');
     const effectivePhone = (isAnithaType && (documentData.salesperson_phone === '+65 97686891' || documentData.salesperson_phone === '+65 81962270' || !documentData.salesperson_phone)) ? '+65 91090347' : (documentData.salesperson_phone || '+65 8196 2270');
 
+    // Helper to convert image URL to base64 for reliable rendering
+    const getBase64Image = async (url) => {
+        if (!url) return '';
+        if (url.startsWith('data:')) return url;
+        try {
+            const response = await fetch(url, { mode: 'cors' });
+            const blob = await response.blob();
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+            });
+        } catch (e) {
+            console.error('Failed to convert image to base64:', e);
+            return url; // Fallback to original URL
+        }
+    };
+
+    const logoB64 = await getBase64Image(companyLogo);
+    const signatureB64 = await getBase64Image(companySignature);
+    const paynowB64 = await getBase64Image(companyPaynow);
+
     const htmlContent = `
-        <div style="padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b; width: 800px; min-height: 1130px; background: #fff; position: relative; padding-bottom: 100px; box-sizing: border-box; margin: 0 auto;">
+        <div style="padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b !important; width: 800px; min-height: 1130px; background: #ffffff !important; position: relative; padding-bottom: 100px; box-sizing: border-box; margin: 0 auto; color-scheme: light !important;">
             <style>
-                p { margin: 0 0 4px 0; }
-                b, strong { font-weight: 700; color: #1e293b; }
+                * { color-scheme: light !important; -webkit-print-color-adjust: exact !important; }
+                p { margin: 0 0 4px 0; color: #1e293b !important; }
+                b, strong { font-weight: 700; color: #1e293b !important; }
                 ul, ol { margin: 4px 0; padding-left: 20px; }
                 li { margin-bottom: 2px; }
             </style>
@@ -49,9 +74,10 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
             <!-- Company Header -->
             <div style="padding: 30px 50px 10px 50px; display: flex; justify-content: space-between; align-items: flex-start;">
                 <div style="flex: 1;">
-                   <img src="${companyLogo}" crossorigin="anonymous" style="height: 70px; object-fit: contain; margin-bottom: 10px;" />
+                   <img src="${logoB64}" style="height: 70px; object-fit: contain; margin-bottom: 10px;" />
                    <div style="font-size: 15px; font-weight: 700; color: #1e293b;">${companyName}</div>
                    <div style="font-size: 11px; color: #1e3a8a; font-weight: 600; margin-top: 2px;">CR, GST & UEN : ${companyUen}</div>
+                   ${paynowB64 ? `<div style="margin-top:10px;"><img src="${paynowB64}" style="width: 100px; height: 100px;" /></div>` : ''}
                 </div>
                 <div style="text-align: right; color: #475569; font-size: 11px; flex: 1; line-height: 1.5;">
                     <div style="white-space: pre-wrap;">${companyAddress}</div>
@@ -189,7 +215,7 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
             <!-- Signatures -->
             <div style="margin-top: 40px; padding: 0 50px; display: flex; justify-content: space-between; align-items: flex-end;">
                  <div style="text-align: center;">
-                    ${settings?.signature_url ? `<img src="${settings.signature_url}" crossorigin="anonymous" style="height: 60px; object-fit: contain; margin-bottom: 5px;" />` : `<div style="height: 60px;"></div>`}
+                    ${signatureB64 ? `<img src="${signatureB64}" style="max-height: 80px; max-width: 180px; object-fit: contain; margin-bottom: 5px;" />` : `<div style="height: 60px;"></div>`}
                     <div style="border-top: 1.5px solid #1e293b; padding-top: 8px; font-size: 10px; color: #1e293b; font-weight: 700; min-width: 200px;">Authorized Signature</div>
                     <div style="font-size: 9px; color: #64748b; margin-top: 2px;">${companyName}</div>
                  </div>
@@ -211,53 +237,39 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
     `;
 
     const container = document.createElement('div');
-    container.id = `pdf-render-container-${Date.now()}`;
     container.innerHTML = htmlContent;
-
-    // THE "SAFE POSITION" - Fixed, top left, invisible but rendered
-    // Using opacity 1 but way off-screen to ensure html2canvas captures it correctly
     Object.assign(container.style, {
         position: 'absolute',
-        left: '0',
-        top: '-10000px',
+        left: '-9999px', // Position far off-screen
+        top: '0',
         width: '800px',
-        backgroundColor: '#ffffff',
-        zIndex: '-9999',
-        opacity: '1',
-        pointerEvents: 'none',
-        display: 'block'
+        backgroundColor: 'white',
+        visibility: 'visible',
+        display: 'block',
+        margin: '0',
+        padding: '0',
+        colorScheme: 'light'
     });
-
+    
     document.body.appendChild(container);
 
     const opt = {
-        margin: [0, 0, 0, 0],
+        margin: 0,
         filename: `${document_no || 'Document'}_${(document_type || 'Workflow').replace(/\s+/g, '_')}.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: {
             scale: 2,
             useCORS: true,
-            allowTaint: false,
+            allowTaint: true,
             letterRendering: true,
-            logging: true,
-            scrollX: 0,
-            scrollY: 0,
-            windowWidth: 800,
+            backgroundColor: '#ffffff',
+            width: 800
         },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
 
     try {
-        console.log("PDF: Initializing capture for", document_no, { 
-            type: document_type, 
-            itemCount: items?.length, 
-            hasPartner: !!partners,
-            hasVessel: !!vessels 
-        });
-
-        if (document.fonts) {
-            await document.fonts.ready;
-        }
+        if (document.fonts) await document.fonts.ready;
 
         const waitForImages = () => {
             const imgs = container.getElementsByTagName('img');
@@ -271,18 +283,24 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
         };
         await waitForImages();
 
-        // Extra stabilization delay
-        await new Promise(r => setTimeout(r, 800));
+        // DEEP STABILIZATION: Wait longer for everything to settle
+        await new Promise(r => setTimeout(r, 4000));
 
         const pdfBlob = await html2pdf()
             .set(opt)
             .from(container)
+            .toPdf()
             .output('blob');
 
         console.log("PDF: SUCCESS. Blob Size:", pdfBlob.size);
 
         if (pdfBlob.size < 1000) {
             throw new Error("Generated PDF is too small, likely empty.");
+        }
+
+        // Remove container immediately after capture
+        if (document.body.contains(container)) {
+            document.body.removeChild(container);
         }
 
         if (action === 'download') {

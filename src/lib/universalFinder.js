@@ -108,7 +108,7 @@ export async function runDuckDuckGoSearch(query) {
 
                 results.push({
                     title: titleMatch[1].replace(/<[^>]*>?/gm, '').trim(),
-                    link: link,
+                    url: link,
                     snippet: snippetMatch ? snippetMatch[1].replace(/<[^>]*>?/gm, '').trim() : '',
                     source: 'duckduckgo'
                 });
@@ -151,7 +151,7 @@ export async function runUniversalSearch(params, keyIndex = 0) {
             const resultsToSave = freeResults.map(item => ({
                 search_id: search.id,
                 title: item.title,
-                link: item.link,
+                url: item.url || item.link,
                 snippet: item.snippet,
                 pagemap: item.address_data ? { address: item.address_data } : {}
             }));
@@ -188,7 +188,7 @@ export async function runUniversalSearch(params, keyIndex = 0) {
         const googleResults = (data.items || []).map(item => ({
             search_id: search.id,
             title: item.title,
-            link: item.link,
+            url: item.link,
             snippet: item.snippet,
             pagemap: item.pagemap
         }));

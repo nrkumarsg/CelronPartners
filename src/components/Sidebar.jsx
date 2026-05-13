@@ -249,6 +249,16 @@ export default function Sidebar() {
                     <span className="nav-text" style={{ fontWeight: 800, color: '#6366f1' }}>Quote2Customers</span>
                 </NavLink>
 
+                <NavLink to="/workflows?type=Job" className={`nav-link ${(location.pathname === '/workflows' && location.search.includes('type=Job')) ? 'active' : ''}`} title="JOBS">
+                    <ShieldCheck size={20} color="#10b981" />
+                    <span className="nav-text" style={{ fontWeight: 800, color: '#10b981' }}>JOBS</span>
+                </NavLink>
+
+                <NavLink to="/soa" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Statement of Account">
+                    <ClipboardList size={20} color="#ec4899" />
+                    <span className="nav-text" style={{ fontWeight: 800, color: '#ec4899' }}>Statement of Account</span>
+                </NavLink>
+
                 <div className="nav-separator" />
                 <span className="nav-group-header">Jobs Control (Legacy)</span>
 

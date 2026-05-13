@@ -1473,10 +1473,11 @@ export default function WorkflowEditor() {
                 work_locations: workLocations.find(wl => wl.id === formData.work_location_id)
             }, settings, 'blob');
             
-            const url = URL.createObjectURL(pdfBlob);
-            window.open(url, '_blank');
-            // Keep the URL alive for a bit to ensure it loads
-            setTimeout(() => URL.revokeObjectURL(url), 10000);
+            // Convert Blob to File so it can be passed via state
+            const pdfFile = new File([pdfBlob], `${formData.document_no || 'Document'}.pdf`, { type: 'application/pdf' });
+            
+            // Navigate to the converter/editor tool with the PDF file
+            navigate('/tools/converter', { state: { pdfFile } });
         } catch (err) {
             console.error('Annotation PDF generation failed:', err);
             alert('Failed to generate PDF for annotation. Please try again.');

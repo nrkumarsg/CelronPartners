@@ -141,7 +141,9 @@ export const getWorkflowDocuments = async (companyId, type = null) => {
         // Fetch partners
         const partnerIds = [...new Set(data.map(d => d.partner_id).filter(Boolean))];
         if (partnerIds.length > 0) {
-            const { data: partners } = await supabase.from('partners').select('id, name, address, phone, email, registration_no').in('id', partnerIds);
+            // Updated to select * or correct columns to avoid "Walk-in" errors due to schema mismatches (e.g., registration_no vs uen)
+            const { data: partners, error: pError } = await supabase.from('partners').select('*').in('id', partnerIds);
+            if (pError) console.error("Error fetching partners in getWorkflowDocuments:", pError);
             const partnerMap = Object.fromEntries(partners?.map(p => [p.id, p]) || []);
             data.forEach(d => { d.partners = partnerMap[d.partner_id]; });
         }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useWorkLocationsStore } from '../lib/workLocationsStore';
-import { ArrowLeft, Save, Trash2, Search, MapPin } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, Search, MapPin, Sparkles } from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
 import AddressAutocomplete from '../components/common/AddressAutocomplete';
@@ -79,6 +79,27 @@ export default function WorkLocationForm() {
                 setLoading(false);
             }
         }
+    };
+
+    const handleAIPincode = async () => {
+        if (!formData.location_name) {
+            alert('Please enter a Location Name first.');
+            return;
+        }
+        setLoading(true);
+        try {
+            const { researchLocationPincodeWithGemini } = await import('../lib/geminiService');
+            const data = await researchLocationPincodeWithGemini(formData.location_name);
+            if (data && data.pincode) {
+                setFormData(prev => ({ ...prev, pincode: data.pincode }));
+            } else {
+                alert('Could not find pincode for this location.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Failed to run AI lookup.');
+        }
+        setLoading(false);
     };
 
     const handleGoogleSearch = () => {
@@ -177,7 +198,18 @@ export default function WorkLocationForm() {
                         </div>
 
                         <div className="form-group">
-                            <label className="form-label">Pincode / Zip Code</label>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <label className="form-label" style={{ marginBottom: 0 }}>Pincode / Zip Code</label>
+                                <button 
+                                    type="button"
+                                    onClick={handleAIPincode}
+                                    disabled={loading || !formData.location_name}
+                                    className="btn-icon-sm"
+                                    style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1', border: 'none', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer' }}
+                                >
+                                    <Sparkles size={14} /> AI Fill
+                                </button>
+                            </div>
                             <input
                                 type="text"
                                 className="form-input"

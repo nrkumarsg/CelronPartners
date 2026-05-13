@@ -155,9 +155,8 @@ export default function WorkflowPrintPreview() {
                                     pdf.text(`Page ${i} of ${totalPages}`, pdf.internal.pageSize.getWidth() - 25, pdf.internal.pageSize.getHeight() - 10);
                                 }
                             }).output('blob').then(blob => {
-                                const url = URL.createObjectURL(blob);
-                                window.open(url, '_blank');
-                                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                                const pdfFile = new File([blob], `${safeFilename}.pdf`, { type: 'application/pdf' });
+                                navigate('/tools/converter', { state: { pdfFile } });
                             });
                         }}
                         style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}

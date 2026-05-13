@@ -18,8 +18,19 @@ export default function VesselsDirectory() {
     }, [fetchVessels]);
 
     const handleDelete = async (id) => {
+        if (!id) return;
         if (window.confirm('Are you sure you want to delete this vessel?')) {
-            await deleteVessel(id);
+            try {
+                const result = await deleteVessel(id);
+                if (result.success) {
+                    // State is updated in store
+                } else {
+                    alert('Error deleting vessel: ' + (result.error || 'Unknown error'));
+                }
+            } catch (err) {
+                console.error('Delete error:', err);
+                alert('Failed to delete vessel.');
+            }
         }
     };
 
@@ -202,8 +213,9 @@ export default function VesselsDirectory() {
                                                 </button>
                                                 <button
                                                     className="btn btn-danger"
-                                                    style={{ padding: '6px' }}
+                                                    style={{ padding: '6px', opacity: loading ? 0.5 : 1 }}
                                                     onClick={() => handleDelete(v.id)}
+                                                    disabled={loading}
                                                     title="Delete"
                                                 >
                                                     <Trash2 size={16} />
