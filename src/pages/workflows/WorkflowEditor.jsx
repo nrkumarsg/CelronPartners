@@ -46,6 +46,13 @@ import {
 import FloatingControlHub from '../../components/FloatingControlHub';
 import RichTextEditor from '../../components/common/RichTextEditor';
 import { ITEM_UNITS } from '../../utils/units';
+
+const NOTES_PRESETS = {
+    'General': `Please ensure all documents are referenced with the enquiry number.<br/>All goods must be securely packed for sea transport.`,
+    'Delivery': `Delivery must be made to:<br/>Celron Enterprises Pte Ltd<br/>10 Jalan Besar, Sim Lim Tower #03-05<br/>Singapore 208787`,
+    'Payment': `Payment will be processed via telegraphic transfer upon receipt of original invoices and delivery orders.`
+};
+
 const TC_PRESETS = {
     'Enquiry': `1. PLEASE QUOTE YOUR BEST PRICE AND EARLIEST DELIVERY.
 2. QUOTATION SHOULD BE VALID FOR AT LEAST 30 DAYS.
@@ -1197,10 +1204,10 @@ export default function WorkflowEditor() {
         setLineItems(updated);
     };
 
-    const addLineItem = (type = 'item') => {
+    const addLineItem = (type = 'item', imageUrl = '') => {
         const newItem = {
             id: 'temp-' + Date.now(),
-            description: '',
+            description: type === 'image' ? 'Attached Image Document' : '',
             quantity: type === 'item' ? 1 : 0,
             unit_price: 0,
             amount: 0,
@@ -1208,9 +1215,37 @@ export default function WorkflowEditor() {
             tax_rate: 9,
             uom: 'Units',
             is_section: type === 'section',
-            is_note: type === 'note'
+            is_note: type === 'note',
+            is_image: type === 'image',
+            image_url: imageUrl
         };
         setLineItems([...lineItems, newItem]);
+    };
+
+    const handleQuickImageAttach = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setSaving(true);
+        try {
+            const token = getStoredToken();
+            const folderId = await ensureJobFolder();
+            if (!folderId) throw new Error("Could not ensure Google Drive folder for document.");
+            
+            // Per user request, upload to the flow's specific folder (we'll just use root folderId or '0. Attachments')
+            const attachmentsFolder = await getOrCreateFolder(token, '0. Attachments', folderId);
+            
+            const result = await uploadFileToDrive(token, file, { folderId: attachmentsFolder });
+            const fileUrl = `https://drive.google.com/file/d/${result.id}/view`;
+            
+            addLineItem('image', fileUrl);
+        } catch (err) {
+            console.error('Failed to attach quick image:', err);
+            alert('Failed to attach image: ' + err.message);
+        } finally {
+            setSaving(false);
+            e.target.value = ''; // Reset input
+        }
     };
 
     const removeLineItem = (index) => {
@@ -2721,6 +2756,24 @@ export default function WorkflowEditor() {
                                 <button className="add-btn" onClick={() => setShowOCRModal(true)} style={{ color: '#8b5cf6', fontWeight: 700 }}>
                                     <Sparkles size={14} /> Image to Items
                                 </button>
+
+                                <input 
+                                    type="file" 
+                                    id="quick-image-attach" 
+                                    accept="image/*,application/pdf" 
+                                    style={{ display: 'none' }} 
+                                    onChange={handleQuickImageAttach} 
+                                />
+                                <button 
+                                    className="add-btn" 
+                                    onClick={() => document.getElementById('quick-image-attach').click()} 
+                                    style={{ color: '#0ea5e9', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}
+                                    disabled={saving}
+                                >
+                                    {saving ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />} 
+                                    {saving ? 'Uploading...' : 'Quick Attach'}
+                                </button>
+
                                 <div style={{ position: 'relative' }}>
                                     <div style={{ display: 'flex', gap: '8px' }}>
                                         <button className="add-btn catalog-btn" onClick={() => setShowCatalogDropdown(!showCatalogDropdown)}>
@@ -2928,6 +2981,27 @@ export default function WorkflowEditor() {
                                         <FileText size={18} color="#2563eb" />
                                     </div>
                                     <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#1e3a8a', letterSpacing: '-0.01em' }}>Notes & Comments</span>
+                                    
+                                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                                        <select 
+                                            className="form-select-sm"
+                                            onChange={(e) => {
+                                                if (e.target.value) {
+                                                    const currentVal = formData.notes || '';
+                                                    const templateVal = NOTES_PRESETS[e.target.value];
+                                                    handleEditorChange('notes', currentVal + (currentVal ? '<br/><br/>' : '') + templateVal);
+                                                    e.target.value = ''; // Reset select
+                                                }
+                                            }}
+                                            style={{ fontSize: '0.75rem', padding: '4px 8px', borderRadius: '8px' }}
+                                            defaultValue=""
+                                        >
+                                            <option value="" disabled>Load Standard Note...</option>
+                                            <option value="General">General Note</option>
+                                            <option value="Delivery">Delivery Details</option>
+                                            <option value="Payment">Payment Info</option>
+                                        </select>
+                                    </div>
                                 </label>
                                 <div style={{ background: '#fff', borderRadius: '12px', padding: '8px', border: '1px solid #e2e8f0' }}>
                                     <RichTextEditor

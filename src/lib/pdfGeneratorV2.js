@@ -1,4 +1,5 @@
 import html2pdf from 'html2pdf.js';
+import { getStoredToken } from './googleAuthService';
 
 export const generateSleekPDF = async (documentData, settings, action = 'download') => {
     const {
@@ -43,6 +44,29 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
     const getBase64Image = async (url) => {
         if (!url) return '';
         if (url.startsWith('data:')) return url;
+        
+        // Handle Google Drive links
+        if (url.includes('drive.google.com')) {
+            try {
+                const fileIdMatch = url.match(/d\/([a-zA-Z0-9_-]+)/);
+                if (fileIdMatch && fileIdMatch[1]) {
+                    const token = getStoredToken();
+                    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileIdMatch[1]}?alt=media`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    const blob = await response.blob();
+                    return new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result);
+                        reader.readAsDataURL(blob);
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to fetch GDrive image for PDF:', err);
+                return ''; // Return empty string so it doesn't break PDF rendering
+            }
+        }
+
         try {
             const response = await fetch(url, { mode: 'cors' });
             const blob = await response.blob();
@@ -60,6 +84,15 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
     const logoB64 = await getBase64Image(companyLogo);
     const signatureB64 = await getBase64Image(companySignature);
     const paynowB64 = await getBase64Image(companyPaynow);
+
+    // Pre-process items for base64 images to prevent async mapping issues
+    const processedItems = await Promise.all(items.map(async (item) => {
+        if (item.is_image && item.image_url) {
+            const base64 = await getBase64Image(item.image_url);
+            return { ...item, _base64_image: base64 };
+        }
+        return item;
+    }));
 
     const htmlContent = `
         <div style="padding: 0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b !important; width: 800px; min-height: 1130px; background: #ffffff !important; position: relative; padding-bottom: 100px; box-sizing: border-box; margin: 0 auto; color-scheme: light !important;">
@@ -141,7 +174,7 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
                         </tr>
                     </thead>
                     <tbody>
-                        ${items.length > 0 ? items.map((item) => {
+                        ${processedItems.length > 0 ? processedItems.map((item) => {
         if (item.is_section) {
             return `
                                     <tr style="background: #f1f5f9;">
@@ -153,6 +186,16 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
             return `
                                     <tr>
                                         <td colspan="${isDeliveryDoc ? '2' : '4'}" style="padding: 6px 15px; font-size: 10px; color: #64748b; font-style: italic; border-bottom: 1px solid #e2e8f0; white-space: pre-wrap;">${item.description}</td>
+                                    </tr>
+                                `;
+        }
+        if (item.is_image) {
+            return `
+                                    <tr>
+                                        <td colspan="${isDeliveryDoc ? '2' : '4'}" style="padding: 15px; text-align: center; border-bottom: 1px solid #e2e8f0;">
+                                            <div style="font-weight: 700; text-align: left; margin-bottom: 10px; color: #1e3a8a;">${item.description}</div>
+                                            <img src="${item._base64_image}" style="max-width: 100%; max-height: 500px; object-fit: contain; border-radius: 8px;" />
+                                        </td>
                                     </tr>
                                 `;
         }

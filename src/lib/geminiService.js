@@ -388,7 +388,8 @@ export async function extractLineItemsFromImage(text) {
 
 
 export async function researchLocationPincodeWithGemini(locationName) {
-    const prompt = `Find the postal code (pincode or zip code) for the following location: . Return ONLY a JSON object with a single field 'pincode'. Example: {"pincode": "138668"}`;
+    const prompt = `Find the exact postal code (pincode or zip code) for the following location: ${locationName}. 
+    Return ONLY a JSON object with a single field 'pincode'. If you cannot find it, return an empty string. Example: {"pincode": "208787"}`;
     try {
         const { runAI } = await import('./ai/engine.js');
         const data = await runAI('autofill', { prompt });

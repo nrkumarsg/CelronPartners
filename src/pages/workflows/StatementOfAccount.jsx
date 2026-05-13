@@ -267,7 +267,7 @@ export default function StatementOfAccount() {
                 const isInvoice = (doc.document_type || '').includes('Invoice');
                 const isSettled = isInvoice && Math.abs(doc.debit - paymentsSum) < 0.01;
                 
-                const mainDoc = { ...doc, isSettled, groupId: doc.id };
+                const mainDoc = { ...doc, isSettled, groupId: doc.id, outstanding: (doc.debit || 0) - paymentsSum };
                 ledger.push(mainDoc);
                 
                 docPayments.forEach(p => {
@@ -411,7 +411,7 @@ export default function StatementOfAccount() {
         handleGenerate();
     };
 
-    const handleShareFile = async (type = 'whatsapp', message = '', recipient = '') => {
+    const handleShareFile = async (type = 'whatsapp', message = '', recipient = '', cc = '', bcc = '', subjectOverride = '') => {
         setLoading(true);
         try {
             const token = await getStoredToken();
@@ -447,12 +447,15 @@ export default function StatementOfAccount() {
                 
                 if (type === 'whatsapp') {
                     const text = `${message}\n\nView Statement: ${link}`;
-                    const waUrl = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+                    const waUrl = recipient ? `https://wa.me/${recipient}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
                     window.open(waUrl, '_blank');
                 } else {
-                    const subject = `Statement of Account - ${statementData.partner?.name}`;
+                    const subject = subjectOverride || `Statement of Account - ${statementData.partner?.name}`;
                     const body = `${message}\n\nYou can view/download the full statement here:\n${link}\n\nBest Regards,\n${profile?.full_name || 'Accounts Team'}`;
-                    window.location.href = `mailto:${statementData.partner?.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                    let mailtoUrl = `mailto:${recipient || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                    if (cc) mailtoUrl += `&cc=${encodeURIComponent(cc)}`;
+                    if (bcc) mailtoUrl += `&bcc=${encodeURIComponent(bcc)}`;
+                    window.location.href = mailtoUrl;
                 }
             }
         } catch (err) {
@@ -824,7 +827,16 @@ export default function StatementOfAccount() {
                                                     {doc.vessels?.vessel_name || doc.work_locations?.location_name || doc.vessel_name || doc.work_location || '-'}
                                                 </td>
                                                 <td style={{ padding: '16px 20px', textAlign: 'right', color: '#ef4444', fontFamily: "'Inter', sans-serif" }}>
-                                                    {doc.debit > 0 ? doc.debit.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'}
+                                                    {doc.debit > 0 ? (
+                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                                            <span>{doc.debit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                            {doc.outstanding !== undefined && doc.outstanding !== doc.debit && (
+                                                                <span style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '2px', fontWeight: 700 }}>
+                                                                    BAL: SGD {doc.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    ) : '-'}
                                                 </td>
                                                 <td style={{ padding: '16px 20px', textAlign: 'right', color: '#10b981', fontFamily: "'Inter', sans-serif" }}>
                                                     {doc.credit > 0 ? doc.credit.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '-'}
@@ -836,20 +848,20 @@ export default function StatementOfAccount() {
                                                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
                                                         {doc.debit > 0 && !doc.isSettled && (
                                                             <button 
-                                                                className="icon-btn" 
+                                                                className="btn-vibrant-secondary" 
                                                                 onClick={() => setPaymentModal({ 
                                                                     isOpen: true, 
                                                                     prefill: { 
                                                                         partner_id: statementData.partner.id, 
-                                                                        amount: doc.debit, 
+                                                                        amount: doc.outstanding !== undefined ? doc.outstanding : doc.debit, 
                                                                         related_document_id: doc.id, 
                                                                         document_no: doc.document_no 
                                                                     } 
                                                                 })} 
-                                                                style={{ color: '#10b981' }} 
+                                                                style={{ padding: '4px 8px', fontSize: '0.7rem', color: '#10b981', display: 'flex', alignItems: 'center', gap: '4px' }} 
                                                                 title="Record Payment"
                                                             >
-                                                                <CreditCard size={14} />
+                                                                <CreditCard size={12} /> Payment Entry
                                                             </button>
                                                         )}
                                                         <button className="icon-btn" onClick={() => navigate(`/workflows/editor/${(doc.document_type || 'Tax Invoice').toLowerCase().replace(/ /g, '-')}/${doc.id}`)} title="Edit">
@@ -965,16 +977,25 @@ export default function StatementOfAccount() {
                                                  SGD {(item.outstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                              </td>
                                              <td style={{ textAlign: 'right' }}>
-                                                 <button 
-                                                     className="btn-vibrant-secondary"
-                                                     style={{ padding: '6px 16px', fontSize: '0.8rem' }}
-                                                     onClick={() => {
-                                                         setSelectedPartner(item.id);
-                                                         handleGenerate(item.id);
-                                                     }}
-                                                 >
-                                                     SOA
-                                                 </button>
+                                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                     <button 
+                                                         className="btn-vibrant-secondary"
+                                                         style={{ padding: '6px 16px', fontSize: '0.8rem' }}
+                                                         onClick={() => {
+                                                             setSelectedPartner(item.id);
+                                                             handleGenerate(item.id);
+                                                         }}
+                                                     >
+                                                         SOA
+                                                     </button>
+                                                     <button 
+                                                         className="btn-primary"
+                                                         style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px' }}
+                                                         onClick={() => setPaymentModal({ isOpen: true, prefill: { partner_id: item.id } })}
+                                                     >
+                                                         <CreditCard size={14} /> Payment Entry
+                                                     </button>
+                                                 </div>
                                              </td>
                                          </tr>
                                      ))}
@@ -1105,7 +1126,16 @@ export default function StatementOfAccount() {
                                                 <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f5f9', color: '#475569', whiteSpace: 'nowrap' }}>{row.customer_po_no || row.order_reference || row.assigned_job_no || '-'}</td>
                                                 <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f5f9', color: '#475569', wordBreak: 'break-word', lineHeight: 1.2 }}>{row.vessels?.vessel_name || row.work_locations?.location_name || row.vessel_name || row.work_location || '-'}</td>
                                                 <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: row.debit > 0 ? '#e11d48' : '#059669', whiteSpace: 'nowrap', fontWeight: 500 }}>
-                                                    {row.debit > 0 ? row.debit.toLocaleString(undefined, { minimumFractionDigits: 2 }) : `(${row.credit.toLocaleString(undefined, { minimumFractionDigits: 2 })})`}
+                                                    {row.debit > 0 ? (
+                                                        <div>
+                                                            <div>{row.debit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                                                            {row.outstanding !== undefined && row.outstanding !== row.debit && (
+                                                                <div style={{ fontSize: '7px', color: '#64748b', marginTop: '1px' }}>
+                                                                    BAL: SGD {row.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : `(${row.credit.toLocaleString(undefined, { minimumFractionDigits: 2 })})`}
                                                 </td>
                                                 <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f5f9', textAlign: 'center', color: '#64748b', fontSize: '9px', fontWeight: 600 }}>
                                                     {Math.floor((new Date() - new Date(row.issue_date)) / (1000 * 60 * 60 * 24))} Days
@@ -1288,60 +1318,191 @@ export default function StatementOfAccount() {
                     isOpen={showEmailModal}
                     onClose={() => setShowEmailModal(false)}
                     partner={statementData?.partner || null}
+                    contacts={contacts}
                     documentData={{
                         document_type: statementData ? 'Statement of Account' : 'Aging Summary Report',
                         document_no: statementData ? `SOA-${new Date().toISOString().split('T')[0]}` : `SUM-${new Date().toISOString().split('T')[0]}`,
                         closingBalance: statementData ? statementData.closingBalance : companyAging.reduce((sum, item) => sum + item.outstanding, 0)
                     }}
-                    onShare={(email, msg) => handleShareFile('email', msg, email)}
+                    onShare={(preview) => handleShareFile('email', preview.body, preview.to, preview.cc, preview.bcc, preview.subject)}
                 />
             )}
         </div>
     );
 }
 
-function EmailShareModal({ isOpen, onClose, partner, documentData, onShare }) {
-    const [email, setEmail] = useState(partner?.email || 'accounts@celron.net');
-    const [message, setMessage] = useState('');
+function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, contacts = [] }) {
+    const [emailPreview, setEmailPreview] = useState({
+        to: partner?.email || 'accounts@celron.net',
+        cc: '',
+        bcc: '',
+        subject: `${documentData.document_type} - ${partner?.name || 'Customer'}`,
+        body: '',
+        attachments: []
+    });
 
     useEffect(() => {
         if (isOpen) {
             const defaultMsg = `Dear ${partner?.name || 'Accounts Team'},\n\nPlease find the ${documentData.document_type} (${documentData.document_no}) for your review and reference.\n\nTotal Due: SGD ${documentData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n\nKind Regards,`;
-            setMessage(defaultMsg);
+            setEmailPreview(prev => ({ ...prev, body: defaultMsg }));
         }
     }, [isOpen, partner, documentData]);
+
+    const getSuggestedEmails = () => {
+        const companyContacts = partner ? contacts.filter(c => c.partner_id === partner.id) : [];
+        const suggestions = companyContacts.filter(c => c.email).map(c => ({ name: c.name, email: c.email }));
+        suggestions.push({ name: 'Accounts Team', email: 'accounts@celron.net' });
+        suggestions.push({ name: 'Director Review', email: 'director@celron.net' });
+        if (partner?.email && !suggestions.find(s => s.email === partner.email)) {
+            suggestions.unshift({ name: partner.name, email: partner.email });
+        }
+        return suggestions;
+    };
+
+    const addEmailToField = (field, emailToAdd) => {
+        setEmailPreview(prev => {
+            const current = prev[field] || '';
+            const newEmails = current ? `${current}; ${emailToAdd}` : emailToAdd;
+            return { ...prev, [field]: newEmails };
+        });
+    };
 
     if (!isOpen) return null;
 
     return (
-        <div style={{ position: 'fixed', inset: 0, zCheck: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', padding: '24px', backdropFilter: 'blur(4px)' }}>
-            <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '600px', background: '#fff', borderRadius: '20px', padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: '20px', background: '#1e3a8a', color: '#fff' }}>
-                    <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800 }}>Send Statement via Email</h3>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
+            <div style={{ background: '#fff', borderRadius: '12px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)', width: '100%', maxWidth: '850px', display: 'flex', flexDirection: 'column', maxHeight: '95vh', overflow: 'hidden' }}>
+
+                <div style={{ padding: '16px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc' }}>
+                    <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Send size={20} color="#3b82f6" /> Email Preview
+                    </h2>
+                    <button onClick={onClose} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8' }}>
+                        <X size={24} />
+                    </button>
                 </div>
-                <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div className="form-item" style={{ margin: 0 }}>
-                        <label>Recipient Email</label>
-                        <input type="email" className="form-input" value={email} onChange={e => setEmail(e.target.value)} placeholder="e.g. accounts@celron.net" />
-                        <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                            <button className="btn-vibrant-secondary" style={{ fontSize: '0.7rem', padding: '4px 8px' }} onClick={() => setEmail('accounts@celron.net')}>Accounts Team</button>
-                            <button className="btn-vibrant-secondary" style={{ fontSize: '0.7rem', padding: '4px 8px' }} onClick={() => setEmail('director@celron.net')}>Director Review</button>
+
+                <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>To</label>
+                            <div style={{ position: 'relative', display: 'flex', gap: '8px' }}>
+                                <input
+                                    type="email"
+                                    style={{ flex: 1, padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
+                                    value={emailPreview.to}
+                                    onChange={(e) => setEmailPreview(prev => ({ ...prev, to: e.target.value }))}
+                                />
+                            </div>
                         </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cc (Separate with semicolon)</label>
+                                <textarea
+                                    rows="2"
+                                    style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box', resize: 'none' }}
+                                    value={emailPreview.cc}
+                                    onChange={(e) => setEmailPreview(prev => ({ ...prev, cc: e.target.value }))}
+                                    placeholder="email1@example.com; email2@example.com"
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Bcc</label>
+                                <textarea
+                                    rows="2"
+                                    style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box', resize: 'none' }}
+                                    value={emailPreview.bcc}
+                                    onChange={(e) => setEmailPreview(prev => ({ ...prev, bcc: e.target.value }))}
+                                    placeholder="bcc1@example.com; bcc2@example.com"
+                                />
+                            </div>
+                        </div>
+
+                        {getSuggestedEmails().length > 0 && (
+                            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                    Select Contacts
+                                </label>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                    {getSuggestedEmails().map((contact, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            style={{ 
+                                                background: '#fff', 
+                                                border: '1px solid #cbd5e1', 
+                                                borderRadius: '6px', 
+                                                padding: '4px 8px', 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: '8px',
+                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b' }}>{contact.name}</span>
+                                                <span style={{ fontSize: '10px', color: '#64748b' }}>{contact.email}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid #e2e8f0', paddingLeft: '8px', marginLeft: '4px' }}>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => addEmailToField('to', contact.email)}
+                                                    style={{ background: '#eef2ff', color: '#6366f1', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
+                                                >
+                                                    To
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => addEmailToField('cc', contact.email)}
+                                                    style={{ background: '#f0fdf4', color: '#16a34a', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
+                                                >
+                                                    Cc
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
-                    <div className="form-item" style={{ margin: 0 }}>
-                        <label>Message Body</label>
-                        <textarea 
-                            className="form-input" 
-                            style={{ minHeight: '150px', fontSize: '0.85rem' }} 
-                            value={message} 
-                            onChange={e => setMessage(e.target.value)} 
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Subject</label>
+                        <input
+                            type="text"
+                            style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
+                            value={emailPreview.subject}
+                            onChange={(e) => setEmailPreview(prev => ({ ...prev, subject: e.target.value }))}
                         />
                     </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+                        <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Message Body</label>
+                        <textarea
+                            style={{ width: '100%', minHeight: '200px', padding: '14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', resize: 'vertical', fontFamily: 'monospace', fontSize: '13px', lineHeight: '1.5', boxSizing: 'border-box' }}
+                            value={emailPreview.body}
+                            onChange={(e) => setEmailPreview(prev => ({ ...prev, body: e.target.value }))}
+                        />
+                        <div style={{ background: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0', marginTop: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <FileText size={24} color="#16a34a" />
+                            <div>
+                                <p style={{ fontSize: '12px', color: '#166534', margin: 0, fontWeight: 700 }}>📄 PDF Automatically Attached</p>
+                                <p style={{ fontSize: '11px', color: '#166534', margin: '2px 0 0 0', opacity: 0.9 }}>The {documentData.document_type || 'Statement'} PDF has been generated and is attached to this email.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div style={{ padding: '20px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#f8fafc' }}>
-                    <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
-                    <button className="btn btn-primary" onClick={() => { onShare(email, message); onClose(); }}>
-                        <Mail size={18} /> Send Now
+
+                <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px', background: '#f8fafc' }}>
+                    <button
+                        onClick={onClose}
+                        style={{ padding: '10px 20px', fontSize: '14px', fontWeight: 600, color: '#475569', background: '#fff', border: '1px solid #cbd5e1', borderRadius: '8px', cursor: 'pointer' }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={() => { onShare(emailPreview); onClose(); }}
+                        style={{ padding: '10px 20px', fontSize: '14px', fontWeight: 600, color: '#fff', background: '#3b82f6', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                        <Send size={16} /> Send Email Now
                     </button>
                 </div>
             </div>
@@ -1363,6 +1524,48 @@ function ReceivePaymentModal({ prefill, onClose, onSuccess, partners, company_id
         notes: prefill?.notes || ''
     });
     const [saving, setSaving] = useState(false);
+    const [outstandingInvoices, setOutstandingInvoices] = useState([]);
+    const [loadingInvoices, setLoadingInvoices] = useState(false);
+
+    useEffect(() => {
+        const fetchInvoices = async () => {
+            if (!formData.partner_id) {
+                setOutstandingInvoices([]);
+                return;
+            }
+            setLoadingInvoices(true);
+            try {
+                const { data } = await getStatementData(company_id, formData.partner_id, '2000-01-01', '2099-12-31');
+                if (data) {
+                    const invoices = [];
+                    const payments = new Map();
+                    data.forEach(doc => {
+                        if ((doc.document_type || '').includes('Invoice')) {
+                            invoices.push(doc);
+                        } else if (doc.document_type === 'Payment Received' && doc.internal_notes) {
+                            try {
+                                const notes = JSON.parse(doc.internal_notes);
+                                if (notes.related_document_id) {
+                                    payments.set(notes.related_document_id, (payments.get(notes.related_document_id) || 0) + parseFloat(doc.total_amount || 0));
+                                }
+                            } catch {}
+                        }
+                    });
+                    const outstanding = invoices.map(inv => {
+                        const paid = payments.get(inv.id) || 0;
+                        return { ...inv, outstanding: (parseFloat(inv.total_amount || 0) - paid) };
+                    }).filter(inv => inv.outstanding > 0.01);
+                    setOutstandingInvoices(outstanding);
+                }
+            } catch (err) {
+                console.error('Error fetching invoices', err);
+            } finally {
+                setLoadingInvoices(false);
+            }
+        };
+        fetchInvoices();
+    }, [formData.partner_id, company_id]);
+
 
     const handleSave = async () => {
         if (!formData.partner_id || !formData.total_amount) {
@@ -1390,7 +1593,7 @@ function ReceivePaymentModal({ prefill, onClose, onSuccess, partners, company_id
                 internal_notes: JSON.stringify({
                     payment_method: formData.payment_method,
                     payment_ref: formData.payment_ref,
-                    related_document_id: formData.related_document_id
+                    related_document_id: formData.related_document_id === 'other_custom' ? null : formData.related_document_id
                 })
             };
 
@@ -1447,14 +1650,61 @@ function ReceivePaymentModal({ prefill, onClose, onSuccess, partners, company_id
                     </div>
                     <div className="grid-2">
                         <div className="form-item" style={{ margin: 0 }}>
-                            <label>Invoice No / Job No Reference</label>
-                            <input 
-                                type="text" 
-                                className="form-input" 
-                                value={formData.invoice_no} 
-                                onChange={e => setFormData({ ...formData, invoice_no: e.target.value })} 
-                                placeholder="e.g. INV-2024-001 or JOB-889" 
-                            />
+                            <label>
+                                Invoice No / Job No Reference 
+                                {loadingInvoices && <Loader2 size={12} className="animate-spin" style={{ display: 'inline-block', marginLeft: '6px' }} />}
+                            </label>
+                            {formData.related_document_id === 'other_custom' ? (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <input 
+                                        type="text" 
+                                        className="form-input" 
+                                        style={{ flex: 1 }}
+                                        value={formData.invoice_no} 
+                                        onChange={e => setFormData({ ...formData, invoice_no: e.target.value })} 
+                                        placeholder="Enter manual reference..." 
+                                    />
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-secondary" 
+                                        style={{ padding: '0 12px' }} 
+                                        onClick={() => setFormData({ ...formData, related_document_id: '' })}
+                                    >
+                                        Back
+                                    </button>
+                                </div>
+                            ) : (
+                                <select 
+                                    className="form-input" 
+                                    value={formData.related_document_id} 
+                                    onChange={e => {
+                                        const selectedId = e.target.value;
+                                        if (selectedId === 'other_custom') {
+                                            setFormData({ ...formData, related_document_id: 'other_custom', invoice_no: '' });
+                                        } else {
+                                            const selectedInv = outstandingInvoices.find(i => i.id === selectedId);
+                                            if (selectedInv) {
+                                                setFormData({ 
+                                                    ...formData, 
+                                                    related_document_id: selectedId, 
+                                                    invoice_no: selectedInv.document_no,
+                                                    total_amount: selectedInv.outstanding > 0 ? selectedInv.outstanding : formData.total_amount
+                                                });
+                                            } else {
+                                                setFormData({ ...formData, related_document_id: '', invoice_no: '' });
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <option value="">-- Select Outstanding Invoice --</option>
+                                    {outstandingInvoices.map(inv => (
+                                        <option key={inv.id} value={inv.id}>
+                                            {inv.document_no} {inv.assigned_job_no ? `(Job: ${inv.assigned_job_no})` : ''} - Bal: SGD {inv.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </option>
+                                    ))}
+                                    <option value="other_custom">Custom Reference...</option>
+                                </select>
+                            )}
                         </div>
                         <div className="form-item" style={{ margin: 0 }}>
                             <label>Description / Allocation</label>

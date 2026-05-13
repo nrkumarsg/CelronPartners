@@ -180,7 +180,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                     <div style={styles.bodyBold}>{doc.partners?.name || 'Walk-in Customer'}</div>
                     <div style={{ ...styles.small, marginTop: '2px' }}>{doc.partners?.address || ''}</div>
                     <div style={{ ...styles.small, marginTop: '4px' }}>
-                        <strong>Phone:</strong> {doc.partners?.phone || '-'} &nbsp;&nbsp; <strong>Email:</strong> {doc.partners?.email || '-'}
+                        <strong>Phone:</strong> {doc.partners?.phone1 || doc.partners?.phone2 || '-'} &nbsp;&nbsp; <strong>Email:</strong> {doc.partners?.email1 || doc.partners?.email2 || '-'}
                     </div>
                     <div style={{ borderTop: '1px solid #e2e8f0', marginTop: '8px', paddingTop: '8px' }}>
                         <div style={styles.bodyBold}>ATTN: {doc.contacts?.name || doc.partners?.contact_person || 'N/A'}</div>
