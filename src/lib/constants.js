@@ -24,7 +24,8 @@ export const COUNTRIES = [
 export const PARTNER_CATEGORIES = [
     'Partner', 'Spare Parts', 'Service', 'Calibration', 'Automation',
     'Electrical', 'Mechanical', 'Instrumentation', 'Safety Equipment',
-    'Industrial Supplies', 'Customer', 'Supplier', 'Freelancer', 'Service Company'
+    'Industrial Supplies', 'Customer', 'Supplier', 'Freelancer', 'Service Company',
+    'Principal', 'Forwarder', 'Courier'
 ];
 
 export const ALL_MODULES = [

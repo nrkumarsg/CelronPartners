@@ -51,6 +51,7 @@ export default function PartnerForm() {
     const [primaryContact, setPrimaryContact] = useState({
         name: '',
         post: '',
+        department: '',
         email: '',
         handphone: ''
     });
@@ -90,12 +91,16 @@ export default function PartnerForm() {
                 
                 const { data: results } = await supabase
                     .from('search_results')
-                    .select('title, snippet, url')
+                    .select('title, snippet, url, pagemap')
                     .eq('search_id', searchId)
                     .limit(5);
                 
                 if (results && results.length > 0) {
-                    searchContext = results.map(r => `[Web Data] ${r.title} (${r.url}): ${r.snippet}`).join('\n');
+                    searchContext = results.map(r => {
+                        const addr = r.pagemap?.address;
+                        const addrStr = addr ? ` [Structured Address: ${addr.road || ''}, ${addr.city || addr.town || ''}, ${addr.country || ''} ${addr.postcode || ''}]` : '';
+                        return `[Web Data] ${r.title} (${r.url}): ${r.snippet}${addrStr}`;
+                    }).join('\n');
                 }
             } catch (searchErr) {
                 console.warn('[AI] Live search unavailable, using model intelligence only.');
@@ -128,6 +133,42 @@ export default function PartnerForm() {
                 confidence: 'none',
                 manual_verification_required: true
             });
+        } finally {
+            setIsAiResearching(false);
+        }
+    };
+
+    const handlePhotonResearch = async () => {
+        if (!formData.weblink && !formData.name) return alert('Please enter a Website or Company Name.');
+        
+        setIsAiResearching(true);
+        try {
+            const response = await fetch('/api/research/photon', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    url: formData.weblink, 
+                    companyName: formData.name 
+                })
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                const p = result.data;
+                setAiPreview({
+                    address: p.address || '',
+                    email1: p.emails?.[0] || '',
+                    phone1: p.phone || '',
+                    website: formData.weblink || '',
+                    confidence: p.confidence || 'medium',
+                    isPhoton: true,
+                    photonData: p,
+                    extraInfo: `Photon OSINT Findings: ${p.emails?.length || 0} emails, ${p.subdomains?.length || 0} subdomains found.`
+                });
+            }
+        } catch (err) {
+            console.error('Photon Research Error:', err);
+            alert('Photon service error: ' + err.message);
         } finally {
             setIsAiResearching(false);
         }
@@ -374,29 +415,54 @@ export default function PartnerForm() {
                                         <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Research company details with Antigravity AI</div>
                                     </div>
                                 </div>
-                                <button
-                                    type="button"
-                                    onClick={handleAiAutofill}
-                                    disabled={isAiResearching || !formData.name}
-                                    className="btn"
-                                    style={{
-                                        background: isAiResearching ? '#e2e8f0' : 'linear-gradient(135deg, #6366f1, #4f46e5)',
-                                        color: 'white',
-                                        padding: '10px 20px',
-                                        borderRadius: '12px',
-                                        fontSize: '0.9rem',
-                                        fontWeight: 600,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        boxShadow: isAiResearching ? 'none' : '0 4px 12px rgba(99, 102, 241, 0.2)'
-                                    }}
-                                >
-                                    {isAiResearching ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
-                                    {isAiResearching ? 'Researching...' : 'Research with AI'}
-                                </button>
+                                <div style={{ display: 'flex', gap: '12px' }}>
+                                    <button
+                                        type="button"
+                                        onClick={handleAiAutofill}
+                                        disabled={isAiResearching || !formData.name}
+                                        className="btn"
+                                        style={{
+                                            background: isAiResearching ? '#e2e8f0' : 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                                            color: 'white',
+                                            padding: '10px 20px',
+                                            borderRadius: '12px',
+                                            fontSize: '0.9rem',
+                                            fontWeight: 600,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            boxShadow: isAiResearching ? 'none' : '0 4px 12px rgba(99, 102, 241, 0.2)'
+                                        }}
+                                    >
+                                        {isAiResearching ? <Loader2 className="animate-spin" size={18} /> : <Sparkles size={18} />}
+                                        {isAiResearching ? 'Researching...' : 'AI Profile'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handlePhotonResearch}
+                                        disabled={isAiResearching || (!formData.weblink && !formData.name)}
+                                        className="btn"
+                                        style={{
+                                            background: isAiResearching ? '#e2e8f0' : 'linear-gradient(135deg, #0ea5e9, #0284c7)',
+                                            color: 'white',
+                                            padding: '10px 20px',
+                                            borderRadius: '12px',
+                                            fontSize: '0.9rem',
+                                            fontWeight: 600,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            boxShadow: isAiResearching ? 'none' : '0 4px 12px rgba(14, 165, 233, 0.2)'
+                                        }}
+                                    >
+                                        <Search size={18} />
+                                        Crawl with Photon
+                                    </button>
+                                </div>
                             </div>
 
                             {aiPreview && (
@@ -426,7 +492,29 @@ export default function PartnerForm() {
                                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>City:</strong> {aiPreview.city || '-'}</div>
                                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>Pincode:</strong> {aiPreview.pincode || '-'}</div>
                                             <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>Address:</strong> {aiPreview.address || '-'}</div>
-                                            <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>Brands:</strong> {aiPreview.brands || '-'}</div>
+                                            
+                                            {!aiPreview.isPhoton && <div style={{ gridColumn: 'span 2', background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0' }}><strong>Brands:</strong> {aiPreview.brands || '-'}</div>}
+                                            
+                                            {aiPreview.isPhoton && aiPreview.photonData && (
+                                                <div style={{ gridColumn: 'span 2', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                    {aiPreview.photonData.emails?.length > 0 && (
+                                                        <div style={{ background: '#f0fdf4', padding: '12px', borderRadius: '12px', border: '1px solid #bbf7d0' }}>
+                                                            <strong>Found Emails:</strong> {aiPreview.photonData.emails.join(', ')}
+                                                        </div>
+                                                    )}
+                                                    {aiPreview.photonData.subdomains?.length > 0 && (
+                                                        <div style={{ background: '#f0f9ff', padding: '12px', borderRadius: '12px', border: '1px solid #bae6fd' }}>
+                                                            <strong>Subdomains:</strong> {aiPreview.photonData.subdomains.join(', ')}
+                                                        </div>
+                                                    )}
+                                                    {aiPreview.photonData.social && (
+                                                        <div style={{ background: '#faf5ff', padding: '12px', borderRadius: '12px', border: '1px solid #e9d5ff' }}>
+                                                            <strong>Social Profiles:</strong> {Object.entries(aiPreview.photonData.social).filter(([k,v]) => v).map(([k,v]) => `${k}: ${v}`).join(' | ')}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
+
                                             {aiPreview.activity_summary && (
                                                 <div style={{ gridColumn: 'span 2', background: 'linear-gradient(to right, #f5f3ff, #ede9fe)', padding: '14px', borderRadius: '12px', border: '1px dashed #c7d2fe' }}>
                                                     <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#6366f1', textTransform: 'uppercase', marginBottom: '4px' }}>Business Activity Insight</div>
@@ -692,6 +780,22 @@ export default function PartnerForm() {
                                     </div>
                                 </div>
                                 <div className="form-group">
+                                    <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Department</label>
+                                    <select
+                                        className="form-select premium-input"
+                                        value={primaryContact.department}
+                                        onChange={e => setPrimaryContact({ ...primaryContact, department: e.target.value })}
+                                    >
+                                        <option value="">-- Select Department --</option>
+                                        <option value="Accounts">Accounts / Finance</option>
+                                        <option value="Purchasing">Purchasing / Procurement</option>
+                                        <option value="Logistics">Logistics / Operations</option>
+                                        <option value="Technical">Technical / Engineering</option>
+                                        <option value="Sales">Sales / Marketing</option>
+                                        <option value="Management">Management</option>
+                                    </select>
+                                </div>
+                                <div className="form-group">
                                     <label className="form-label" style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Handphone / WhatsApp</label>
                                     <div style={{ position: 'relative' }}>
                                         <Phone size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
@@ -793,7 +897,7 @@ export default function PartnerForm() {
  * Inline form to quickly add contacts without navigating
  */
 function InlineContactForm({ partnerId, companyId, onSave }) {
-    const [contact, setContact] = useState({ name: '', post: '', email: '', handphone: '' });
+    const [contact, setContact] = useState({ name: '', post: '', department: '', email: '', handphone: '' });
     const [saving, setSaving] = useState(false);
 
     const handleSave = async () => {
@@ -828,6 +932,21 @@ function InlineContactForm({ partnerId, companyId, onSave }) {
             <div className="form-group">
                 <label className="form-label">Phone</label>
                 <input className="form-input premium-input" value={contact.handphone} onChange={e => setContact({...contact, handphone: e.target.value})} placeholder="+65..." />
+            </div>
+            <div className="form-group">
+                <label className="form-label">Department</label>
+                <select 
+                    className="form-select premium-input" 
+                    value={contact.department} 
+                    onChange={e => setContact({...contact, department: e.target.value})}
+                >
+                    <option value="">-- Dept --</option>
+                    <option value="Accounts">Accounts</option>
+                    <option value="Purchasing">Purchasing</option>
+                    <option value="Logistics">Logistics</option>
+                    <option value="Technical">Technical</option>
+                    <option value="Sales">Sales</option>
+                </select>
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: '24px' }}>
                 <button className="btn btn-primary" onClick={handleSave} disabled={saving} style={{ width: '100%', height: '42px', borderRadius: '10px' }}>

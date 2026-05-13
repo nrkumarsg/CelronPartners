@@ -46,35 +46,132 @@ export async function performMaritimeIntelligenceSearch({
         }
     }
 
-    // 2. Perform Live Search using Key Rotation
+    // 2. Perform Live Search using Free Options first, then falling back to Key Rotation
     return runUniversalSearch({ query, userId, skipAi });
 }
 
-export async function runUniversalSearch(params, keyIndex = 0) {
-    if (keyIndex >= GOOGLE_API_KEYS.length) {
-        console.error('All Google Search API keys exhausted');
-        return null;
+export async function runNominatimSearch(query) {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`;
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'CelronHub-Procurement-System/1.0 (contact@celron.net)'
+            }
+        });
+        const data = await response.json();
+        return data.map(item => ({
+            title: item.display_name,
+            link: `https://www.openstreetmap.org/?mlat=${item.lat}&mlon=${item.lon}`,
+            snippet: `Official Address: ${item.display_name}. Category: ${item.category}, Type: ${item.type}`,
+            address_data: item.address,
+            lat: item.lat,
+            lon: item.lon,
+            source: 'nominatim'
+        }));
+    } catch (err) {
+        console.warn('[Nominatim] Search failed:', err);
+        return [];
     }
+}
+
+export async function runDuckDuckGoSearch(query) {
+    const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+    try {
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+        });
+        if (!response.ok) return [];
+        const html = await response.text();
+        
+        const results = [];
+        const resultRegex = /<div class="result__body">([\s\S]*?)<\/div>/g;
+        let match;
+        while ((match = resultRegex.exec(html)) !== null && results.length < 5) {
+            const body = match[1];
+            const titleMatch = body.match(/<a class="result__a"[\s\S]*?>([\s\S]*?)<\/a>/);
+            const linkMatch = body.match(/href="([\s\S]*?)"/);
+            const snippetMatch = body.match(/<a class="result__snippet"[\s\S]*?>([\s\S]*?)<\/a>/);
+            
+            if (titleMatch && linkMatch) {
+                let link = linkMatch[1];
+                // Clean up DDG redirect links
+                if (link.includes('uddg=')) {
+                    try {
+                        const urlParams = new URLSearchParams(link.split('?')[1]);
+                        link = urlParams.get('uddg') || link;
+                    } catch (e) {
+                        // fallback to original link
+                    }
+                }
+
+                results.push({
+                    title: titleMatch[1].replace(/<[^>]*>?/gm, '').trim(),
+                    link: link,
+                    snippet: snippetMatch ? snippetMatch[1].replace(/<[^>]*>?/gm, '').trim() : '',
+                    source: 'duckduckgo'
+                });
+            }
+        }
+        return results;
+    } catch (err) {
+        console.warn('[DDG] Search failed:', err);
+        return [];
+    }
+}
+
+export async function runUniversalSearch(params, keyIndex = 0) {
+    const { query, userId } = params;
+    if (!query) return null;
+
+    // 1. Create Search Entry
+    const { data: search, error: searchErr } = await supabase
+        .from('searches')
+        .insert({ 
+            query, 
+            user_id: userId,
+            source: 'maritime_finder'
+        })
+        .select()
+        .single();
+    
+    if (searchErr) throw searchErr;
+
+    // 2. Try FREE Options First (Nominatim + DDG)
+    console.log(`[Finder] Attempting free search for: ${query}`);
+    try {
+        const [nomRes, ddgRes] = await Promise.all([
+            runNominatimSearch(query),
+            runDuckDuckGoSearch(query)
+        ]);
+
+        const freeResults = [...nomRes, ...ddgRes];
+        if (freeResults.length > 0) {
+            const resultsToSave = freeResults.map(item => ({
+                search_id: search.id,
+                title: item.title,
+                link: item.link,
+                snippet: item.snippet,
+                pagemap: item.address_data ? { address: item.address_data } : {}
+            }));
+            await supabase.from('search_results').insert(resultsToSave);
+            console.log(`[Finder] Free search succeeded with ${freeResults.length} items.`);
+            return search.id;
+        }
+    } catch (freeErr) {
+        console.warn('[Finder] Free search attempt failed, falling back to Google:', freeErr);
+    }
+
+    // 3. Fallback to Google Search API
+    if (keyIndex >= GOOGLE_API_KEYS.length) {
+        console.error('All Search options (Free & Google) exhausted');
+        return search.id;
+    }
+    
     const currentKey = GOOGLE_API_KEYS[keyIndex];
     
     try {
-        const { query, userId } = params;
-        if (!query) return null;
-
-        // 1. Create Search Entry
-        const { data: search, error: searchErr } = await supabase
-            .from('searches')
-            .insert({ 
-                query, 
-                user_id: userId,
-                source: 'maritime_finder' // Added required field
-            })
-            .select()
-            .single();
-        
-        if (searchErr) throw searchErr;
-
-        // 2. Call Google Search API
         const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${currentKey}&cx=${GOOGLE_CX}&q=${encodeURIComponent(query)}`;
         const response = await fetch(searchUrl);
         const data = await response.json();
@@ -82,14 +179,13 @@ export async function runUniversalSearch(params, keyIndex = 0) {
         if (data.error) {
             const isRetryable = [429, 403, 400].includes(data.error.code);
             if (isRetryable) {
-                console.warn(`[Finder] Key ${keyIndex} failed (${data.error.code}). Trying next...`);
+                console.warn(`[Finder] Google Key ${keyIndex} failed. Trying next...`);
                 return runUniversalSearch(params, keyIndex + 1);
             }
             throw new Error(data.error.message);
         }
 
-        // 3. Store Results
-        const results = (data.items || []).map(item => ({
+        const googleResults = (data.items || []).map(item => ({
             search_id: search.id,
             title: item.title,
             link: item.link,
@@ -97,14 +193,13 @@ export async function runUniversalSearch(params, keyIndex = 0) {
             pagemap: item.pagemap
         }));
 
-        if (results.length > 0) {
-            const { error: resErr } = await supabase.from('search_results').insert(results);
-            if (resErr) console.error('Error saving search results:', resErr);
+        if (googleResults.length > 0) {
+            await supabase.from('search_results').insert(googleResults);
         }
 
         return search.id;
     } catch (err) {
-        console.error('[Finder] Search failed on Key:', keyIndex, err);
-        return runUniversalSearch(params, keyIndex + 1);
+        console.error('[Finder] Google Search failed:', err);
+        return search.id;
     }
 }

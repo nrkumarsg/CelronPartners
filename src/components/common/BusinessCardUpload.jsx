@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Camera, X, UploadCloud, User, CreditCard } from 'lucide-react';
+import { Camera, X, UploadCloud, User, CreditCard, Sparkles } from 'lucide-react';
 import { uploadFile } from '../../lib/store';
 import { performOCR } from '../../lib/googleAuthService';
 
-export default function BusinessCardUpload({ frontValue, backValue, onFrontChange, onBackChange, onOCR, label = "Business Card" }) {
+export default function BusinessCardUpload({ frontValue, backValue, onFrontChange, onBackChange, onOCR, onSmartOCR, label = "Business Card" }) {
     const [uploadingFront, setUploadingFront] = useState(false);
     const [uploadingBack, setUploadingBack] = useState(false);
     const [scanning, setScanning] = useState(false);
@@ -49,7 +49,29 @@ export default function BusinessCardUpload({ frontValue, backValue, onFrontChang
 
     return (
         <div className="bc-upload-container">
-            <label className="form-label">{label}</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <label className="form-label" style={{ margin: 0 }}>{label}</label>
+                {onSmartOCR && (
+                    <button 
+                        onClick={onSmartOCR}
+                        style={{ 
+                            background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', 
+                            border: '1px solid #ddd6fe', 
+                            color: '#7c3aed', 
+                            padding: '4px 10px', 
+                            borderRadius: '8px', 
+                            fontSize: '0.75rem', 
+                            fontWeight: 700, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px',
+                            cursor: 'pointer'
+                        }}
+                    >
+                        <Sparkles size={14} /> Smart Assistant
+                    </button>
+                )}
+            </div>
 
             <div className="bc-stack">
                 {/* Front Side */}

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getWorkflowDocumentById } from '../../lib/workflowV2Service';
 import { getDocumentSettings } from '../../lib/store';
 import { useAuth } from '../../contexts/AuthContext';
-import { Printer, ArrowLeft, Download } from 'lucide-react';
+import { Printer, ArrowLeft, Download, Pencil } from 'lucide-react';
 import html2pdf from 'html2pdf.js';
 import WorkflowDocumentLayout from '../../components/workflow/WorkflowDocumentLayout';
 
@@ -128,6 +128,41 @@ export default function WorkflowPrintPreview() {
                         style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', background: '#10b981', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
                     >
                         <Download size={18} /> Download PDF
+                    </button>
+                    <button
+                        onClick={() => {
+                            const element = document.getElementById('print-paper-content');
+                            const customerName = doc.partners?.name || 'Customer';
+                            const projectOrVessel = doc.vessels?.name || doc.subject || 'Project';
+                            const effectiveType = (doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : (doc.document_type || 'Document');
+                            const rawFilename = `${effectiveType}_${doc.document_no || 'Draft'} - ${customerName} - ${projectOrVessel}`;
+                            const safeFilename = rawFilename.replace(/[/\\?%*:|"<>]/g, '-').trim();
+
+                            const opt = {
+                                margin: 0,
+                                filename: `${safeFilename}.pdf`,
+                                image: { type: 'jpeg', quality: 0.98 },
+                                html2canvas: { scale: 2, useCORS: true, logging: false },
+                                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                            };
+                            
+                            html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf) => {
+                                const totalPages = pdf.internal.getNumberOfPages();
+                                for (let i = 1; i <= totalPages; i++) {
+                                    pdf.setPage(i);
+                                    pdf.setFontSize(8);
+                                    pdf.setTextColor(150);
+                                    pdf.text(`Page ${i} of ${totalPages}`, pdf.internal.pageSize.getWidth() - 25, pdf.internal.pageSize.getHeight() - 10);
+                                }
+                            }).output('blob').then(blob => {
+                                const url = URL.createObjectURL(blob);
+                                window.open(url, '_blank');
+                                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                            });
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 20px', background: '#6366f1', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                    >
+                        <Pencil size={18} /> Sign & Annotate
                     </button>
                     <button
                         onClick={() => window.print()}

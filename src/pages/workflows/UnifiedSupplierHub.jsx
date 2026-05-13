@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
     getWorkflowDocuments, 
     deleteWorkflowDocument, 
-    duplicateWorkflowDocument,
-    createSupplierPOFromSupplierQuote,
-    createQuotationFromSupplierQuote,
-    convertEnquiryToV2Document
+    getHubStats,
+    getEnquiryLinkedStats,
+    trackFloatedRFQ,
+    createSupplierPOFromSupplierQuote
 } from '../../lib/workflowV2Service';
 import { 
     LayoutDashboard, 
@@ -17,439 +17,445 @@ import {
     ShoppingCart, 
     Clock, 
     CheckCircle2, 
-    MoreVertical,
     Eye,
-    Printer,
     Trash2,
-    Copy,
     Filter,
     ChevronDown,
     ExternalLink,
-    ArrowLeft,
-    Package
+    Send,
+    Building2,
+    Calendar,
+    Loader2,
+    Camera
 } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
-
-const TABS = [
-    { id: 'customer_enquiries', label: 'Customer Enquiries', icon: <FileText size={18} />, color: '#6366f1' },
-    { id: 'supplier_rfqs', label: 'Supplier RFQs', icon: <ArrowRightLeft size={18} />, color: '#f59e0b' },
-    { id: 'supplier_quotes', label: 'Supplier Quotes', icon: <Clock size={18} />, color: '#10b981' },
-    { id: 'purchase_orders', label: 'Purchase Orders', icon: <ShoppingCart size={18} />, color: '#8b5cf6' }
-];
+import FastFloatModal from '../../components/workflows/FastFloatModal';
 
 export default function UnifiedSupplierHub() {
+    const TABS = [
+        { id: 'customer_enquiries', label: 'Customer Enquiries', icon: <FileText size={18} />, color: '#6366f1' },
+        { id: 'rfq_floats', label: 'RFQ Floats', icon: <ArrowRightLeft size={18} />, color: '#f59e0b' },
+        { id: 'supplier_quotes', label: 'Supplier Quotes', icon: <Clock size={18} />, color: '#10b981' },
+        { id: 'orders_to_suppliers', label: 'Order to Suppliers', icon: <ShoppingCart size={18} />, color: '#ef4444' }
+    ];
+
     const { profile } = useAuth();
     const navigate = useNavigate();
-    const location = useLocation();
-    
     const [activeTab, setActiveTab] = useState('customer_enquiries');
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [stats, setStats] = useState({ activeEnquiries: 0, pendingRFQs: 0, receivedQuotes: 0, totalPOValue: 0 });
+    const [selectedEnquiry, setSelectedEnquiry] = useState(null);
+    const [isFloatModalOpen, setIsFloatModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [showDropdown, setShowDropdown] = useState(null); // ID of document with open dropdown
 
     useEffect(() => {
         if (profile?.company_id) {
+            fetchStats();
             fetchData();
         }
     }, [profile, activeTab]);
 
+    const fetchStats = async () => {
+        try {
+            const hubStats = await getHubStats(profile.company_id);
+            setStats(hubStats);
+        } catch (err) {
+            console.error("Error fetching stats:", err);
+        }
+    };
+
     const fetchData = async () => {
         setLoading(true);
         try {
+            let result;
             if (activeTab === 'customer_enquiries') {
-                const { data: enquiries, error } = await supabase
+                result = await supabase
                     .from('customer_enquiries')
-                    .select('*, customer:partners(name)')
+                    .select('*, customer:partners(name), contact:contacts(name)')
                     .eq('company_id', profile.company_id)
                     .order('created_at', { ascending: false });
-                if (error) throw error;
-                setData(enquiries || []);
-            } else if (activeTab === 'supplier_rfqs') {
-                const { data: docs, error } = await getWorkflowDocuments(profile.company_id, 'Enquiry');
-                if (error) throw error;
-                setData(docs || []);
+            } else if (activeTab === 'rfq_floats') {
+                result = await supabase
+                    .from('workflow_documents')
+                    .select('*, partners(name)')
+                    .eq('company_id', profile.company_id)
+                    .eq('document_type', 'Enquiry')
+                    .order('created_at', { ascending: false });
             } else if (activeTab === 'supplier_quotes') {
-                const { data: quotes, error } = await supabase
+                result = await supabase
                     .from('supplier_quotes')
-                    .select(`
-                        *,
-                        supplier:partners(name),
-                        enquiry:customer_enquiries(enquiry_no, subject)
-                    `)
+                    .select('*, enquiry:customer_enquiries(enquiry_no, subject, customer_ref), supplier:partners(name)')
                     .eq('company_id', profile.company_id)
                     .order('created_at', { ascending: false });
-                if (error) throw error;
-                setData(quotes || []);
-            } else if (activeTab === 'purchase_orders') {
-                const { data: docs, error } = await getWorkflowDocuments(profile.company_id, 'Purchase Order');
-                if (error) throw error;
-                setData(docs || []);
+            } else if (activeTab === 'orders_to_suppliers') {
+                result = await supabase
+                    .from('workflow_documents')
+                    .select('*, partners(name)')
+                    .eq('company_id', profile.company_id)
+                    .eq('document_type', 'Purchase Order')
+                    .order('created_at', { ascending: false });
             }
+
+            if (result.error) throw result.error;
+            setData(result.data || []);
         } catch (err) {
-            console.error(`Error fetching ${activeTab}:`, err);
+            console.error("Error fetching data:", err);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleConvertToPO = async (quoteId) => {
-        if (!window.confirm('Convert this Supplier Quote to a Purchase Order?')) return;
-        setLoading(true);
-        try {
-            const savedDoc = await createSupplierPOFromSupplierQuote(quoteId);
-            alert(`Purchase Order ${savedDoc.document_no} created successfully!`);
-            navigate(`/workflows/editor/purchase-order/${savedDoc.id}`);
-        } catch (err) {
-            console.error(err);
-            alert('Failed to convert to PO: ' + err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleConvertToQuote = async (quoteId) => {
-        if (!window.confirm('Generate a Customer Quotation based on this Supplier Quote?')) return;
-        setLoading(true);
-        try {
-            const savedDoc = await createQuotationFromSupplierQuote(quoteId);
-            alert(`Quotation ${savedDoc.document_no} drafted successfully!`);
-            navigate(`/workflows/editor/quotation/${savedDoc.id}`);
-        } catch (err) {
-            console.error(err);
-            alert('Failed to generate Quotation: ' + err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleConvertToEnquiry = async (enqId) => {
-        if (!window.confirm('Convert this V1 Enquiry to a V2 RFQ/Enquiry?')) return;
-        setLoading(true);
-        try {
-            const savedDoc = await convertEnquiryToV2Document(enqId, 'Enquiry');
-            alert(`RFQ ${savedDoc.document_no} created successfully!`);
-            navigate(`/workflows/editor/enquiry/${savedDoc.id}`);
-        } catch (err) {
-            console.error(err);
-            alert('Failed to convert to RFQ: ' + err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const getStatusBadgeClass = (status) => {
-        const s = status?.toLowerCase() || 'draft';
-        if (s.includes('draft')) return 'badge-draft';
-        if (s.includes('pending') || s.includes('waiting')) return 'badge-pending';
-        if (s.includes('confirmed') || s.includes('approved')) return 'badge-confirmed';
-        if (s.includes('received')) return 'badge-received';
-        if (s.includes('sent') || s.includes('floated')) return 'badge-sent';
-        if (s.includes('quoted')) return 'badge-quoted';
-        if (s.includes('cancelled') || s.includes('rejected')) return 'badge-cancelled';
-        if (s.includes('rfq')) return 'badge-rfq';
-        return 'badge-draft';
-    };
-
-    const stripHtml = (html) => {
-        if (!html) return '';
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const text = doc.body.textContent || "";
-        return text.replace(/&nbsp;/g, ' ').trim();
-    };
-
-    const handleDelete = async (id, tab) => {
+    const handleDelete = async (id, table) => {
         if (!window.confirm('Are you sure you want to delete this record?')) return;
-        
         try {
-            if (tab === 'customer_enquiries') {
-                await supabase.from('customer_enquiries').delete().eq('id', id);
-            } else if (tab === 'supplier_rfqs' || tab === 'purchase_orders') {
-                await deleteWorkflowDocument(id);
-            } else if (tab === 'supplier_quotes') {
-                await supabase.from('supplier_quotes').delete().eq('id', id);
-            }
+            const { error } = await supabase.from(table).delete().eq('id', id);
+            if (error) throw error;
             fetchData();
+            fetchStats();
         } catch (err) {
-            alert('Delete failed: ' + err.message);
+            alert('Error deleting record: ' + err.message);
+        }
+    };
+
+    const handleCreatePO = async (quoteId) => {
+        if (!window.confirm("Convert this Supplier Quote into a formal Purchase Order?")) return;
+        try {
+            setLoading(true);
+            const po = await createSupplierPOFromSupplierQuote(quoteId);
+            alert(`Purchase Order ${po.document_no} created successfully!`);
+            navigate(`/workflows/editor/purchase-order/${po.id}`);
+        } catch (err) {
+            console.error("Failed to create PO:", err);
+            alert("Failed to create PO: " + err.message);
+        } finally {
+            setLoading(false);
         }
     };
 
     const filteredData = data.filter(item => {
         const query = searchQuery.toLowerCase();
         if (activeTab === 'customer_enquiries') {
-            return (item.enquiry_no || '').toLowerCase().includes(query) ||
-                   (item.customer?.name || '').toLowerCase().includes(query) ||
-                   (item.description || '').toLowerCase().includes(query);
-        } else if (activeTab === 'supplier_rfqs' || activeTab === 'purchase_orders') {
-            return (item.document_no || '').toLowerCase().includes(query) ||
-                   (item.partners?.name || '').toLowerCase().includes(query) ||
-                   (item.subject || '').toLowerCase().includes(query);
+            return (item.enquiry_no?.toLowerCase().includes(query) || 
+                    item.customer?.name?.toLowerCase().includes(query) ||
+                    item.subject?.toLowerCase().includes(query));
+        } else if (activeTab === 'rfq_floats') {
+            return (item.document_no?.toLowerCase().includes(query) || 
+                    item.partners?.name?.toLowerCase().includes(query) ||
+                    item.subject?.toLowerCase().includes(query));
         } else if (activeTab === 'supplier_quotes') {
-            return (item.supplier?.name || '').toLowerCase().includes(query) ||
-                   (item.enquiry?.enquiry_no || '').toLowerCase().includes(query) ||
-                   (item.enquiry?.subject || '').toLowerCase().includes(query);
+            return (item.enquiry?.enquiry_no?.toLowerCase().includes(query) || 
+                    item.supplier?.name?.toLowerCase().includes(query));
+        } else if (activeTab === 'orders_to_suppliers') {
+            return (item.document_no?.toLowerCase().includes(query) || 
+                    item.partners?.name?.toLowerCase().includes(query) ||
+                    item.subject?.toLowerCase().includes(query));
         }
         return true;
     });
 
-    const renderTable = () => {
-        if (loading) return <div className="text-center py-20">Loading data...</div>;
-        if (filteredData.length === 0) return (
-            <div className="text-center py-20 opacity-50">
-                <FileText size={48} className="mx-auto mb-4" />
-                <p>No records found.</p>
-            </div>
-        );
+    const stripHtml = (html) => {
+        if (!html) return '';
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        return doc.body.textContent || "";
+    };
 
+    const getStatusBadge = (status) => {
+        const colors = {
+            'Open': { bg: '#e0f2fe', text: '#0369a1' },
+            'Draft': { bg: '#f1f5f9', text: '#475569' },
+            'Sent': { bg: '#fef3c7', text: '#92400e' },
+            'Received': { bg: '#dcfce7', text: '#166534' },
+            'Shortlisted': { bg: '#f0f9ff', text: '#0284c7' },
+            'RFQ Floated': { bg: '#f5f3ff', text: '#5b21b6' },
+            'Job Created': { bg: '#ecfdf5', text: '#059669' }
+        };
+        const style = colors[status] || { bg: '#f1f5f9', text: '#475569' };
         return (
-            <div className="hub-table-wrapper">
-                <table className="hub-table w-full">
-                    <thead>
-                        {activeTab === 'customer_enquiries' && (
-                            <tr>
-                                <th>Enquiry No</th>
-                                <th>Date</th>
-                                <th>Customer</th>
-                                <th>Source</th>
-                                <th>Status</th>
-                                <th className="text-right">Actions</th>
-                            </tr>
-                        )}
-                        {activeTab === 'supplier_rfqs' && (
-                            <tr>
-                                <th>RFQ No</th>
-                                <th>Issue Date</th>
-                                <th>Supplier</th>
-                                <th>Subject</th>
-                                <th>Status</th>
-                                <th className="text-right">Actions</th>
-                            </tr>
-                        )}
-                        {activeTab === 'supplier_quotes' && (
-                            <tr>
-                                <th>Supplier</th>
-                                <th>Linked Enquiry</th>
-                                <th>Amount</th>
-                                <th>Status</th>
-                                <th>Received Date</th>
-                                <th className="text-right">Actions</th>
-                            </tr>
-                        )}
-                        {activeTab === 'purchase_orders' && (
-                            <tr>
-                                <th>PO No</th>
-                                <th>Issue Date</th>
-                                <th>Supplier</th>
-                                <th>Total Amount</th>
-                                <th>Status</th>
-                                <th className="text-right">Actions</th>
-                            </tr>
-                        )}
-                    </thead>
-                    <tbody>
-                        {filteredData.map(item => (
-                            <tr key={item.id}>
-                                {activeTab === 'customer_enquiries' && (
-                                    <>
-                                        <td className="font-bold">{item.enquiry_no}</td>
-                                        <td>{new Date(item.enquiry_date).toLocaleDateString('en-GB')}</td>
-                                        <td className="font-medium">{item.customer?.name || 'Walk-in'}</td>
-                                        <td>
-                                            <span className="tag">{item.source_type}</span>
-                                        </td>
-                                        <td>
-                                            <span className={`badge ${getStatusBadgeClass(item.status)}`}>
-                                                {item.status}
-                                            </span>
-                                        </td>
-                                    </>
-                                )}
-                                {activeTab === 'supplier_rfqs' && (
-                                    <>
-                                        <td className="font-bold">{item.document_no}</td>
-                                        <td>{new Date(item.issue_date).toLocaleDateString('en-GB')}</td>
-                                        <td className="font-medium">{item.partners?.name}</td>
-                                        <td className="truncate max-w-[200px] text-slate-500">{stripHtml(item.subject)}</td>
-                                        <td>
-                                            <span className={`badge ${getStatusBadgeClass(item.status)}`}>
-                                                {item.status}
-                                            </span>
-                                        </td>
-                                    </>
-                                )}
-                                {activeTab === 'supplier_quotes' && (
-                                    <>
-                                        <td className="font-bold">{item.supplier?.name}</td>
-                                        <td>
-                                            <div 
-                                                className="text-xs font-bold text-indigo-600 mb-0.5 cursor-pointer hover:underline flex items-center gap-1 w-fit"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    navigate(`/workflows/enquiry/${item.enquiry_id}`);
-                                                }}
-                                                title="Open Linked Enquiry"
-                                            >
-                                                {item.enquiry?.enquiry_no}
-                                                <ExternalLink size={10} />
-                                            </div>
-                                            <div className="text-sm text-slate-600 truncate max-w-[300px]">{stripHtml(item.enquiry?.subject)}</div>
-                                        </td>
-                                        <td className="font-bold">
-                                            {item.quote_amount ? `$${item.quote_amount.toLocaleString()}` : '-'}
-                                        </td>
-                                        <td>
-                                            <span className={`badge ${getStatusBadgeClass(item.status)}`}>
-                                                {item.status}
-                                            </span>
-                                        </td>
-                                        <td className="text-sm opacity-70">{new Date(item.created_at).toLocaleDateString('en-GB')}</td>
-                                    </>
-                                )}
-                                {activeTab === 'purchase_orders' && (
-                                    <>
-                                        <td className="font-bold">{item.document_no}</td>
-                                        <td>{new Date(item.issue_date).toLocaleDateString('en-GB')}</td>
-                                        <td className="font-medium">{item.partners?.name}</td>
-                                        <td className="font-bold">
-                                            <span className="text-xs opacity-50 mr-1">{item.currency}</span>
-                                            {item.total_amount?.toLocaleString()}
-                                        </td>
-                                        <td>
-                                            <span className={`badge ${getStatusBadgeClass(item.status)}`}>
-                                                {item.status}
-                                            </span>
-                                        </td>
-                                    </>
-                                )}
-                                <td className="text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <button 
-                                            className="btn-icon-sm"
-                                            onClick={() => {
-                                                if (activeTab === 'customer_enquiries') navigate(`/workflows/enquiry/${item.id}`);
-                                                else if (activeTab === 'supplier_rfqs') navigate(`/workflows/editor/enquiry/${item.id}`);
-                                                else if (activeTab === 'purchase_orders') navigate(`/workflows/editor/purchase-order/${item.id}`);
-                                                else if (activeTab === 'supplier_quotes') navigate(`/workflows/float-supplier-order`);
-                                            }}
-                                            title="View Details"
-                                        >
-                                            <Eye size={16} />
-                                        </button>
-
-                                        {activeTab === 'customer_enquiries' && (
-                                            <>
-                                                <button 
-                                                    className="btn-icon-sm text-amber-500"
-                                                    onClick={() => navigate(`/workflows/editor/enquiry/new?sourceEnquiryId=${item.id}`)}
-                                                    title="Float to Suppliers (Manual RFQ)"
-                                                >
-                                                    <ArrowRightLeft size={16} />
-                                                </button>
-                                                <button 
-                                                    className="btn-icon-sm text-indigo-500"
-                                                    onClick={() => handleConvertToEnquiry(item.id)}
-                                                    title="Convert to V2 Enquiry"
-                                                >
-                                                    <FileText size={16} />
-                                                </button>
-                                            </>
-                                        )}
-
-                                        {activeTab === 'supplier_quotes' && (
-                                            <>
-                                                <button 
-                                                    className="btn-icon-sm text-blue-500"
-                                                    onClick={() => handleConvertToPO(item.id)}
-                                                    title="Convert to Purchase Order"
-                                                >
-                                                    <Package size={16} />
-                                                </button>
-                                                <button 
-                                                    className="btn-icon-sm text-green-500"
-                                                    onClick={() => handleConvertToQuote(item.id)}
-                                                    title="Convert to Customer Quotation"
-                                                >
-                                                    <FileText size={16} />
-                                                </button>
-                                            </>
-                                        )}
-
-                                        <button 
-                                            className="btn-icon-sm text-red-500"
-                                            onClick={() => handleDelete(item.id, activeTab)}
-                                            title="Delete"
-                                        >
-                                            <Trash2 size={16} />
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+            <span style={{ 
+                padding: '4px 10px', 
+                borderRadius: '20px', 
+                fontSize: '0.75rem', 
+                fontWeight: 600,
+                background: style.bg,
+                color: style.text
+            }}>
+                {status}
+            </span>
         );
     };
 
     return (
-        <div className="hub-container animate-fade-in">
-            <header className="hub-header">
+        <div className="hub-container" style={{ padding: '40px', maxWidth: '1400px', margin: '0 auto' }}>
+            <header className="hub-header" style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <div className="hub-title-group">
-                    <h1>
-                        <div className="hub-title-icon">
+                    <h1 style={{ fontSize: '2.5rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '16px', margin: 0 }}>
+                        <div style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', color: '#fff', padding: '12px', borderRadius: '16px', boxShadow: '0 10px 15px -3px rgba(99, 102, 241, 0.3)' }}>
                             <LayoutDashboard size={32} />
                         </div>
                         Unified Supplier Hub
                     </h1>
-                    <p className="hub-subtitle">Manage the complete lifecycle from inbound enquiry to supplier fulfillment.</p>
+                    <p style={{ fontSize: '1.1rem', color: '#64748b', marginTop: '8px' }}>High-speed procurement lifecycle management</p>
                 </div>
-                <div className="hub-actions">
-                    <div className="hub-search-wrapper">
-                        <Search size={20} className="hub-search-icon" />
+                
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    {(() => {
+                        let btnLabel = '';
+                        let btnAction = () => {};
+                        let btnColor = '#ef4444';
+                        let showBtn = true;
+
+                        if (activeTab === 'customer_enquiries') {
+                            btnLabel = 'New Customer Enquiry';
+                            btnAction = () => navigate('/workflows/enquiry/new');
+                            btnColor = '#6366f1';
+                        } else if (activeTab === 'rfq_floats') {
+                            btnLabel = 'New RFQ Float';
+                            btnAction = () => navigate('/workflows/editor/Enquiry/new');
+                            btnColor = '#f59e0b';
+                        } else if (activeTab === 'orders_to_suppliers') {
+                            btnLabel = 'New Order';
+                            btnAction = () => navigate('/workflows/editor/purchase-order/new');
+                            btnColor = '#ef4444';
+                        } else {
+                            showBtn = false;
+                        }
+
+                        if (!showBtn) return null;
+
+                        return (
+                            <button 
+                                onClick={btnAction}
+                                style={{ 
+                                    padding: '12px 20px', 
+                                    background: btnColor, 
+                                    color: '#fff', 
+                                    borderRadius: '12px', 
+                                    border: 'none', 
+                                    fontWeight: 700, 
+                                    cursor: 'pointer', 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    gap: '8px',
+                                    boxShadow: `0 4px 12px -2px ${btnColor}44`,
+                                    transition: 'all 0.2s'
+                                }}
+                                onMouseOver={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                onMouseOut={e => e.currentTarget.style.transform = 'translateY(0)'}
+                            >
+                                <Plus size={18} /> {btnLabel}
+                            </button>
+                        );
+                    })()}
+                    <div style={{ position: 'relative', width: '300px' }}>
+                        <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
                         <input 
                             type="text" 
-                            placeholder="Search records..." 
-                            className="hub-search-input"
+                            placeholder="Quick Search..."
+                            style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '0.9rem' }}
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
-                    <button 
-                        className="btn btn-primary"
-                        onClick={() => {
-                            if (activeTab === 'customer_enquiries') navigate('/workflows/enquiry/new');
-                            else if (activeTab === 'supplier_rfqs') navigate('/workflows/editor/enquiry/new');
-                            else if (activeTab === 'purchase_orders') navigate('/workflows/editor/purchase-order/new');
-                        }}
-                    >
-                        <Plus size={20} /> 
-                        New {(() => {
-                            const label = TABS.find(t => t.id === activeTab)?.label || '';
-                            if (label === 'Customer Enquiries') return 'Customer Enquiry';
-                            return label.replace(/s$/, '');
-                        })()}
-                    </button>
                 </div>
             </header>
 
-            <nav className="hub-tabs-nav">
+            <nav style={{ display: 'flex', gap: '12px', marginBottom: '32px', background: '#f1f5f9', padding: '6px', borderRadius: '14px', width: 'fit-content' }}>
                 {TABS.map(tab => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`hub-tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+                        style={{ 
+                            padding: '10px 20px', 
+                            borderRadius: '10px', 
+                            border: 'none',
+                            background: activeTab === tab.id ? '#fff' : 'transparent',
+                            color: activeTab === tab.id ? tab.color : '#64748b',
+                            fontWeight: 700,
+                            fontSize: '0.9rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            boxShadow: activeTab === tab.id ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none',
+                            transition: 'all 0.2s'
+                        }}
                     >
-                        <div className="hub-tab-icon-wrapper">
-                            {React.cloneElement(tab.icon, { size: 18 })}
-                        </div>
+                        {tab.icon}
                         {tab.label}
                     </button>
                 ))}
             </nav>
 
-            {renderTable()}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px', marginBottom: '40px' }}>
+                {[
+                    { label: 'Active Enquiries', val: stats.activeEnquiries, icon: <FileText size={20} />, col: '#6366f1' },
+                    { label: 'Pending RFQs', val: stats.pendingRFQs, icon: <ArrowRightLeft size={20} />, col: '#f59e0b' },
+                    { label: 'Received Quotes', val: stats.receivedQuotes, icon: <Clock size={20} />, col: '#10b981' },
+                    { label: 'Total PO Value', val: `$${(stats.totalPOValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: <ShoppingCart size={20} />, col: '#ef4444' }
+                ].map((s, i) => (
+                    <div key={i} style={{ background: '#fff', padding: '24px', borderRadius: '20px', border: '1px solid #f1f5f9', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', gap: '20px' }}>
+                        <div style={{ background: `${s.col}15`, color: s.col, padding: '12px', borderRadius: '14px' }}>{s.icon}</div>
+                        <div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#64748b' }}>{s.label}</div>
+                            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1e293b' }}>{s.val}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '24px' }}>
+                {loading ? (
+                    <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '100px' }}>
+                        <Loader2 className="animate-spin" size={48} color="#6366f1" style={{ margin: '0 auto' }} />
+                        <p style={{ marginTop: '16px', color: '#64748b', fontWeight: 600 }}>Syncing workspace...</p>
+                    </div>
+                ) : filteredData.length === 0 ? (
+                    <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '80px', background: '#fff', borderRadius: '24px', border: '2px dashed #e2e8f0' }}>
+                        <div style={{ opacity: 0.3, marginBottom: '20px' }}><LayoutDashboard size={64} style={{ margin: '0 auto' }} /></div>
+                        <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b' }}>No Records Found</h3>
+                        <p style={{ color: '#64748b' }}>Try adjusting your search or check another tab.</p>
+                    </div>
+                ) : (
+                    filteredData.map((item) => (
+                        <div key={item.id} style={{ 
+                            background: '#fff', 
+                            borderRadius: '24px', 
+                            border: '1px solid #f1f5f9', 
+                            padding: '24px', 
+                            boxShadow: '0 10px 15px -3px rgba(0,0,0,0.04)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            transition: 'transform 0.2s, box-shadow 0.2s',
+                            cursor: 'default'
+                        }} className="hub-card-hover">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>
+                                    {activeTab === 'customer_enquiries' ? item.enquiry_no : 
+                                     activeTab === 'rfq_floats' ? item.document_no : 
+                                     activeTab === 'orders_to_suppliers' ? item.document_no :
+                                     `Quote: ${item.enquiry?.enquiry_no || 'N/A'}`}
+                                </div>
+                                {getStatusBadge(item.status)}
+                            </div>
+
+                            <h3 style={{ 
+                                fontSize: '1.1rem', 
+                                fontWeight: 700, 
+                                color: '#1e293b', 
+                                margin: '0 0 12px 0', 
+                                minHeight: '3rem',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                lineHeight: '1.5rem'
+                            }}>
+                                {activeTab === 'supplier_quotes' ? item.supplier?.name : 
+                                 activeTab === 'orders_to_suppliers' ? (item.subject || `Order to ${item.partners?.name}`) :
+                                 (stripHtml(item.subject) || item.customer?.name || 'Untitled Enquiry')}
+                            </h3>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px', flex: 1 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#64748b' }}>
+                                    <Building2 size={14} />
+                                    {activeTab === 'customer_enquiries' ? item.customer?.name : 
+                                     activeTab === 'rfq_floats' ? item.partners?.name : 
+                                     activeTab === 'orders_to_suppliers' ? item.partners?.name :
+                                     `Source: ${item.enquiry?.customer_ref || 'Direct'}`}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: '#64748b' }}>
+                                    <Calendar size={14} />
+                                    {new Date(item.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                </div>
+                                {activeTab === 'supplier_quotes' && (
+                                    <div style={{ marginTop: '8px', padding: '12px', background: '#f8fafc', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#64748b' }}>Bid Amount</div>
+                                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#10b981' }}>${(item.quote_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                    </div>
+                                )}
+                                {activeTab === 'orders_to_suppliers' && (
+                                    <div style={{ marginTop: '8px', padding: '12px', background: '#fef2f2', borderRadius: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#991b1b' }}>Order Value</div>
+                                        <div style={{ fontSize: '1rem', fontWeight: 800, color: '#ef4444' }}>${(item.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                 {activeTab === 'customer_enquiries' && (
+                                    <button 
+                                        onClick={() => { setSelectedEnquiry(item); setIsFloatModalOpen(true); }}
+                                        style={{ flex: 1, background: '#6366f1', color: '#fff', border: 'none', padding: '10px', borderRadius: '12px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                    >
+                                        <Send size={14} /> Float RFQ
+                                    </button>
+                                )}
+                                {activeTab === 'supplier_quotes' && (
+                                    <button 
+                                        onClick={() => handleCreatePO(item.id)}
+                                        style={{ flex: 1, background: '#10b981', color: '#fff', border: 'none', padding: '10px', borderRadius: '12px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                                    >
+                                        <ShoppingCart size={14} /> Order from Supplier
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={() => {
+                                        if (activeTab === 'customer_enquiries') navigate(`/workflows/enquiry/${item.id}`);
+                                        else if (activeTab === 'rfq_floats') navigate(`/workflows/editor/Enquiry/${item.id}`);
+                                        else if (activeTab === 'orders_to_suppliers') navigate(`/workflows/editor/purchase-order/${item.id}`);
+                                        else if (activeTab === 'supplier_quotes') navigate(`/workflows/enquiry/${item.enquiry_id}`);
+                                    }}
+                                    style={{ flex: activeTab === 'customer_enquiries' ? 0.4 : 1, background: '#f1f5f9', color: '#475569', border: 'none', padding: '10px', borderRadius: '12px', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer' }}
+                                >
+                                    View
+                                </button>
+                                {(activeTab === 'rfq_floats' || activeTab === 'orders_to_suppliers') && (
+                                    <button 
+                                        onClick={() => {
+                                            const type = activeTab === 'rfq_floats' ? 'Enquiry' : 'purchase-order';
+                                            navigate(`/workflows/editor/${type}/${item.id}?tab=gallery`);
+                                        }}
+                                        title="Gallery / Photos"
+                                        style={{ padding: '10px', background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', borderRadius: '12px', cursor: 'pointer' }}
+                                    >
+                                        <Camera size={14} />
+                                    </button>
+                                )}
+                                <button 
+                                    onClick={() => handleDelete(item.id, activeTab === 'customer_enquiries' ? 'customer_enquiries' : (activeTab === 'rfq_floats' || activeTab === 'orders_to_suppliers' ? 'workflow_documents' : 'supplier_quotes'))}
+                                    style={{ padding: '10px', background: '#fff', color: '#ef4444', border: '1px solid #fee2e2', borderRadius: '12px', cursor: 'pointer' }}
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+
+            <FastFloatModal 
+                isOpen={isFloatModalOpen}
+                onClose={() => setIsFloatModalOpen(false)}
+                enquiry={selectedEnquiry}
+                onConfirm={async (suppliers) => {
+                    await trackFloatedRFQ(selectedEnquiry.id, suppliers.map(s => s.id), profile.company_id);
+                    setIsFloatModalOpen(false);
+                    fetchData();
+                    fetchStats();
+                }}
+            />
+
+            <style dangerouslySetInnerHTML={{ __html: `
+                .hub-card-hover:hover {
+                    transform: translateY(-5px);
+                    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1) !important;
+                }
+                @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+                .animate-spin { animation: spin 1s linear infinite; }
+            `}} />
         </div>
     );
 }

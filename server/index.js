@@ -10,6 +10,19 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// ---- Root Status --------------------------------------------------------
+app.get('/', (req, res) => {
+    res.send(`
+        <div style="font-family: sans-serif; text-align: center; padding: 50px;">
+            <h1 style="color: #4f46e5;">Celron Hub Backend is LIVE</h1>
+            <p style="color: #64748b;">The API server is running on port 4001</p>
+            <div style="display: inline-block; padding: 8px 16px; background: #ecfdf5; color: #059669; border-radius: 20px; font-weight: bold; font-size: 0.9rem;">
+                ● Connected to Supabase
+            </div>
+        </div>
+    `);
+});
+
 // ---- 1️⃣ Search endpoint -------------------------------------------------
 app.post('/api/universal-finder/search', async (req, res) => {
     const { query, userLat, userLng, userId, country, restrictToCountry, skipAi } = req.body;

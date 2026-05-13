@@ -387,7 +387,8 @@ export default function WorkflowV2Board() {
 
         const matchesSearch = (doc.document_no || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (doc.partners?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (doc.subject || '').toLowerCase().includes(searchQuery.toLowerCase());
+            (doc.subject || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (doc.customer_ref || '').toLowerCase().includes(searchQuery.toLowerCase());
         return matchesType && matchesSearch;
     });
 
@@ -816,8 +817,20 @@ export default function WorkflowV2Board() {
                                         <tr key={doc.id} className="table-row">
                                             <td className="font-bold" style={{ color: '#1e3a8a' }}>{doc.assigned_job_no || 'TBD'}</td>
                                             <td>
-                                                <div style={{ fontWeight: 700, color: '#1e3a8a' }}>{doc.delivery_verification?.po_description || doc.partners?.name || 'Walk-in'}</div>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{doc.contacts?.first_name ? `Attn: ${doc.contacts.first_name}` : ''}</div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.5px' }}>CUSTOMER</div>
+                                                    <div style={{ fontWeight: 600, color: '#1e3a8a', fontSize: '0.9rem' }}>{doc.delivery_verification?.po_description || doc.partners?.name || 'Walk-in'}</div>
+                                                    
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#94a3b8', letterSpacing: '0.5px', marginTop: '4px' }}>CONTACT PERSON</div>
+                                                    <div style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600 }}>
+                                                        {doc.contacts?.name || 'N/A'}
+                                                    </div>
+                                                    
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px', opacity: 0.8 }}>
+                                                        {doc.subject || '-'}
+                                                    </div>
+                                                    {doc.customer_ref && <div style={{ opacity: 0.6, fontSize: '0.7rem' }}>Ref: {doc.customer_ref}</div>}
+                                                </div>
                                             </td>
                                             <td>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -963,8 +976,20 @@ export default function WorkflowV2Board() {
                                             <td className="font-medium" style={{ color: 'var(--accent)' }}>{doc.document_no}</td>
                                             <td>{formatDate(doc.issue_date)}</td>
                                             <td>
-                                                <div style={{ fontWeight: 500 }}>{doc.partners?.name || 'Walk-in'}</div>
-                                                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{doc.subject || '-'}</div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: 800, color: 'var(--text-secondary)', letterSpacing: '0.5px', opacity: 0.7 }}>CUSTOMER</div>
+                                                    <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{doc.partners?.name || 'Walk-in'}</div>
+                                                    
+                                                    <div style={{ fontSize: '0.6rem', fontWeight: 800, color: 'var(--text-secondary)', letterSpacing: '0.5px', marginTop: '4px', opacity: 0.7 }}>CONTACT PERSON</div>
+                                                    <div style={{ fontSize: '0.8rem', color: 'var(--accent)', fontWeight: 600 }}>
+                                                        {doc.contacts?.name || 'N/A'}
+                                                    </div>
+                                                    
+                                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px', opacity: 0.8 }}>
+                                                        {doc.subject || '-'}
+                                                    </div>
+                                                    {doc.customer_ref && <div style={{ opacity: 0.6, fontSize: '0.7rem' }}>Ref: {doc.customer_ref}</div>}
+                                                </div>
                                             </td>
                                             <td>
                                                 {doc.vessels?.vessel_name || doc.work_locations?.location_name || '-'}
@@ -1273,25 +1298,7 @@ export default function WorkflowV2Board() {
                                 </div>
                             </div>
 
-                            <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '12px', border: '1px solid #f3f4f6', marginBottom: '24px' }}>
-                                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1e40af', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Automatically Generate:</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.9rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><FileCheck size={16} /> Order Acknowledgment</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><FileCheck size={16} /> Delivery Order</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><FileCheck size={16} /> Proforma Invoice</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><FileCheck size={16} /> Tax Invoice</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><FileCheck size={16} /> Packing List</div>
-                                </div>
-                                
-                                <div style={{ marginTop: '16px', borderTop: '1px solid #e5e7eb', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem', color: '#374151' }}>
-                                        <input type="checkbox" name="includeCertificates" style={{ width: '16px', height: '16px', accentColor: '#4f46e5' }} /> Include Certificates (CERT)
-                                    </label>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem', color: '#374151' }}>
-                                        <input type="checkbox" name="includeServiceReport" style={{ width: '16px', height: '16px', accentColor: '#4f46e5' }} /> Include Service Report (SR)
-                                    </label>
-                                </div>
-                            </div>
+
 
                             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '32px' }}>
                                 <button type="button" onClick={() => setShowConversionModal(false)} style={{ 

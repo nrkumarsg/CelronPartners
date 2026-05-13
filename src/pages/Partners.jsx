@@ -22,6 +22,7 @@ export default function Partners() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCountry, setSelectedCountry] = useState('');
+    const [selectedCountryNot, setSelectedCountryNot] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [dbCategories, setDbCategories] = useState([]);
@@ -103,6 +104,7 @@ export default function Partners() {
 
     const handleCountryChange = (e) => {
         setSelectedCountry(e.target.value);
+        setSelectedCountryNot('');
         setCurrentPage(1);
     };
 
@@ -316,9 +318,10 @@ export default function Partners() {
             (p.info && p.info.toLowerCase().includes(term))
         );
         const matchesCountry = !selectedCountry || (p.country && p.country === selectedCountry);
+        const matchesCountryNot = !selectedCountryNot || (p.country !== selectedCountryNot);
         const matchesCategory = !selectedCategory || (p.types && p.types.includes(selectedCategory));
 
-        return matchesSearch && matchesCountry && matchesCategory;
+        return matchesSearch && matchesCountry && matchesCountryNot && matchesCategory;
     });
 
     const paginatedPartners = filteredPartners.slice(
@@ -431,21 +434,26 @@ export default function Partners() {
             <div style={{ display: 'flex', gap: '12px', marginBottom: '32px', overflowX: 'auto', paddingBottom: '8px', alignItems: 'center' }} className="hide-on-print no-scrollbar">
                 <div style={{ color: '#94a3b8', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginRight: '8px' }}>Quick Filters:</div>
                 {[
-                    { label: 'All', cat: '', country: '' },
-                    { label: 'Suppliers', cat: 'Supplier', country: '' },
-                    { label: 'Customers', cat: 'Customer', country: '' },
-                    { label: 'Singapore', cat: '', country: 'Singapore' },
-                    { label: 'Spare Parts', cat: 'Spare Parts', country: '' },
-                    { label: 'Service', cat: 'Service', country: '' },
-                    { label: 'Instrumentation', cat: 'Instrumentation', country: '' }
+                    { label: 'All', cat: '', country: '', countryNot: '', color: '#6366f1' },
+                    { label: 'Principals', cat: 'Principal', country: '', countryNot: '', color: '#f59e0b' },
+                    { label: 'Local Customers', cat: 'Customer', country: 'Singapore', countryNot: '', color: '#10b981' },
+                    { label: 'Int. Customers', cat: 'Customer', country: '', countryNot: 'Singapore', color: '#06b6d4' },
+                    { label: 'Local Suppliers', cat: 'Supplier', country: 'Singapore', countryNot: '', color: '#ef4444' },
+                    { label: 'Int. Suppliers', cat: 'Supplier', country: '', countryNot: 'Singapore', color: '#f97316' },
+                    { label: 'Local Service', cat: 'Service Company', country: 'Singapore', countryNot: '', color: '#3b82f6' },
+                    { label: 'Int. Service', cat: 'Service Company', country: '', countryNot: 'Singapore', color: '#64748b' },
+                    { label: 'Freelancers', cat: 'Freelancer', country: '', countryNot: '', color: '#ec4899' },
+                    { label: 'Forwarders', cat: 'Forwarder', country: '', countryNot: '', color: '#8b5cf6' },
+                    { label: 'Couriers', cat: 'Courier', country: '', countryNot: '', color: '#eab308' }
                 ].map(chip => {
-                    const isActive = (chip.cat === selectedCategory && chip.country === selectedCountry);
+                    const isActive = (chip.cat === selectedCategory && chip.country === selectedCountry && chip.countryNot === selectedCountryNot);
                     return (
                         <button
                             key={chip.label}
                             onClick={() => {
                                 setSelectedCategory(chip.cat);
                                 setSelectedCountry(chip.country);
+                                setSelectedCountryNot(chip.countryNot);
                                 setCurrentPage(1);
                             }}
                             className="filter-chip"
@@ -453,24 +461,24 @@ export default function Partners() {
                                 padding: '8px 20px',
                                 borderRadius: '100px',
                                 border: '1px solid',
-                                borderColor: isActive ? '#6366f1' : '#e2e8f0',
-                                background: isActive ? 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' : '#fff',
-                                color: isActive ? '#fff' : '#64748b',
+                                borderColor: isActive ? 'transparent' : `${chip.color}30`,
+                                background: isActive ? `linear-gradient(135deg, ${chip.color} 0%, ${chip.color}dd 100%)` : `${chip.color}08`,
+                                color: isActive ? '#fff' : chip.color,
                                 fontSize: '0.85rem',
                                 fontWeight: 600,
                                 cursor: 'pointer',
                                 whiteSpace: 'nowrap',
                                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                                boxShadow: isActive ? '0 4px 12px rgba(99, 102, 241, 0.35)' : '0 2px 4px rgba(0,0,0,0.02)'
+                                boxShadow: isActive ? `0 4px 12px ${chip.color}40` : '0 2px 4px rgba(0,0,0,0.02)'
                             }}
                         >
                             {chip.label}
                         </button>
                     );
                 })}
-                {(selectedCategory || selectedCountry || searchTerm) && (
+                {(selectedCategory || selectedCountry || selectedCountryNot || searchTerm) && (
                     <button 
-                        onClick={() => { setSelectedCategory(''); setSelectedCountry(''); setSearchTerm(''); }}
+                        onClick={() => { setSelectedCategory(''); setSelectedCountry(''); setSelectedCountryNot(''); setSearchTerm(''); }}
                         style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', marginLeft: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}
                     >
                         <X size={14} /> Clear All

@@ -18,6 +18,32 @@ export async function chatWithGemini(prompt, base64Image = null, history = [], t
 }
 
 /**
+ * LLM Query Cleaner: Normalizes company names and addresses for better search accuracy.
+ * Strips legal noise, corrects typos, and extracts core entity names.
+ */
+export async function cleanSearchQuery(rawInput, type = 'company') {
+    const prompt = `
+        ACT AS A DATA NORMALIZATION EXPERT.
+        Clean the following ${type} input for high-precision search indexing.
+        Input: "${rawInput}"
+        
+        Rules:
+        1. Correct obvious typos.
+        2. For companies: Strip legal suffixes (Pte Ltd, LLC, Corp) unless they are part of the core brand identity.
+        3. For addresses: Format into standard "Street, Building, Unit, City, Country" if possible.
+        4. Return ONLY a valid JSON object: {"cleaned": "string", "original": "string", "confidence": number}
+    `;
+
+    try {
+        const response = await runAI('autofill', { prompt });
+        return response.cleaned || rawInput;
+    } catch (err) {
+        console.error('Query Cleaner Error:', err);
+        return rawInput;
+    }
+}
+
+/**
  * Image-to-Terms Extraction: Uses Gemini to turn a photo into a search query.
  */
 export async function extractTermsFromImage(base64Image) {
@@ -35,16 +61,15 @@ export async function extractTermsFromImage(base64Image) {
  * Smart Search Company Auto-fill: 3-Stage Pipeline
  */
 export async function smartSearchCompany(companyName, website = '', searchContext = '') {
-    const tools = [{ google_search: {} }];
     try {
-        // STAGE 1: Raw Research (No JSON constraint, allows Tool usage)
-        console.log('[AI Stage 1] Researching using Google Search Tool...');
+        // STAGE 1: Raw Research
+        console.log('[AI Stage 1] Researching...');
         const researchSummary = await runAI('research', { 
             query: `Find official Singapore UEN (Unique Entity Number), ACRA registration details, headquarters address, primary email, phone, and brands for the business: ${companyName}. 
             Try searching on uen.sg, opencorpdata.com, or official ACRA records. 
             Website: ${website}. ${searchContext ? 'Context: ' + searchContext : ''}`,
-            useTools: true 
-        }, [], tools);
+            useTools: false 
+        });
 
         // STAGE 2: Extraction (Strict JSON)
         console.log('[AI Stage 2] Extracting structured data...');
@@ -62,7 +87,7 @@ export async function smartSearchCompany(companyName, website = '', searchContex
                 isVerification: true, 
                 extractedData: extractData, 
                 searchContext: typeof researchSummary === 'string' ? researchSummary : JSON.stringify(researchSummary)
-            }, [], tools);
+            });
             
             const merged = { ...extractData, ...verifyData };
             // Ensure we don't lose data from stage 2 if stage 3 returned less
@@ -128,9 +153,8 @@ export async function researchCompanyWithGemini(companyName, searchContext = '')
  * Contact Profiling: Redirects to runAI('autofill')
  */
 export async function researchContactWithGemini(name, companyName) {
-    const tools = [{ google_search: {} }];
     try {
-        const data = await runAI('autofill', { contact_name: name, company_name: companyName }, [], tools);
+        const data = await runAI('autofill', { contact_name: name, company_name: companyName });
         return {
             fields: {
                 post: data.post || data.designation || '',
@@ -150,14 +174,13 @@ export async function researchContactWithGemini(name, companyName) {
  * Vessel Intelligence: Redirects to runAI('autofill')
  */
 export async function researchVesselWithGemini(vesselName, imoNumber = '', mmsi = '', searchContext = '') {
-    const tools = [{ google_search: {} }];
     try {
         const data = await runAI('autofill', { 
             vessel_name: vesselName, 
             imo_number: imoNumber, 
             mmsi: mmsi,
             searchContext 
-        }, [], tools);
+        });
         
         return {
             fields: {
@@ -194,12 +217,11 @@ export async function researchVesselWithGemini(vesselName, imoNumber = '', mmsi 
  * Real-time Exchange Rate: Uses Gemini + Google Search to find current currency rates.
  */
 export async function getExchangeRateWithGemini(fromCurrency, toCurrency = 'SGD') {
-    const tools = [{ google_search: {} }];
     const prompt = `Find the current exchange rate for 1 ${fromCurrency} to ${toCurrency} for today ${new Date().toLocaleDateString()}. 
     Return ONLY a JSON object with the "rate" (number) and "source" (string). Example: {"rate": 1.36, "source": "Google Search"}`;
     
     try {
-        const data = await runAI('research', prompt, [], tools);
+        const data = await runAI('research', prompt);
         // Sometimes Gemini returns a string instead of parsed JSON if the engine doesn't auto-parse research tasks
         if (typeof data === 'string') {
             const match = data.match(/\{.*\}/s);

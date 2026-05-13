@@ -11,7 +11,7 @@ export const generateDocumentPDF = async (job, documentType) => {
     const logoUrl = settings?.logo_url || '/logo.png';
     const signatureUrl = settings?.signature_url;
     const companyName = settings?.company_name || 'CEL-RON ENTERPRISES PTE LTD';
-    const address = settings?.address || '10, Jln Besar, #03-05, Sim Lim Tower, Singapore 208787';
+    const address = settings?.address || '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787';
     const phone = settings?.phone || '+65 6299 1234';
     const email = settings?.email || 'sales@celron.net';
     const web = settings?.website || settings?.company_url || 'www.celron.net';

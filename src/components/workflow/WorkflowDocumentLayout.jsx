@@ -57,7 +57,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
 
     const companyLogo = settings?.logo_url || 'https://celron.net/wp-content/uploads/2023/12/celronlogowithtranslogorotating.gif';
     const companyName = (settings?.company_name || 'CEL-RON ENTERPRISES PTE LTD').replace('CELRON', 'CEL-RON');
-    const companyAddress = settings?.address || '10, Jln Besar, #03-05, Singapore 208787';
+    const companyAddress = settings?.address || '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787';
     const companyUen = settings?.gst_uen || '201436227C';
 
     const formatDate = (d) => {
@@ -82,6 +82,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
     const isPayment = doc.document_type === 'Payment Received';
     const isFinancial = isInvoice || isProforma || isPayment;
     const isEnquiry = doc.document_type?.toUpperCase() === 'ENQUIRY';
+    const isAnithaType = ['Tax Invoice', 'Purchase Order', 'Delivery Order', 'Proforma Invoice', 'Packing List', 'Statement Of Account', 'Order Acknowledgment'].includes(doc.document_type);
 
     const docNoLabel = isQuotation ? 'Q.NO' : 
                        isJob ? 'JOB.NO' :
@@ -229,9 +230,9 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                             <tr>
                                 <td style={{ padding: '4px 10px', background: '#f8fafc', ...styles.h3, borderRight: styles.border, verticalAlign: 'top' }}>SALESPERSON</td>
                                 <td style={{ padding: '4px 10px', ...styles.bodyBold }}>
-                                    {(doc.salesperson_name || 'N.R.KUMAR').toUpperCase()}<br/>
-                                    <span style={{ fontWeight: 600 }}>{doc.salesperson_phone || settings?.phone || '+65 97686891'}</span>
-                                    <span style={{ fontWeight: 400, fontSize: '9px', color: '#64748b', marginLeft: '10px' }}>| {doc.salesperson_email || settings?.sales_email || 'sales@celron.net'}</span>
+                                    {((isAnithaType && (doc.salesperson_name === 'N.R.KUMAR' || doc.salesperson_name === 'KUMAR' || !doc.salesperson_name)) ? 'ANITHA' : (doc.salesperson_name || 'ANITHA')).toUpperCase()}<br/>
+                                    <span style={{ fontWeight: 600 }}>{(isAnithaType && (doc.salesperson_phone === '+65 97686891' || doc.salesperson_phone === '+65 81962270' || !doc.salesperson_phone)) ? '+65 91090347' : (doc.salesperson_phone || '+65 8196 2270')}</span>
+                                    <span style={{ fontWeight: 400, fontSize: '9px', color: '#64748b', marginLeft: '10px' }}>| {(isAnithaType && (doc.salesperson_email === 'sales@celron.net' || doc.salesperson_email === 'kumar@celron.net' || !doc.salesperson_email)) ? 'accounts@celron.net' : (doc.salesperson_email || 'sales@celron.net')}</span>
                                 </td>
                             </tr>
                         </tbody>

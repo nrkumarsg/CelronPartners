@@ -1,8 +1,8 @@
 import fetch from 'node-fetch';
 
-const API_KEY = 'AIzaSyDasTT2wm8TGbeBvwScbdVRIotE8IXWisA';
+const API_KEY = 'AIzaSyAaQu126Dh_1KT2ystIC4iOXAh-NSHAZrc';
 const modelName = 'gemini-2.5-flash';
-const url = `https://generativelanguage.googleapis.com/v1/models/${modelName}:generateContent?key=${API_KEY}`;
+const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${API_KEY}`;
 
 async function testGemini() {
     console.log(`Testing Gemini: ${url}`);

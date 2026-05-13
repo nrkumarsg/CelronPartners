@@ -161,6 +161,14 @@ export const getWorkflowDocuments = async (companyId, type = null) => {
             const locationMap = Object.fromEntries(locations?.map(l => [l.id, l]) || []);
             data.forEach(d => { d.work_locations = locationMap[d.work_location_id]; });
         }
+
+        // Fetch contacts
+        const contactIds = [...new Set(data.map(d => d.contact_id).filter(Boolean))];
+        if (contactIds.length > 0) {
+            const { data: contacts } = await supabase.from('contacts').select('id, name, email, handphone').in('id', contactIds);
+            const contactMap = Object.fromEntries(contacts?.map(c => [c.id, c]) || []);
+            data.forEach(d => { d.contacts = contactMap[d.contact_id]; });
+        }
     }
     
     return { data, error };
@@ -203,21 +211,64 @@ export const getStatementData = async (companyId, partnerId, startDate, endDate)
 };
 
 /**
- * Get Workflow Counts for Dashboards/Sidebar
+ * Get Detailed Hub Stats
  */
-export const getWorkflowCounts = async (companyId) => {
-    const { data, error } = await supabase
-        .from('workflow_documents')
-        .select('document_type, status')
-        .eq('company_id', companyId);
+export const getHubStats = async (companyId) => {
+    try {
+        const [v1Enquiries, v2Docs, quotes] = await Promise.all([
+            supabase.from('customer_enquiries').select('id, status').eq('company_id', companyId),
+            supabase.from('workflow_documents').select('id, document_type, total_amount, status').eq('company_id', companyId),
+            supabase.from('supplier_quotes').select('id').eq('company_id', companyId)
+        ]);
 
-    if (error) return { enquiryCount: 0, jobCount: 0, quotationCount: 0 };
+        const stats = {
+            activeEnquiries: v1Enquiries.data?.filter(e => !['Job Created', 'Cancelled'].includes(e.status)).length || 0,
+            pendingRFQs: v2Docs.data?.filter(d => d.document_type === 'Enquiry' && d.status === 'Draft').length || 0,
+            receivedQuotes: quotes.data?.length || 0,
+            totalPOValue: v2Docs.data?.filter(d => d.document_type === 'Purchase Order').reduce((sum, d) => sum + (parseFloat(d.total_amount) || 0), 0) || 0
+        };
 
-    const enquiryCount = data.filter(d => d.document_type === 'Enquiry').length;
-    const jobCount = data.filter(d => d.document_type === 'Job').length;
-    const quotationCount = data.filter(d => d.document_type === 'Quotation').length;
+        return stats;
+    } catch (err) {
+        console.error("Error fetching hub stats:", err);
+        return { activeEnquiries: 0, pendingRFQs: 0, receivedQuotes: 0, totalPOValue: 0 };
+    }
+};
 
-    return { enquiryCount, jobCount, quotationCount, all: data };
+/**
+ * Get RFQ and Quote counts for a specific enquiry
+ */
+export const getEnquiryLinkedStats = async (enquiryId) => {
+    try {
+        const [rfqs, quotes] = await Promise.all([
+            supabase.from('workflow_documents').select('id').eq('enquiry_id', enquiryId).eq('document_type', 'Enquiry'),
+            supabase.from('supplier_quotes').select('id').eq('enquiry_id', enquiryId)
+        ]);
+        return {
+            rfqCount: rfqs.data?.length || 0,
+            quoteCount: quotes.data?.length || 0
+        };
+    } catch (err) {
+        return { rfqCount: 0, quoteCount: 0 };
+    }
+};
+
+/**
+ * Track that an enquiry has been floated to specific suppliers
+ */
+export const trackFloatedRFQ = async (enquiryId, supplierIds, companyId) => {
+    // Update enquiry status to reflect it has been floated
+    const { error } = await supabase
+        .from('customer_enquiries')
+        .update({ 
+            status: 'RFQ Floated',
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', enquiryId);
+    
+    if (error) console.error("Error updating enquiry status:", error);
+    
+    return { success: !error };
 };
 
 /**
@@ -976,4 +1027,24 @@ export const convertProformaToTaxInvoice = async (proformaId) => {
     return savedInv;
 };
 
+/**
+ * Get Document Counts and Summary for Dashboards
+ */
+export const getWorkflowCounts = async (companyId) => {
+    try {
+        const { data: all, error } = await supabase
+            .from('workflow_documents')
+            .select('document_type, status')
+            .eq('company_id', companyId);
+
+        if (error) throw error;
+
+        const jobCount = all.filter(d => d.document_type === 'Job' && d.status === 'Active').length;
+
+        return { all: all || [], jobCount };
+    } catch (err) {
+        console.error("Error fetching workflow counts:", err);
+        return { all: [], jobCount: 0 };
+    }
+};
 

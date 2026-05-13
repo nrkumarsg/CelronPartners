@@ -4,6 +4,8 @@ import { useWorkLocationsStore } from '../lib/workLocationsStore';
 import { ArrowLeft, Save, Trash2, Search, MapPin } from 'lucide-react';
 import ReactQuill from 'react-quill-new';
 import 'react-quill-new/dist/quill.snow.css';
+import AddressAutocomplete from '../components/common/AddressAutocomplete';
+
 
 export default function WorkLocationForm() {
     const { id } = useParams();
@@ -158,14 +160,19 @@ export default function WorkLocationForm() {
                     <div className="grid-2">
                         <div className="form-group">
                             <label className="form-label">Location Name (City / Branch) *</label>
-                            <input
-                                type="text"
-                                className="form-input"
-                                name="location_name"
+                            <AddressAutocomplete
                                 value={formData.location_name}
-                                onChange={handleChange}
-                                placeholder="Enter location name"
-                                required
+                                onChange={(val) => setFormData(prev => ({ ...prev, location_name: val }))}
+                                onSelect={(place) => {
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        location_name: place.name,
+                                        pincode: place.postcode || prev.pincode,
+                                        city: place.city || prev.city,
+                                        country: place.country || prev.country
+                                    }));
+                                }}
+                                placeholder="Search for a site or address..."
                             />
                         </div>
 

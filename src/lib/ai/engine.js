@@ -1,13 +1,12 @@
 const API_KEYS = [
-  (typeof process !== 'undefined' && process.env.VITE_GOOGLE_API_KEY) || 
-  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GOOGLE_API_KEY),
-  'AIzaSyA_HbU2knq-UMpUf7PY7jATfmFPdMwZU18' // Hardcoded backup for critical reliability
+  (typeof process !== 'undefined' && process.env.VITE_GROQ_API_KEY) || 
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GROQ_API_KEY)
 ].filter(Boolean);
 
 const MODELS = {
-  FAST: "gemini-1.5-flash", 
-  SMART: "gemini-1.5-pro",
-  LATEST: "gemini-1.5-flash"
+  FAST: "llama-3.1-8b-instant", 
+  SMART: "llama-3.3-70b-versatile",
+  LATEST: "llama-3.1-8b-instant"
 };
 
 const DEFAULT_CONFIG = {
@@ -20,11 +19,16 @@ const DEFAULT_CONFIG = {
 // CORE RUNNER (WITH PROGRESSIVE ESCALATION)
 // -----------------------------
 export async function runWithFallback(prompt, useSmart = false, history = [], tools = null, image = null, useJson = true) {
+  if (image) {
+      console.warn("[AI Engine] Vision models are currently unsupported on Groq.");
+      return useJson ? { error: "Vision (OCR) features are not supported with the current AI provider.", confidence: 0 } : "Vision unsupported.";
+  }
+
   const modelQueue = useSmart ? [MODELS.SMART, MODELS.LATEST, MODELS.FAST] : [MODELS.FAST, MODELS.LATEST, MODELS.SMART];
   
   for (const model of modelQueue) {
     try {
-      return await chatWithModel(model, prompt, history, tools, image, useJson, 0);
+      return await chatWithModel(model, prompt, history, useJson, 0);
     } catch (err) {
       console.warn(`[AI Engine] ${model} failed. Trying next... Error: ${err.message}`);
       continue;
@@ -33,61 +37,54 @@ export async function runWithFallback(prompt, useSmart = false, history = [], to
   throw new Error("All AI models and fallbacks failed. Check API Key quota.");
 }
 
-async function chatWithModel(model, prompt, history = [], tools = null, image = null, useJson = true, keyIndex = 0) {
+async function chatWithModel(model, prompt, history = [], useJson = true, keyIndex = 0) {
     if (keyIndex >= API_KEYS.length) {
         throw new Error("All keys exhausted for " + model);
     }
 
     const currentKey = API_KEYS[keyIndex];
-    // Try v1 first, then v1beta
-    const versions = ['v1beta', 'v1'];
+    const url = `https://api.groq.com/openai/v1/chat/completions`;
     
-    for (const version of versions) {
-        const url = `https://generativelanguage.googleapis.com/${version}/models/${model}:generateContent?key=${currentKey}`;
-        try {
-            const contents = [...history];
-            const parts = [{ text: prompt }];
-            if (image) parts.push({ inline_data: { mime_type: 'image/jpeg', data: image } });
-            contents.push({ role: 'user', parts });
+    try {
+        const messages = [...history];
+        messages.push({ role: 'user', content: prompt });
 
-            const generationConfig = { ...DEFAULT_CONFIG };
-            if (useJson) generationConfig.responseMimeType = "application/json";
+        const body = {
+            model: model,
+            messages: messages,
+            temperature: DEFAULT_CONFIG.temperature,
+            max_tokens: DEFAULT_CONFIG.maxOutputTokens,
+            top_p: DEFAULT_CONFIG.topP
+        };
 
-            const response = await fetch(url, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents, tools, generationConfig })
-            });
-
-            const data = await response.json();
-            
-            if (data.error) {
-              const status = data.error.status;
-              const message = data.error.message || "";
-              
-              if (status === 'NOT_FOUND') continue; // Try next version
-              
-              // If it's a quota, auth, or key issue, try the next key
-              if (status === 'RESOURCE_EXHAUSTED' || 
-                  status === 'UNAUTHENTICATED' || 
-                  (status === 'INVALID_ARGUMENT' && (message.includes('API key') || message.includes('expired')))) {
-                break; // Try next key
-              }
-              
-              throw new Error(`${status}: ${data.error.message}`);
-            }
-
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!text) throw new Error("Empty Response");
-            return useJson ? safeJSONParse(text) : text;
-        } catch (err) {
-            if (err.message.includes('NOT_FOUND')) continue;
-            throw err;
+        if (useJson) {
+            body.response_format = { type: "json_object" };
         }
+
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${currentKey}`
+            },
+            body: JSON.stringify(body)
+        });
+
+        const data = await response.json();
+        
+        if (data.error) {
+            if (data.error.code === 'invalid_api_key' || data.error.code === 'insufficient_quota') {
+                return chatWithModel(model, prompt, history, useJson, keyIndex + 1);
+            }
+            throw new Error(`${data.error.type}: ${data.error.message}`);
+        }
+
+        const text = data.choices?.[0]?.message?.content;
+        if (!text) throw new Error("Empty Response");
+        return useJson ? safeJSONParse(text) : text;
+    } catch (err) {
+        throw err;
     }
-    
-    // If we reach here, this key/model combo failed both v1 and v1beta
-    return chatWithModel(model, prompt, history, tools, image, useJson, keyIndex + 1);
 }
 
 function safeJSONParse(text) {

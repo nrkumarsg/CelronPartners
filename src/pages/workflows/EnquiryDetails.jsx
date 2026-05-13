@@ -875,7 +875,7 @@ export default function EnquiryDetails() {
                                 <div style={{ textAlign: 'right' }}>
                                     <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#1e293b' }}>CEL-RON ENTERPRISES PTE LTD</h3>
                                     <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '0.8rem', lineHeight: 1.4 }}>
-                                        10, Jln Besar, #03-05, Singapore 208787<br />
+                                        10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787<br />
                                         Phone: +65 8196 2270 | Email: sales@celron.net
                                     </p>
                                 </div>

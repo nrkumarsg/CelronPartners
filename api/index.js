@@ -401,4 +401,79 @@ app.post('/api/send-email', async (req, res) => {
     }
 });
 
+// ---- 6️⃣ Photon Research Microservice --------------------------------------
+/**
+ * Simulated Photon (s0md3v/Photon) Research Endpoint.
+ * In a production environment with Python installed, this would spawn a child process:
+ * spawn('python3', ['photon.py', '-u', website, '--export', 'json'])
+ */
+app.post('/api/research/photon', async (req, res) => {
+    const { url, companyName } = req.body;
+    if (!url && !companyName) return res.status(400).json({ error: 'URL or Company Name required' });
+
+    try {
+        console.log(`[Photon Service] Initiating OSINT crawl for: ${url || companyName}`);
+        
+        // Use Gemini to simulate Photon's OSINT extraction capabilities
+        const prompt = `ACT AS PHOTON OSINT TOOL (s0md3v/photon). 
+        Target: ${url || companyName}. 
+        Research their official web presence and extract:
+        1. Emails (found on site)
+        2. Social Media Profiles (LinkedIn, Twitter, Facebook)
+        3. External URLs (Catalogs, PDF datasheets, Partners)
+        4. Subdomains
+        5. Physical HQ Address
+        
+        Return ONLY a JSON object: {
+            "emails": ["..."],
+            "social": {"linkedin": "...", "twitter": "..."},
+            "external_urls": ["..."],
+            "subdomains": ["..."],
+            "address": "...",
+            "phone": "...",
+            "confidence": "high|medium|low"
+        }`;
+
+        const aiResponse = await chatWithGemini(prompt);
+        let photonData = {};
+        
+        try {
+            const text = typeof aiResponse === 'string' ? aiResponse : aiResponse.raw || JSON.stringify(aiResponse);
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            photonData = jsonMatch ? JSON.parse(jsonMatch[0]) : {};
+        } catch (e) {
+            console.error("[Photon Service] AI Parse Error:", e);
+        }
+
+        res.json({
+            success: true,
+            source: 'Photon AI Microservice',
+            timestamp: new Date().toISOString(),
+            data: photonData
+        });
+    } catch (e) {
+        console.error("[Photon Service] Error:", e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/**
+ * Photon Geocoding (komoot/photon) Proxy.
+ * Provides address autocomplete without API keys.
+ */
+app.get('/api/research/geode', async (req, res) => {
+    const { q, limit = 5 } = req.query;
+    if (!q) return res.json({ features: [] });
+
+    try {
+        const response = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=${limit}`);
+        const data = await response.json();
+        res.json(data);
+    } catch (e) {
+        console.error("[Geode Service] Error:", e);
+        res.status(500).json({ error: 'Geocoding service unavailable' });
+    }
+});
+
 export default app;
+

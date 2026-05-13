@@ -865,6 +865,13 @@ export default function CalibrationLab() {
                 >
                     Instrument Library
                 </button>
+                <button
+                    onClick={() => window.open('https://celron-pmr.vercel.app', '_blank')}
+                    style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#3b82f6', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
+                    title="Open CelRon PMR"
+                >
+                    <ExternalLink size={16} /> PMR App
+                </button>
             </div>
 
             {activeTab === 'form' && (

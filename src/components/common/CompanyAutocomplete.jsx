@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Building2, MapPin, X, Loader2 } from 'lucide-react';
+import { Search, Building2, MapPin, X, Loader2, Sparkles } from 'lucide-react';
+import { cleanSearchQuery } from '../../lib/geminiService';
+
 
 const CompanyAutocomplete = ({ value, onChange, onSelect, className }) => {
     const [inputValue, setInputValue] = useState(value || '');
@@ -47,6 +49,9 @@ const CompanyAutocomplete = ({ value, onChange, onSelect, className }) => {
 
     const [apiError, setApiError] = useState(null);
 
+    const [isCleaning, setIsCleaning] = useState(false);
+    const [cleanedQuery, setCleanedQuery] = useState('');
+
     const fetchSuggestions = async (input) => {
         if (!input || input.length < 2) {
             setSuggestions([]);
@@ -54,13 +59,14 @@ const CompanyAutocomplete = ({ value, onChange, onSelect, className }) => {
             return;
         }
 
-        if (!GOOGLE_API_KEY) {
-            console.error('Missing Google API Key');
-            return;
-        }
-
         setLoading(true);
         setApiError(null);
+        
+        // STAGE 1: LLM Query Cleaning (User Recommendation)
+        setIsCleaning(true);
+        const cleaned = await cleanSearchQuery(input);
+        setCleanedQuery(cleaned);
+        setIsCleaning(false);
 
         // Wait up to 3 seconds for SDK if not ready
         let ready = sdkReady;
@@ -84,9 +90,38 @@ const CompanyAutocomplete = ({ value, onChange, onSelect, className }) => {
 
         try {
             const service = new window.google.maps.places.AutocompleteService();
-            service.getPlacePredictions({ input, types: ['establishment'] }, (predictions, status) => {
+            // Use the CLEANED query for better matching
+            service.getPlacePredictions({ 
+                input: cleaned, 
+                types: ['establishment'] 
+            }, (predictions, status) => {
                 if (status === window.google.maps.places.PlacesServiceStatus.OK && predictions) {
-                    setSuggestions(predictions);
+                    
+                    // STAGE 2: Custom Reranker (User Recommendation)
+                    // Prioritize results that match the industrial/Singapore context
+                    const sorted = [...predictions].sort((a, b) => {
+                        const aLower = a.description.toLowerCase();
+                        const bLower = b.description.toLowerCase();
+                        
+                        // Rule 1: Prioritize industrial keywords
+                        const industrialKeywords = ['industrial', 'engineering', 'marine', 'technical', 'supply', 'logistics', 'automation'];
+                        const aHasIndustry = industrialKeywords.some(k => aLower.includes(k));
+                        const bHasIndustry = industrialKeywords.some(k => bLower.includes(k));
+                        
+                        if (aHasIndustry && !bHasIndustry) return -1;
+                        if (!aHasIndustry && bHasIndustry) return 1;
+                        
+                        // Rule 2: Prioritize Singapore results (local context)
+                        const aInSG = aLower.includes('singapore');
+                        const bInSG = bLower.includes('singapore');
+                        
+                        if (aInSG && !bInSG) return -1;
+                        if (!aInSG && bInSG) return 1;
+                        
+                        return 0;
+                    });
+
+                    setSuggestions(sorted);
                     setApiError(null);
                 } else {
                     if (status !== 'ZERO_RESULTS') {
@@ -164,8 +199,13 @@ const CompanyAutocomplete = ({ value, onChange, onSelect, className }) => {
                     autoComplete="off"
                 />
                 <div style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {isCleaning && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: '#6366f1', fontWeight: 600 }}>
+                            <Sparkles size={12} className="animate-pulse" /> Normalizing...
+                        </div>
+                    )}
                     {!GOOGLE_API_KEY && <span style={{ fontSize: '0.7rem', color: '#ef4444' }}>API Key Missing</span>}
-                    {loading ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} color="#94a3b8" />}
+                    {loading && !isCleaning ? <Loader2 className="animate-spin" size={16} /> : <Search size={16} color="#94a3b8" />}
                     {inputValue && (
                         <button
                             type="button"

@@ -64,6 +64,7 @@ import WorkflowDocumentLayout from '../../components/workflow/WorkflowDocumentLa
 import html2pdf from 'html2pdf.js';
 import { generateSleekPDF } from '../../lib/pdfGeneratorV2';
 import { WhatsAppShareModal } from '../../components/workflow/WhatsAppShareModal';
+import SmartOCRModal from '../../components/common/SmartOCRModal';
 
 export default function WorkflowEditor() {
     const { type, id } = useParams();
@@ -100,6 +101,7 @@ export default function WorkflowEditor() {
     const [loadingGallery, setLoadingGallery] = useState(false);
     const [galleryUploadProgress, setGalleryUploadProgress] = useState(0);
     const [galleryUploadSuccess, setGalleryUploadSuccess] = useState(false);
+    const [showOCRModal, setShowOCRModal] = useState(false);
 
     // Payments State
     const [customerPayments, setCustomerPayments] = useState([]);
@@ -121,7 +123,6 @@ export default function WorkflowEditor() {
     const [uploadProgress, setUploadProgress] = useState(0);
     const [paymentQuarter, setPaymentQuarter] = useState('All'); // 'All' | 'Q1' | 'Q2' | 'Q3' | 'Q4'
     const [isOCRLoading, setIsOCRLoading] = useState(false);
-    const [showOCRModal, setShowOCRModal] = useState(false);
     const [discountType, setDiscountType] = useState('percent'); // 'percent' | 'lumpsum'
 
     const [settings, setSettings] = useState(null);
@@ -129,6 +130,50 @@ export default function WorkflowEditor() {
     const [signatureBase64, setSignatureBase64] = useState('');
     const [paynowBase64, setPaynowBase64] = useState('');
     const printRef = useRef();
+
+    const getSuggestedEmails = () => {
+        const selectedPartner = partners.find(p => p.id === formData.partner_id);
+        const suggestions = [];
+        
+        if (selectedPartner) {
+            if (selectedPartner.email1) {
+                suggestions.push({ 
+                    name: selectedPartner.name, 
+                    email: selectedPartner.email1, 
+                    type: 'HQ' 
+                });
+            }
+            if (selectedPartner.contacts && Array.isArray(selectedPartner.contacts)) {
+                selectedPartner.contacts.forEach(contact => {
+                    if (contact.email) {
+                        suggestions.push({ 
+                            name: contact.name, 
+                            email: contact.email, 
+                            type: 'Contact' 
+                        });
+                    }
+                });
+            }
+        }
+        
+        const officeEmail = isAnithaType ? 'accounts@celron.net' : (settings?.email || 'sales@celron.net');
+        suggestions.push({ name: 'Our Office', email: officeEmail, type: 'Internal' });
+        
+        return suggestions;
+    };
+
+    const addEmailToField = (field, email) => {
+        if (field === 'to') {
+            setEmailPreview(prev => ({ ...prev, to: email }));
+        } else if (field === 'cc') {
+            const currentCc = emailPreview.cc ? emailPreview.cc.trim() : '';
+            if (!currentCc) {
+                setEmailPreview(prev => ({ ...prev, cc: email }));
+            } else if (!currentCc.includes(email)) {
+                setEmailPreview(prev => ({ ...prev, cc: `${currentCc}; ${email}` }));
+            }
+        }
+    };
 
     const [showFloatModal, setShowFloatModal] = useState(false);
     const [selectedSuppliers, setSelectedSuppliers] = useState([]);
@@ -138,6 +183,14 @@ export default function WorkflowEditor() {
         currentIndex: 0
     });
     const [isFetchingRate, setIsFetchingRate] = useState(false);
+    
+    useEffect(() => {
+        const queryParams = new URLSearchParams(location.search);
+        const tab = queryParams.get('tab');
+        if (tab && ['items', 'other', 'workflow', 'po', 'costing', 'payments', 'gallery', 'explorer'].includes(tab)) {
+            setActiveTab(tab);
+        }
+    }, [location.search]);
 
     const toBase64 = url => fetch(url, { mode: 'cors' })
         .then(response => response.blob())
@@ -164,10 +217,9 @@ export default function WorkflowEditor() {
     defaultExpiry.setDate(defaultExpiry.getDate() + 30);
 
     // Form Data
-    // Form Data
     const [formData, setFormData] = useState(() => {
         const docType = (type || 'Enquiry').split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
-        const isAnithaDoc = ['Tax Invoice', 'Purchase Order', 'Delivery Order', 'Proforma Invoice', 'Packing List'].includes(docType);
+        const isAnithaDoc = ['Tax Invoice', 'Purchase Order', 'Delivery Order', 'Proforma Invoice', 'Packing List', 'Statement Of Account', 'Order Acknowledgment'].includes(docType);
         
         return {
         document_type: docType,
@@ -182,15 +234,21 @@ export default function WorkflowEditor() {
         work_location_id: '',
         salesperson_name: isAnithaDoc ? 'ANITHA' : (profile?.full_name || 'N.R.KUMAR'),
         salesperson_phone: isAnithaDoc ? '+6591090347' : (profile?.phone || '+6597685891'),
-        salesperson_email: isAnithaDoc ? 'accounts@celron.net' : (profile?.professional_email || 'kumar@celron.net'),
+        salesperson_email: isAnithaDoc ? 'accounts@celron.net' : (profile?.professional_email || 'sales@celron.net'),
         subject: '',
         customer_ref: 'WALK IN',
         currency: 'SGD',
         exchange_rate: 1.0,
         base_currency: 'SGD',
+        tax_type: 'GST',
+        tax_rate: 9,
+        discount: 0,
         status: 'Draft',
+        terms: TC_PRESETS[docType] || '',
         notes: '',
-        terms_conditions: '',
+        vessel_name: '',
+        location_name: '',
+        customer_name: '',
         subtotal: 0,
         tax_amount: 0,
         total_amount: 0,
@@ -208,8 +266,10 @@ export default function WorkflowEditor() {
         payment_method: 'Bank Transfer',
         payment_ref: '',
         delivery_verification: {}
-    };
+        };
     });
+
+    const isAnithaType = ['Tax Invoice', 'Purchase Order', 'Delivery Order', 'Proforma Invoice', 'Packing List', 'Statement Of Account', 'Order Acknowledgment'].includes(formData.document_type);
 
     useEffect(() => {
         fetchMasterData();
@@ -329,23 +389,24 @@ export default function WorkflowEditor() {
     };
 
     const ensureJobFolder = async () => {
-        if (!formData.assigned_job_no || explorerFolderId) return;
+        const docNo = formData.assigned_job_no || formData.document_no || formData.enquiry_no;
+        if (!docNo || explorerFolderId) return explorerFolderId;
 
         setLoadingExplorer(true);
         try {
             const token = getStoredToken();
-            const year = new Date(formData.issue_date).getFullYear().toString();
+            const year = new Date(formData.issue_date || new Date()).getFullYear().toString();
             const folderId = await provisionFullProjectStructure(
                 token, 
-                settings?.gdrive_celron_root_id, 
+                settings?.gdrive_celron_root_id || settings?.google_drive_folder_id, 
                 year, 
-                formData.assigned_job_no
+                docNo
             );
             setExplorerFolderId(folderId);
-            setExplorerPath([{ id: folderId, name: formData.assigned_job_no }]);
+            setExplorerPath([{ id: folderId, name: docNo }]);
             return folderId;
         } catch (err) {
-            console.error('Error ensuring job folder:', err);
+            console.error('Error ensuring project folder:', err);
             setExplorerError('Failed to connect to Google Drive project folder.');
         } finally {
             setLoadingExplorer(false);
@@ -388,6 +449,24 @@ export default function WorkflowEditor() {
         } finally {
             setLoadingSignedProofs(false);
         }
+    };
+
+    const getDocumentDisplayName = (docOverride = null) => {
+        const d = docOverride || formData;
+        const p = partners.find(p => p.id === d.partner_id)?.name || 'Walk-in';
+        const v = vessels.find(v => v.id === d.vessel_id)?.vessel_name || '';
+        const l = workLocations.find(wl => wl.id === d.work_location_id)?.location_name || '';
+        
+        const vesselOrLocation = v || l || '';
+        const description = (d.subject || '').trim();
+        const docNo = d.document_no || 'Draft';
+        
+        let parts = [docNo];
+        if (description) parts.push(description);
+        if (vesselOrLocation) parts.push(vesselOrLocation);
+        if (p) parts.push(p);
+        
+        return parts.join(' - ').replace(/[/\\?%*:|"<>]/g, '-');
     };
 
     const handleUploadSignedProofDirect = async (file) => {
@@ -729,7 +808,7 @@ export default function WorkflowEditor() {
 
             const targetFolderId = await getOrCreateFolder(token, subfolderName, rootId);
             
-            const file = new File([pdfBlob], `${docData.document_no}.pdf`, { type: 'application/pdf' });
+            const filename = `${getDocumentDisplayName(docData)}.pdf`;
             await uploadFileToDrive(token, file, { folderId: targetFolderId });
         } catch (err) {
             console.warn('Auto-upload PDF background task failed:', err);
@@ -1350,7 +1429,7 @@ export default function WorkflowEditor() {
                     const rootId = await ensureJobFolder();
                     const stageFolder = await getGDriveFolderIdForStage(targetType, token, rootId);
                     
-                    const filename = `${targetType}_${savedDoc.document_no}.pdf`;
+                    const filename = `${getDocumentDisplayName(savedDoc)}.pdf`;
                     await uploadFileToDrive(token, new File([pdfBlob], filename, { type: 'application/pdf' }), { folderId: stageFolder });
                 }
             } catch (archiveErr) {
@@ -1378,12 +1457,40 @@ export default function WorkflowEditor() {
         window.open(`/workflows/print/${id}`, '_blank');
     };
 
+    const handleAnnotate = async () => {
+        if (isNew) {
+            alert('Please Save the document first to sign and annotate.');
+            return;
+        }
+        setSaving(true);
+        try {
+            console.log('Generating PDF for annotation...');
+            const pdfBlob = await generateSleekPDF({
+                ...formData,
+                items: lineItems,
+                partners: partners.find(p => p.id === formData.partner_id),
+                vessels: vessels.find(v => v.id === formData.vessel_id),
+                work_locations: workLocations.find(wl => wl.id === formData.work_location_id)
+            }, settings, 'blob');
+            
+            const url = URL.createObjectURL(pdfBlob);
+            window.open(url, '_blank');
+            // Keep the URL alive for a bit to ensure it loads
+            setTimeout(() => URL.revokeObjectURL(url), 10000);
+        } catch (err) {
+            console.error('Annotation PDF generation failed:', err);
+            alert('Failed to generate PDF for annotation. Please try again.');
+        } finally {
+            setSaving(false);
+        }
+    };
+
     const handleEmail = async () => {
         const partner = partners.find(p => p.id === formData.partner_id);
         const contact = contacts.find(c => c.id === formData.contact_id);
 
         const recipient = contact?.email || partner?.email1 || '';
-        const subject = `${formData.document_type} ${formData.document_no}: ${formData.subject || ''}`;
+        const subjectLine = getDocumentDisplayName();
 
         // Build items list for email body
         let itemsContent = "";
@@ -1411,12 +1518,47 @@ export default function WorkflowEditor() {
             itemsContent += "--------------------------------------------------\n";
         }
 
-        const footer = `\n\nBest Regards,\n\n${formData.salesperson_name || 'CEL-RON Team'}\n${settings?.company_name || 'CEL-RON ENTERPRISES PTE LTD'}\n${settings?.address || ''}\nEmail: ${settings?.sales_email || 'sales@celron.net'} | Tel: ${settings?.phone || ''}`;
+        const effectiveSalesperson = (isAnithaType && (formData.salesperson_name === 'N.R.KUMAR' || formData.salesperson_name === 'KUMAR' || !formData.salesperson_name)) ? 'ANITHA' : (formData.salesperson_name || 'CEL-RON Team');
+        const effectiveEmail = (isAnithaType && (formData.salesperson_email === 'sales@celron.net' || formData.salesperson_email === 'kumar@celron.net' || !formData.salesperson_email)) ? 'accounts@celron.net' : (formData.salesperson_email || 'sales@celron.net');
+        const effectivePhone = (isAnithaType && (formData.salesperson_phone === '+65 97686891' || formData.salesperson_phone === '+65 81962270' || !formData.salesperson_phone)) ? '+65 91090347' : (formData.salesperson_phone || '+65 81962270');
+
+        const defaultAddress = '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787';
+        const footer = `\n\nBest Regards,\n\n${effectiveSalesperson}\n${settings?.company_name || 'CELRON ENTERPRISES PTE LTD'}\n${settings?.address || defaultAddress}\nEmail: ${effectiveEmail} | Tel: ${effectivePhone}`;
 
         const effectiveType = (formData.document_type === 'Quotation' && (formData.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : formData.document_type;
         const body = `Dear ${contact?.name || 'Customer'},\n\nPlease find attached the ${effectiveType} (${formData.document_no}) for your review.${itemsContent}${footer}`;
 
-        setEmailPreview({ to: recipient, cc: '', bcc: 'celron.simlim0305@gmail.com; accounts@celron.net', subject, body, attachments: [] });
+        // ---- Smart CC Logic ----------------------------------------------------
+        let suggestedCc = [];
+        const partnerContacts = contacts.filter(c => c.partnerId === formData.partner_id);
+        
+        // Match department to document type
+        const docTypeLower = (formData.document_type || '').toLowerCase();
+        let targetDepts = [];
+        if (docTypeLower.includes('invoice') || docTypeLower.includes('statement')) targetDepts = ['account', 'finance', 'ap', 'payment'];
+        if (docTypeLower.includes('order') && docTypeLower.includes('purchase')) targetDepts = ['purchas', 'procur'];
+        if (docTypeLower.includes('delivery') || docTypeLower.includes('packing')) targetDepts = ['logist', 'operat', 'warehouse'];
+
+        if (targetDepts.length > 0) {
+            const matches = partnerContacts.filter(c => 
+                targetDepts.some(dept => (c.department || '').toLowerCase().includes(dept))
+            );
+            suggestedCc = matches.map(c => c.email).filter(e => e && e !== recipient);
+        }
+
+        // Also add partner's secondary email if not already recipient
+        if (partner?.email2 && partner.email2 !== recipient && !suggestedCc.includes(partner.email2)) {
+            suggestedCc.push(partner.email2);
+        }
+
+        setEmailPreview({ 
+            to: recipient, 
+            cc: suggestedCc.join('; '), 
+            bcc: 'celron.simlim0305@gmail.com; accounts@celron.net', 
+            subject: subjectLine, 
+            body, 
+            attachments: [] 
+        });
     };
 
     const attachDocumentFromSuite = async (doc) => {
@@ -1540,7 +1682,12 @@ export default function WorkflowEditor() {
             const recipient = supplier?.email1 || supplier?.email || '';
             const subject = `RFQ: ${newDoc.document_no} | ${newDoc.subject || ''}`;
             
-            const footer = `\n\nBest Regards,\n\n${formData.salesperson_name || 'CEL-RON Team'}\n${settings?.company_name || 'CEL-RON ENTERPRISES PTE LTD'}\n${settings?.address || ''}\nEmail: ${settings?.sales_email || 'sales@celron.net'} | Tel: ${settings?.phone || ''}`;
+            const effectiveSalesperson = (formData.salesperson_name === 'N.R.KUMAR' || formData.salesperson_name === 'KUMAR' || !formData.salesperson_name) ? 'ANITHA' : (formData.salesperson_name || 'CEL-RON Team');
+            const effectiveEmail = (formData.salesperson_email === 'sales@celron.net' || formData.salesperson_email === 'kumar@celron.net' || !formData.salesperson_email) ? 'accounts@celron.net' : (formData.salesperson_email || 'sales@celron.net');
+            const effectivePhone = (formData.salesperson_phone === '+65 97686891' || formData.salesperson_phone === '+65 81962270' || !formData.salesperson_phone) ? '+65 91090347' : (formData.salesperson_phone || '+65 81962270');
+
+            const defaultAddress = '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787';
+            const footer = `\n\nBest Regards,\n\n${effectiveSalesperson}\n${settings?.company_name || 'CELRON ENTERPRISES PTE LTD'}\n${settings?.address || defaultAddress}\nEmail: ${effectiveEmail} | Tel: ${effectivePhone}`;
             const body = `Dear ${supplier?.name || 'Supplier'},\n\nPlease find attached our Request for Quotation (${newDoc.document_no}) for your review.\n\nPlease provide your best pricing and lead time.\n\n${footer}`;
 
             // We need to set the current document context for the PDF generator in sendEmail
@@ -1589,7 +1736,7 @@ export default function WorkflowEditor() {
             const element = printRef.current;
             const opt = {
                 margin: [5, 5, 5, 5],
-                filename: `${(formData.document_type === 'Quotation' && (formData.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : formData.document_type}_${(formData.document_no || 'Draft').replace(/[/\\?%*:|"<>]/g, '-')}.pdf`,
+                filename: `${getDocumentDisplayName()}.pdf`,
                 image: { type: 'jpeg', quality: 0.92 },
                 html2canvas: { 
                     scale: 2, 
@@ -1667,7 +1814,7 @@ export default function WorkflowEditor() {
                 const element = printRef.current;
                 const opt = {
                     margin: [5, 5, 5, 5],
-                    filename: `${targetDocType}_${targetDocNo || 'Draft'}.pdf`,
+                    filename: `${getDocumentDisplayName(isFloat ? { ...formData, document_type: targetDocType, document_no: targetDocNo } : null)}.pdf`,
                     image: { type: 'jpeg', quality: 0.92 },
                     html2canvas: { scale: 2, useCORS: true, logging: false, scrollY: 0, windowWidth: 1000 },
                     jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true },
@@ -1850,6 +1997,9 @@ export default function WorkflowEditor() {
                     <button className="btn-vibrant-secondary" onClick={handlePrint}>
                         <Printer size={18} /> Print PDF
                     </button>
+                    <button className="btn-vibrant-secondary" onClick={handleAnnotate} disabled={saving}>
+                        <Pencil size={18} /> {saving ? 'Preparing...' : 'Sign & Annotate'}
+                    </button>
                     <button className="btn-vibrant-secondary" onClick={handleEmail}>
                         <Send size={18} /> Send by Email
                     </button>
@@ -1944,6 +2094,16 @@ export default function WorkflowEditor() {
                                                 .filter(p => formData.document_type !== 'Purchase Order' || (p.types && p.types.includes('Supplier')) || p.category === 'Supplier')
                                                 .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                                         </select>
+                                        {formData.partner_id && (
+                                            <button 
+                                                className="icon-btn" 
+                                                onClick={() => handleEditMaster('partner_id')} 
+                                                style={{ padding: '8px', background: '#f8fafc' }}
+                                                title="Edit Customer"
+                                            >
+                                                <Pencil size={16} />
+                                            </button>
+                                        )}
                                         <button 
                                             className="icon-btn" 
                                             onClick={() => setModal({ isOpen: true, type: 'partner_id' })}
@@ -1953,11 +2113,6 @@ export default function WorkflowEditor() {
                                             <Plus size={16} />
                                         </button>
                                     </div>
-                                    {formData.partner_id && (
-                                        <button className="btn-edit-inline" onClick={() => handleEditMaster('partner_id')} title="Edit Customer">
-                                            <Pencil size={14} />
-                                        </button>
-                                    )}
                                 </div>
                             </div>
                             <div className="form-item">
@@ -1974,6 +2129,16 @@ export default function WorkflowEditor() {
                                                     return <option key={c.id} value={c.id}>{c.name} {pName ? `(${pName})` : ''}</option>;
                                                 })}
                                         </select>
+                                        {formData.contact_id && (
+                                            <button 
+                                                className="icon-btn" 
+                                                onClick={() => handleEditMaster('contact_id')} 
+                                                style={{ padding: '8px', background: '#f8fafc' }}
+                                                title="Edit Contact"
+                                            >
+                                                <Pencil size={16} />
+                                            </button>
+                                        )}
                                         <button 
                                             className="icon-btn" 
                                             onClick={() => setModal({ isOpen: true, type: 'contact_id' })}
@@ -1983,12 +2148,11 @@ export default function WorkflowEditor() {
                                             <Plus size={16} />
                                         </button>
                                     </div>
-                                    {formData.contact_id && (
-                                        <button className="btn-edit-inline" onClick={() => handleEditMaster('contact_id')} title="Edit Contact">
-                                            <Pencil size={14} />
-                                        </button>
-                                    )}
                                 </div>
+                            </div>
+                            <div className="form-item">
+                                <label><FileText size={14} /> Customer Reference</label>
+                                <input type="text" className="form-input" name="customer_ref" value={formData.customer_ref} onChange={handleHeaderChange} placeholder="Customer's PO or Ref No." />
                             </div>
                             <div className="form-item">
                                 <label><FileText size={14} /> Subject / Project Name</label>
@@ -2045,7 +2209,7 @@ export default function WorkflowEditor() {
                             <div className="form-item">
                                 <label><Ship size={14} /> Vessel / Service Location</label>
                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                    <div style={{ flex: 1, position: 'relative' }}>
+                                    <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'center' }}>
                                         <select 
                                             className="form-select" 
                                             name="vessel_id" 
@@ -2065,15 +2229,16 @@ export default function WorkflowEditor() {
                                         </select>
                                         {formData.vessel_id && (
                                             <button 
-                                                className="btn-edit-inline"
+                                                className="icon-btn"
                                                 onClick={() => handleEditMaster('vessel_id')}
+                                                style={{ padding: '8px', background: '#f8fafc' }}
                                                 title="Edit Vessel"
                                             >
-                                                <Pencil size={14} />
+                                                <Pencil size={16} />
                                             </button>
                                         )}
                                     </div>
-                                    <div style={{ flex: 1, position: 'relative' }}>
+                                    <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'center' }}>
                                         <select 
                                             className="form-select" 
                                             name="work_location_id" 
@@ -2093,11 +2258,12 @@ export default function WorkflowEditor() {
                                         </select>
                                         {formData.work_location_id && (
                                             <button 
-                                                className="btn-edit-inline"
+                                                className="icon-btn"
                                                 onClick={() => handleEditMaster('work_location_id')}
+                                                style={{ padding: '8px', background: '#f8fafc' }}
                                                 title="Edit Workplace"
                                             >
-                                                <Pencil size={14} />
+                                                <Pencil size={16} />
                                             </button>
                                         )}
                                     </div>
@@ -2203,16 +2369,14 @@ export default function WorkflowEditor() {
                 <div className="tab-container">
                     <button className={`tab ${activeTab === 'items' ? 'active' : ''}`} onClick={() => setActiveTab('items')}>Order Lines</button>
                     <button className={`tab ${activeTab === 'other' ? 'active' : ''}`} onClick={() => setActiveTab('other')}>Other Info</button>
-                    {(formData.assigned_job_no || formData.customer_po_no) && (
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                            {formData.assigned_job_no && <button className={`tab ${activeTab === 'workflow' ? 'active' : ''}`} onClick={() => setActiveTab('workflow')}>Workflow Suite</button>}
-                            <button className={`tab ${activeTab === 'po' ? 'active' : ''}`} onClick={() => setActiveTab('po')}>PO Details</button>
-                            <button className={`tab ${activeTab === 'costing' ? 'active' : ''}`} onClick={() => setActiveTab('costing')}>Project Costing</button>
-                            <button className={`tab ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => setActiveTab('payments')}>Payments & GST</button>
-                            <button className={`tab ${activeTab === 'gallery' ? 'active' : ''}`} onClick={() => setActiveTab('gallery')}>Job Gallery</button>
-                            <button className={`tab ${activeTab === 'explorer' ? 'active' : ''}`} onClick={() => setActiveTab('explorer')}>Explorer</button>
-                        </div>
-                    )}
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                        {formData.assigned_job_no && <button className={`tab ${activeTab === 'workflow' ? 'active' : ''}`} onClick={() => setActiveTab('workflow')}>Workflow Suite</button>}
+                        {formData.customer_po_no && <button className={`tab ${activeTab === 'po' ? 'active' : ''}`} onClick={() => setActiveTab('po')}>PO Details</button>}
+                        {formData.assigned_job_no && <button className={`tab ${activeTab === 'costing' ? 'active' : ''}`} onClick={() => setActiveTab('costing')}>Project Costing</button>}
+                        {formData.assigned_job_no && <button className={`tab ${activeTab === 'payments' ? 'active' : ''}`} onClick={() => setActiveTab('payments')}>Payments & GST</button>}
+                        <button className={`tab ${activeTab === 'gallery' ? 'active' : ''}`} onClick={() => setActiveTab('gallery')}>Photos & Media</button>
+                        <button className={`tab ${activeTab === 'explorer' ? 'active' : ''}`} onClick={() => setActiveTab('explorer')}>Explorer</button>
+                    </div>
                 </div>
 
                 {activeTab === 'gallery' && (
@@ -2220,7 +2384,7 @@ export default function WorkflowEditor() {
                         <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <Ship size={20} className="text-accent" />
-                                <h3 style={{ margin: 0 }}>Job Photos & Media</h3>
+                                <h3 style={{ margin: 0 }}>Project Photos & Media</h3>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                                 {loadingGallery && (
@@ -2236,6 +2400,13 @@ export default function WorkflowEditor() {
                                         <FileCheck size={18} /> Upload Success!
                                     </div>
                                 )}
+                                <button 
+                                    className="btn btn-secondary" 
+                                    onClick={() => setShowOCRModal(true)}
+                                    style={{ background: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', border: '1px solid #ddd6fe', color: '#7c3aed' }}
+                                >
+                                    <Sparkles size={16} /> Smart OCR
+                                </button>
                                 <label className="btn btn-primary" style={{ cursor: 'pointer', position: 'relative', overflow: 'hidden' }}>
                                     <Upload size={16} /> Upload Photo
                                     {loadingGallery && <div className="btn-loading-overlay" />}
@@ -2253,6 +2424,21 @@ export default function WorkflowEditor() {
                                 </label>
                             </div>
                         </div>
+
+                        <SmartOCRModal 
+                            isOpen={showOCRModal}
+                            onClose={() => setShowOCRModal(false)}
+                            title="Job Gallery OCR Assistant"
+                            onApply={(res) => {
+                                if (res.rawText) {
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        notes: (prev.notes || '') + '\n\n[OCR DATA FROM GALLERY]:\n' + res.rawText
+                                    }));
+                                    alert('Extracted text has been appended to the Document Notes.');
+                                }
+                            }}
+                        />
 
                         {loadingGallery && galleryFiles.length === 0 ? (
                             <div style={{ padding: '80px', textAlign: 'center', color: 'var(--text-secondary)' }}>
@@ -3520,25 +3706,7 @@ export default function WorkflowEditor() {
                                 </div>
                             </div>
 
-                            <div style={{ background: '#f9fafb', padding: '20px', borderRadius: '12px', border: '1px solid #f3f4f6', marginBottom: '24px' }}>
-                                <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1e40af', marginBottom: '14px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Automatically Generate:</div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', fontSize: '0.9rem' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><Package size={16} /> Order Acknowledgment</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><Package size={16} /> Delivery Order</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><Package size={16} /> Proforma Invoice</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><Package size={16} /> Tax Invoice</div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065f46' }}><Package size={16} /> Packing List</div>
-                                </div>
-                                
-                                <div style={{ marginTop: '16px', borderTop: '1px solid #e5e7eb', paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem', color: '#374151' }}>
-                                        <input type="checkbox" name="includeCertificates" style={{ width: '16px', height: '16px', accentColor: '#4f46e5' }} /> Include Certificates (CERT)
-                                    </label>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: 600, fontSize: '0.95rem', color: '#374151' }}>
-                                        <input type="checkbox" name="includeServiceReport" style={{ width: '16px', height: '16px', accentColor: '#4f46e5' }} /> Include Service Report (SR)
-                                    </label>
-                                </div>
-                            </div>
+
 
                             <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '32px' }}>
                                 <button type="button" onClick={() => setPoModal({ isOpen: false })} style={{ 
@@ -3646,12 +3814,14 @@ export default function WorkflowEditor() {
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                     <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>To</label>
-                                    <input
-                                        type="email"
-                                        style={{ width: '100%', padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
-                                        value={emailPreview.to}
-                                        onChange={(e) => setEmailPreview(prev => ({ ...prev, to: e.target.value }))}
-                                    />
+                                    <div style={{ position: 'relative', display: 'flex', gap: '8px' }}>
+                                        <input
+                                            type="email"
+                                            style={{ flex: 1, padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
+                                            value={emailPreview.to}
+                                            onChange={(e) => setEmailPreview(prev => ({ ...prev, to: e.target.value }))}
+                                        />
+                                    </div>
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -3675,6 +3845,53 @@ export default function WorkflowEditor() {
                                         />
                                     </div>
                                 </div>
+
+                                {/* CONTACT SELECTOR SECTION */}
+                                {getSuggestedEmails().length > 0 && (
+                                    <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                        <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                            Select Contacts from Company
+                                        </label>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                            {getSuggestedEmails().map((contact, idx) => (
+                                                <div 
+                                                    key={idx} 
+                                                    style={{ 
+                                                        background: '#fff', 
+                                                        border: '1px solid #cbd5e1', 
+                                                        borderRadius: '6px', 
+                                                        padding: '4px 8px', 
+                                                        display: 'flex', 
+                                                        alignItems: 'center', 
+                                                        gap: '8px',
+                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b' }}>{contact.name}</span>
+                                                        <span style={{ fontSize: '10px', color: '#64748b' }}>{contact.email}</span>
+                                                    </div>
+                                                    <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid #e2e8f0', paddingLeft: '8px', marginLeft: '4px' }}>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => addEmailToField('to', contact.email)}
+                                                            style={{ background: '#eef2ff', color: '#6366f1', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
+                                                        >
+                                                            To
+                                                        </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => addEmailToField('cc', contact.email)}
+                                                            style={{ background: '#f0fdf4', color: '#16a34a', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
+                                                        >
+                                                            Cc
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

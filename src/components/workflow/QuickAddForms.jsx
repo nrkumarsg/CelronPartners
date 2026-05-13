@@ -11,6 +11,8 @@ import { parseSupplierBillWithAi } from '../../lib/BillOcrService';
 import RichTextEditor from '../common/RichTextEditor';
 import CompanyAutocomplete from '../common/CompanyAutocomplete';
 import PartnerDocuments from '../partners/PartnerDocuments';
+import SmartOCRModal from '../common/SmartOCRModal';
+import DriveScannerLinker from '../workflows/DriveScannerLinker';
 
 
 // Generic Modal Base
@@ -141,9 +143,16 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
     });
     const [customCategory, setCustomCategory] = useState('');
     const [isAiResearching, setIsAiResearching] = useState(false);
+    const [showOCRModal, setShowOCRModal] = useState(false);
     const [aiPreview, setAiPreview] = useState(null);
     const [aiStatus, setAiStatus] = useState('');
     const [isMapsResearching, setIsMapsResearching] = useState(false);
+
+    useEffect(() => {
+        if (initialData) {
+            setFormData(prev => ({ ...prev, ...initialData }));
+        }
+    }, [initialData]);
 
     const handleCompanySelect = (place) => {
         const address = place.formatted_address || '';
@@ -450,20 +459,22 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
 
     const applyAiResults = () => {
         if (!aiPreview) return;
-        setFormData(prev => ({
-            ...prev,
-            uen: aiPreview.uen || prev.uen,
-            address: aiPreview.address || prev.address,
-            country: aiPreview.country || prev.country,
-            city: aiPreview.city || prev.city,
-            pincode: aiPreview.pincode || prev.pincode,
-            email1: aiPreview.email1 || prev.email1,
-            phone1: aiPreview.phone1 || prev.phone1,
-            weblink: aiPreview.website || prev.weblink,
-            brand: aiPreview.brands || prev.brand,
-            activity_summary: aiPreview.activity_summary || prev.activity_summary,
-            notes: aiPreview.activity_summary ? `${prev.notes || ''}\n\n--- AI ACTIVITY SUMMARY ---\n${aiPreview.activity_summary}` : (prev.notes || '')
-        }));
+        const updated = {
+            ...formData,
+            uen: aiPreview.uen || formData.uen,
+            address: aiPreview.address || formData.address,
+            country: aiPreview.country || formData.country,
+            city: aiPreview.city || formData.city,
+            pincode: aiPreview.pincode || formData.pincode,
+            email1: aiPreview.email1 || formData.email1,
+            phone1: aiPreview.phone1 || formData.phone1,
+            weblink: aiPreview.website || formData.weblink,
+            brand: aiPreview.brands || formData.brand,
+            activity_summary: aiPreview.activity_summary || formData.activity_summary,
+            notes: aiPreview.activity_summary ? `${formData.notes || ''}\n\n--- AI ACTIVITY SUMMARY ---\n${aiPreview.activity_summary}` : (formData.notes || '')
+        };
+        setFormData(updated);
+        if (onDataChange) onDataChange(updated);
         setAiPreview(null);
     };
 
@@ -513,6 +524,9 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                 ...formData,
                 company_id
             };
+            // Sanitize payload to remove joined columns that don't belong to the 'partners' table
+            delete dataToSave.contacts;
+
             const { data, error } = isExisting 
                 ? await supabase.from('partners').update(dataToSave).eq('id', formData.id).select()
                 : await supabase.from('partners').insert([dataToSave]).select();
@@ -679,7 +693,11 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                     </div>
                     <CompanyAutocomplete
                         value={formData.name}
-                        onChange={(val) => setFormData(prev => ({ ...prev, name: val }))}
+                        onChange={(val) => {
+                            const updated = { ...formData, name: val };
+                            setFormData(updated);
+                            if (onDataChange) onDataChange(updated);
+                        }}
                         onSelect={handleCompanySelect}
                         placeholder="Enter company name..."
                     />
@@ -794,7 +812,11 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                             type="text"
                             className="premium-input"
                             value={formData.weblink}
-                            onChange={(e) => setFormData({ ...formData, weblink: e.target.value })}
+                            onChange={(e) => {
+                                const updated = { ...formData, weblink: e.target.value };
+                                setFormData(updated);
+                                if (onDataChange) onDataChange(updated);
+                            }}
                             placeholder="https://company.com"
                             style={{ width: '100%', padding: '10px 14px', paddingRight: '60px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
                         />
@@ -884,7 +906,29 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                     onFrontChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
                     onBackChange={(url) => setFormData(prev => ({ ...prev, business_card_back_url: url }))}
                     onOCR={handleOCR}
+                    onSmartOCR={() => setShowOCRModal(true)}
                     label="Business Card Scan (Auto-fills Form)"
+                />
+                
+                <SmartOCRModal 
+                    isOpen={showOCRModal}
+                    onClose={() => setShowOCRModal(false)}
+                    onApply={(res) => {
+                        if (res.structured) {
+                            setFormData(prev => ({
+                                ...prev,
+                                name: prev.name || res.structured.company_name || '',
+                                uen: prev.uen || res.structured.uen || '',
+                                email1: prev.email1 || res.structured.email || '',
+                                phone1: prev.phone1 || res.structured.phone || res.structured.mobile || '',
+                                address: prev.address || res.structured.address || '',
+                                weblink: prev.weblink || res.structured.website || '',
+                                notes: (prev.notes || '') + '\n\n' + (res.rawText || '')
+                            }));
+                        } else if (res.rawText) {
+                            handleOCR(res.rawText);
+                        }
+                    }}
                 />
             </div>
 
@@ -936,6 +980,13 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
     });
     const [loading, setLoading] = useState(false);
     const [isAiResearching, setIsAiResearching] = useState(false);
+    const [showOCRModal, setShowOCRModal] = useState(false);
+
+    useEffect(() => {
+        if (initialData) {
+            setFormData(prev => ({ ...prev, ...initialData }));
+        }
+    }, [initialData]);
 
     const handleOCR = async (text) => {
         if (!text) return;
@@ -1162,7 +1213,29 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
                     onFrontChange={(url) => setFormData(prev => ({ ...prev, business_card_url: url }))}
                     onBackChange={(url) => setFormData(prev => ({ ...prev, business_card_back_url: url }))}
                     onOCR={handleOCR}
+                    onSmartOCR={() => setShowOCRModal(true)}
                     label="Contact Business Card (Auto-fills Fields)"
+                />
+
+                <SmartOCRModal 
+                    isOpen={showOCRModal}
+                    onClose={() => setShowOCRModal(false)}
+                    title="Smart Contact OCR"
+                    onApply={(res) => {
+                        if (res.structured) {
+                            setFormData(prev => ({
+                                ...prev,
+                                name: prev.name || res.structured.person_name || '',
+                                email: prev.email || res.structured.email || '',
+                                handphone: prev.handphone || res.structured.mobile || res.structured.phone || '',
+                                post: prev.post || res.structured.designation || '',
+                                department: prev.department || res.structured.department || '',
+                                address: prev.address || res.structured.address || ''
+                            }));
+                        } else if (res.rawText) {
+                            handleOCR(res.rawText);
+                        }
+                    }}
                 />
             </div>
 
@@ -1205,6 +1278,14 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
     const [existingContacts, setExistingContacts] = useState([]);
 
     useEffect(() => {
+        if (initialPartner) setPartnerData(initialPartner);
+    }, [initialPartner]);
+
+    useEffect(() => {
+        if (initialContact) setContactData(initialContact);
+    }, [initialContact]);
+
+    useEffect(() => {
         if (!partnerData.name) {
             setExistingContacts([]);
             return;
@@ -1224,9 +1305,14 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
         try {
             // 1. Save Partner
             const isPartnerExisting = !!partnerData.id;
+            
+            // Sanitize payload
+            const partnerPayload = { ...partnerData, company_id };
+            delete partnerPayload.contacts;
+
             const { data: pData, error: pError } = isPartnerExisting 
-                ? await supabase.from('partners').update({ ...partnerData, company_id }).eq('id', partnerData.id).select()
-                : await supabase.from('partners').insert([{ ...partnerData, company_id }]).select();
+                ? await supabase.from('partners').update(partnerPayload).eq('id', partnerData.id).select()
+                : await supabase.from('partners').insert([partnerPayload]).select();
             
             if (pError) throw pError;
             const savedPartner = pData[0];
@@ -1797,6 +1883,14 @@ export const QuickExpenseAdd = ({ job_id, partners, jobs, expense, onSuccess, on
         }
     };
 
+    const handleScannerLink = (url, name) => {
+        setFormData(prev => ({ 
+            ...prev, 
+            bill_url: url,
+            notes: (prev.notes || '') + `\n[Linked from Celron Scanner: ${name}]`
+        }));
+    };
+
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -2042,11 +2136,20 @@ export const QuickExpenseAdd = ({ job_id, partners, jobs, expense, onSuccess, on
                     </div>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                    <label className={`btn ${formData.bill_url ? 'btn-secondary' : 'btn-primary'}`} style={{ cursor: 'pointer', padding: '10px 20px', gap: '10px' }}>
-                        {uploading ? <Loader2 size={18} className="animate-spin" /> : (formData.bill_url ? <RefreshCw size={18} /> : <Upload size={18} />)}
-                        {formData.bill_url ? 'Update Bill' : 'Upload Bill'}
-                        <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={uploading} />
-                    </label>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <DriveScannerLinker 
+                            selectedLink={formData.bill_url} 
+                            onLinkSelected={handleScannerLink} 
+                            onClear={() => setFormData(prev => ({ ...prev, bill_url: '' }))}
+                            label="Scan Repository"
+                        />
+                        <div style={{ width: '1px', height: '40px', background: '#e2e8f0', margin: '0 5px' }} />
+                        <label className={`btn ${formData.bill_url ? 'btn-secondary' : 'btn-primary'}`} style={{ cursor: 'pointer', padding: '10px 20px', gap: '10px', height: '44px', display: 'flex', alignItems: 'center' }}>
+                            {uploading ? <Loader2 size={18} className="animate-spin" /> : (formData.bill_url ? <RefreshCw size={18} /> : <Upload size={18} />)}
+                            {formData.bill_url ? 'Update Bill' : 'Upload Bill'}
+                            <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={uploading} />
+                        </label>
+                    </div>
                     {aiStatus && (
                         <div style={{ fontSize: '0.7rem', color: '#6366f1', fontWeight: 700, animation: 'pulse 2s infinite' }}>
                             {aiStatus}

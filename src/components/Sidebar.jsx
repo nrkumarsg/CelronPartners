@@ -244,6 +244,11 @@ export default function Sidebar() {
                     <span className="nav-text" style={{ fontWeight: 800, color: '#f59e0b' }}>Unified Supplier Hub</span>
                 </NavLink>
 
+                <NavLink to="/quotations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Quote2Customers">
+                    <Briefcase size={20} color="#6366f1" />
+                    <span className="nav-text" style={{ fontWeight: 800, color: '#6366f1' }}>Quote2Customers</span>
+                </NavLink>
+
                 <div className="nav-separator" />
                 <span className="nav-group-header">Jobs Control (Legacy)</span>
 
@@ -292,10 +297,6 @@ export default function Sidebar() {
                     <span className="nav-text">Active Jobs</span>
                 </NavLink>
 
-                <NavLink to="/quotations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Quote2Customers">
-                    <Briefcase size={20} color="#6366f1" />
-                    <span className="nav-text">Quote2Customers</span>
-                </NavLink>
 
                 <NavLink 
                     to="/workflows" 
