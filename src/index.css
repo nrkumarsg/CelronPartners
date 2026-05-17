@@ -1200,3 +1200,6 @@ tr:hover {
   margin-bottom: 8px;
   text-transform: uppercase;
 }
+
+.hide-sm { display: inline-block; } @media (max-width: 1400px) { .hide-sm { display: none; } }
+

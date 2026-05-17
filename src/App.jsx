@@ -96,9 +96,12 @@ const AppLayout = ({ children }) => {
   );
 };
 
+import { Toaster } from 'react-hot-toast';
+
 function App() {
   return (
     <AuthProvider>
+      <Toaster position="top-right" reverseOrder={false} />
       <Routes>
         {/* Public Authentication Routes */}
         <Route path="/login" element={<Login />} />

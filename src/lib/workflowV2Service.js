@@ -280,7 +280,7 @@ export const getWorkflowDocumentsByJob = async (jobId) => {
     const { data, error } = await supabase
         .from('workflow_documents')
         .select(`*, partners(name), vessels!vessel_id(vessel_name), work_locations!work_location_id(location_name)`)
-        .eq('job_id', jobId)
+        .or(`job_id.eq.${jobId},id.eq.${jobId}`)
         .order('created_at', { ascending: false });
     return { data, error };
 };
@@ -352,14 +352,40 @@ export const getWorkflowDocumentById = async (id) => {
  * Delete Document and its Line Items
  */
 export const deleteWorkflowDocument = async (id) => {
-    // Delete line items first due to FK constraints
-    const { error: itemError } = await supabase.from('workflow_line_items').delete().eq('document_id', id);
-    if (itemError) {
-        console.error("Error deleting items:", itemError);
-    }
+    try {
+        // 1. Check for dependent documents (revisions that point to this as original)
+        const { data: dependents } = await supabase
+            .from('workflow_documents')
+            .select('id, document_no')
+            .eq('original_document_id', id);
 
-    const { error: docError } = await supabase.from('workflow_documents').delete().eq('id', id);
-    return { error: docError };
+        if (dependents && dependents.length > 0) {
+            // Delete dependent revisions first
+            for (const dep of dependents) {
+                await deleteWorkflowDocument(dep.id);
+            }
+        }
+
+        // 2. Delete line items
+        const { error: itemError } = await supabase.from('workflow_line_items').delete().eq('document_id', id);
+        if (itemError) {
+            console.error("Error deleting items for document:", id, itemError);
+            // We continue as it might be a partial delete or empty items
+        }
+
+        // 3. Delete the document itself
+        const { error: docError } = await supabase.from('workflow_documents').delete().eq('id', id);
+        
+        if (docError) {
+            console.error("Supabase delete error:", docError);
+            return { error: docError };
+        }
+
+        return { error: null };
+    } catch (err) {
+        console.error("Caught error in deleteWorkflowDocument:", err);
+        return { error: err };
+    }
 };
 
 /**
@@ -912,8 +938,9 @@ export const revertJobToQuotation = async (jobNo) => {
     if (fetchErr) throw fetchErr;
 
     // 2. Identify the original Quotation and the derived documents
+    // We look for QTN prefix. If not found, we might look for the earliest doc or just error.
     const quotation = docs.find(d => (d.document_no || '').startsWith('QTN'));
-    const derivedIds = docs.filter(d => !(d.document_no || '').startsWith('QTN')).map(d => d.id);
+    const derivedIds = docs.filter(d => d.id !== quotation?.id).map(d => d.id);
 
     // 3. Reset the Quotation
     if (quotation) {
@@ -930,7 +957,7 @@ export const revertJobToQuotation = async (jobNo) => {
             .eq('id', quotation.id);
     }
 
-    // 4. Delete derived documents (ORA, DO, INV, etc.)
+    // 4. Delete derived documents (CEL/Job, ORA, DO, INV, etc.)
     if (derivedIds.length > 0) {
         // First delete their items
         await supabase.from('workflow_line_items').delete().in('document_id', derivedIds);
@@ -939,6 +966,77 @@ export const revertJobToQuotation = async (jobNo) => {
     }
 
     return { success: true };
+};
+
+/**
+ * Revert a Quotation back to an Enquiry
+ */
+export const revertQuotationToEnquiry = async (quotationId) => {
+    const { data: qtn, error: qtnErr } = await getWorkflowDocumentById(quotationId);
+    if (qtnErr) throw qtnErr;
+
+    // 1. Generate new Enquiry Number
+    const enqNo = await generateDocNumber(qtn.company_id, 'Enquiry');
+    
+    // 2. Prepare Enquiry Header
+    const { items, id, created_at, updated_at, document_no, document_type, ...cleanHeader } = qtn;
+    const newEnqData = {
+        ...cleanHeader,
+        document_type: 'Enquiry',
+        document_no: enqNo,
+        status: 'Draft',
+        issue_date: new Date().toISOString().split('T')[0]
+    };
+
+    // 3. Save new Enquiry
+    const { data: savedEnq, error: saveError } = await saveWorkflowDocument(newEnqData, items);
+    if (saveError) throw saveError;
+
+    // 4. Delete original Quotation
+    await supabase.from('workflow_line_items').delete().eq('document_id', quotationId);
+    await supabase.from('workflow_documents').delete().eq('id', quotationId);
+
+    return savedEnq;
+};
+
+/**
+ * Convert a Standalone Invoice to a Job Suite
+ */
+export const convertInvoiceToJob = async (invoiceId, poData = {}) => {
+    const { data: inv, error: invErr } = await getWorkflowDocumentById(invoiceId);
+    if (invErr) throw invErr;
+
+    // 1. Generate Job Number Suite (CEL-YYMM-XXXX)
+    let baseJobNo = await generateDocNumber(inv.company_id, 'Job');
+    let seqPart = baseJobNo.split('-').slice(1).join('-'); // YYMM-XXXX
+    const jobNo = `CEL-${seqPart}`;
+
+    // 2. Update Original Invoice to be part of the Job
+    const invUpdate = {
+        ...inv,
+        is_job: true,
+        assigned_job_no: jobNo,
+        status: 'Confirmed',
+        customer_po_no: poData.po_no || inv.customer_ref || 'PENDING',
+        customer_po_date: poData.po_date || new Date().toISOString().split('T')[0]
+    };
+    await saveWorkflowDocument(invUpdate, inv.items);
+
+    // 3. Create Master Job Record (CEL)
+    const newJobData = {
+        ...inv,
+        id: undefined,
+        document_type: 'Job',
+        document_no: jobNo,
+        assigned_job_no: jobNo,
+        is_job: true,
+        status: 'Draft',
+        customer_po_no: invUpdate.customer_po_no,
+        customer_po_date: invUpdate.customer_po_date
+    };
+    await saveWorkflowDocument(newJobData, inv.items);
+
+    return { jobNo };
 };
 
 /**

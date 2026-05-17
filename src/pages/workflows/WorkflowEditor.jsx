@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
     Save, ArrowLeft, Plus, Trash2,
     Printer, Send, X, Package,
@@ -11,8 +12,12 @@ import {
     ArrowRightLeft,
     CheckCircle,
     Copy,
-    Users2
+    Users2,
+    Eye,
+    EyeOff,
+    Info
 } from 'lucide-react';
+import SearchableSelect from '../../components/common/SearchableSelect';
 import { getExchangeRateWithGemini } from '../../lib/geminiService';
 import { listFolderContent, uploadFileToDrive, deleteFile, getOrCreateFolder, provisionFullProjectStructure, provisionPartnerStructure } from '../../lib/driveService';
 import { validateToken, connectGoogleAPI, getStoredToken, performOCR } from '../../lib/googleAuthService';
@@ -25,6 +30,9 @@ import {
     generateDocNumber,
     createDocumentRevision,
     convertQuotationToJob,
+    revertJobToQuotation,
+    revertQuotationToEnquiry,
+    convertInvoiceToJob,
     convertProformaToTaxInvoice,
     getGDriveFolderIdForStage,
     duplicateWorkflowDocument
@@ -44,12 +52,13 @@ import {
     QuickExpenseAdd
 } from '../../components/workflow/QuickAddForms';
 import FloatingControlHub from '../../components/FloatingControlHub';
+import ReceivePaymentModal from '../../components/workflow/ReceivePaymentModal';
 import RichTextEditor from '../../components/common/RichTextEditor';
 import { ITEM_UNITS } from '../../utils/units';
 
 const NOTES_PRESETS = {
     'General': `Please ensure all documents are referenced with the enquiry number.<br/>All goods must be securely packed for sea transport.`,
-    'Delivery': `Delivery must be made to:<br/>Celron Enterprises Pte Ltd<br/>10 Jalan Besar, Sim Lim Tower #03-05<br/>Singapore 208787`,
+    'Delivery': `Delivery must be made to:<br/>Celron Enterprises Pte Ltd<br/>10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787`,
     'Payment': `Payment will be processed via telegraphic transfer upon receipt of original invoices and delivery orders.`
 };
 
@@ -82,6 +91,7 @@ export default function WorkflowEditor() {
     const sourceId = searchParams.get('source_id');
 
     const { profile } = useAuth();
+    const canAdmin = ['admin', 'finance', 'superadmin'].includes(profile?.role);
     const isNew = id === 'new';
 
     // UI State
@@ -133,6 +143,9 @@ export default function WorkflowEditor() {
     const [discountType, setDiscountType] = useState('percent'); // 'percent' | 'lumpsum'
 
     const [settings, setSettings] = useState(null);
+    const [showSignature, setShowSignature] = useState(true);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [paymentPrefill, setPaymentPrefill] = useState(null);
     const [logoBase64, setLogoBase64] = useState('');
     const [signatureBase64, setSignatureBase64] = useState('');
     const [paynowBase64, setPaynowBase64] = useState('');
@@ -165,6 +178,9 @@ export default function WorkflowEditor() {
         
         const officeEmail = isAnithaType ? 'accounts@celron.net' : (settings?.email || 'sales@celron.net');
         suggestions.push({ name: 'Our Office', email: officeEmail, type: 'Internal' });
+        if (isAnithaType) {
+            suggestions.push({ name: 'Director Review', email: 'director@celron.net', type: 'Internal' });
+        }
         
         return suggestions;
     };
@@ -1213,7 +1229,7 @@ export default function WorkflowEditor() {
             amount: 0,
             tax_enabled: true,
             tax_rate: 9,
-            uom: 'Units',
+            uom: 'UNIT(S)',
             is_section: type === 'section',
             is_note: type === 'note',
             is_image: type === 'image',
@@ -1305,13 +1321,13 @@ export default function WorkflowEditor() {
                 currentIdRef.current = data.id; // Update ref immediately for sequential async calls
                 navigate(`/workflows/editor/${type}/${data.id}`, { replace: true });
             } else {
-                alert('Saved successfully');
+                toast.success('Saved successfully');
                 fetchDocument();
             }
             return data;
         } catch (err) {
             console.error(err);
-            alert('Failed to save: ' + err.message);
+            toast.error('Failed to save: ' + err.message);
         } finally {
             setSaving(false);
         }
@@ -1351,7 +1367,13 @@ export default function WorkflowEditor() {
         setSaving(true);
         try {
             const sourceId = poModal.activeSourceId || currentIdRef.current;
-            const { jobNo } = await convertQuotationToJob(sourceId, poData, options);
+            let result;
+            if (poModal.isFromInvoice) {
+                result = await convertInvoiceToJob(sourceId, poData);
+            } else {
+                result = await convertQuotationToJob(sourceId, poData, options);
+            }
+            const { jobNo } = result;
             
             // Handle PO File Upload if present
             if (poFile) {
@@ -1379,13 +1401,13 @@ export default function WorkflowEditor() {
                 }
             }
 
-            alert(`Job ${jobNo} created successfully with all associated documents!`);
+            toast.success(`Job ${jobNo} created successfully with all associated documents!`);
             setPoModal({ isOpen: false });
             setPoFile(null);
             fetchDocument(); // Refresh to show job info
         } catch (err) {
             console.error(err);
-            alert('Failed to convert to job: ' + (err.message || 'Unknown error'));
+            toast.error('Failed to convert to job: ' + (err.message || 'Unknown error'));
         } finally {
             setSaving(false);
         }
@@ -1399,11 +1421,11 @@ export default function WorkflowEditor() {
         try {
             const activeId = currentIdRef.current;
             const savedInv = await convertProformaToTaxInvoice(activeId);
-            alert(`Tax Invoice ${savedInv.document_no} created successfully!`);
+            toast.success(`Tax Invoice ${savedInv.document_no} created successfully!`);
             navigate(`/workflows/editor/tax-invoice/${savedInv.id}`);
         } catch (err) {
             console.error(err);
-            alert('Failed to convert to Tax Invoice: ' + (err.message || 'Unknown error'));
+            toast.error('Failed to convert to Tax Invoice: ' + (err.message || 'Unknown error'));
         } finally {
             setSaving(false);
         }
@@ -1446,7 +1468,7 @@ export default function WorkflowEditor() {
             const { data: savedDoc, error } = await saveWorkflowDocument(newDocData, lineItems);
             if (error) throw error;
 
-            alert(`${targetType} ${savedDoc.document_no} generated successfully!`);
+            toast.success(`${targetType} ${savedDoc.document_no} generated successfully!`);
 
             // 4. Automatic Archive to Drive (as requested)
             try {
@@ -1477,7 +1499,56 @@ export default function WorkflowEditor() {
 
         } catch (err) {
             console.error(err);
-            alert('Failed to generate document: ' + err.message);
+            toast.error('Failed to generate document: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+    
+    const handleRevertJobToQuotation = async () => {
+        if (isNew || !formData.assigned_job_no) return;
+        if (!window.confirm(`Are you sure you want to revert this Job Suite back to a Quotation? \n\nThis will DELETE all associated suite documents (CEL, ORA, DO, etc.) and restore the original Quotation to Draft status.`)) return;
+
+        setSaving(true);
+        try {
+            await revertJobToQuotation(formData.assigned_job_no);
+            alert('Job reverted successfully. Navigating to Quotation...');
+            navigate('/workflows?type=Quotation');
+        } catch (err) {
+            console.error(err);
+            alert('Failed to revert job: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleRevertQuotationToEnquiry = async () => {
+        if (isNew) return;
+        if (!window.confirm('Are you sure you want to revert this Quotation back to an Enquiry? \n\nThis will DELETE the current Quotation and create a new draft Enquiry.')) return;
+
+        setSaving(true);
+        try {
+            const savedEnq = await revertQuotationToEnquiry(id);
+            alert(`Quotation reverted successfully. New Enquiry: ${savedEnq.document_no}`);
+            navigate(`/workflows/editor/enquiry/${savedEnq.id}`);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to revert quotation: ' + err.message);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleConvertInvoiceToJob = async () => {
+        if (isNew) return;
+        setSaving(true);
+        try {
+            const saved = await handleSave();
+            const activeId = saved?.id || currentIdRef.current;
+            setPoModal({ isOpen: true, activeSourceId: activeId, isFromInvoice: true });
+        } catch (err) {
+            console.error(err);
+            alert('Failed to save before conversion.');
         } finally {
             setSaving(false);
         }
@@ -1489,7 +1560,7 @@ export default function WorkflowEditor() {
             alert('Please Save the document first to preview and print.');
             return;
         }
-        window.open(`/workflows/print/${id}`, '_blank');
+        window.open(`/workflows/print/${id}?showSignature=${showSignature}`, '_blank');
     };
 
     const handleAnnotate = async () => {
@@ -1554,12 +1625,13 @@ export default function WorkflowEditor() {
             itemsContent += "--------------------------------------------------\n";
         }
 
-        const effectiveSalesperson = (isAnithaType && (formData.salesperson_name === 'N.R.KUMAR' || formData.salesperson_name === 'KUMAR' || !formData.salesperson_name)) ? 'ANITHA' : (formData.salesperson_name || 'CEL-RON Team');
+        const effectiveSalesperson = (isAnithaType && (formData.salesperson_name === 'N.R.KUMAR' || formData.salesperson_name === 'KUMAR' || !formData.salesperson_name)) ? 'ANITHA (Ms)' : (formData.salesperson_name || 'CEL-RON Team');
         const effectiveEmail = (isAnithaType && (formData.salesperson_email === 'sales@celron.net' || formData.salesperson_email === 'kumar@celron.net' || !formData.salesperson_email)) ? 'accounts@celron.net' : (formData.salesperson_email || 'sales@celron.net');
-        const effectivePhone = (isAnithaType && (formData.salesperson_phone === '+65 97686891' || formData.salesperson_phone === '+65 81962270' || !formData.salesperson_phone)) ? '+65 91090347' : (formData.salesperson_phone || '+65 81962270');
+        const effectivePhone = (isAnithaType && (formData.salesperson_phone === '+65 97686891' || formData.salesperson_phone === '+65 81962270' || !formData.salesperson_phone)) ? '+6581962270' : (formData.salesperson_phone || '+6581962270');
 
         const defaultAddress = '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787';
-        const footer = `\n\nBest Regards,\n\n${effectiveSalesperson}\n${settings?.company_name || 'CELRON ENTERPRISES PTE LTD'}\n${settings?.address || defaultAddress}\nEmail: ${effectiveEmail} | Tel: ${effectivePhone}`;
+        const webInfo = isAnithaType ? '\nweb: www.celron.net / www.celron.shop' : '';
+        const footer = `\n\nBest Regards,\n\n${effectiveSalesperson}\n${settings?.company_name || 'CELRON ENTERPRISES PTE LTD'}\n${settings?.address || defaultAddress}\nEmail: ${effectiveEmail} | Tel: ${effectivePhone}${webInfo}`;
 
         const effectiveType = (formData.document_type === 'Quotation' && (formData.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : formData.document_type;
         const body = `Dear ${contact?.name || 'Customer'},\n\nPlease find attached the ${effectiveType} (${formData.document_no}) for your review.${itemsContent}${footer}`;
@@ -1986,121 +2058,167 @@ export default function WorkflowEditor() {
             {/* Header / Actions */}
             <header className="editor-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <button className="icon-btn" onClick={() => navigate('/workflows')}>
+                    <button className="icon-btn" onClick={() => navigate(-1)} title="Go Back">
                         <ArrowLeft size={20} />
                     </button>
                     <div>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 700 }}>
-                            {formData.document_type === 'Enquiry' ? 'Enquiry to Supplier' : 
-                             (formData.document_type === 'Quotation' && (formData.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : 
-                             formData.document_type}
+                        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>
+                            {formData.document_type}
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <h1 style={{ fontSize: '1.5rem', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>{formData.document_no || 'Draft'}</h1>
-                            {formData.customer_po_no && (
-                                <div style={{ 
-                                    background: '#e0e7ff', 
-                                    color: '#4338ca', 
-                                    padding: '4px 12px', 
-                                    borderRadius: '20px', 
-                                    fontSize: '0.75rem', 
-                                    fontWeight: 700,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '6px',
-                                    border: '1px solid #c7d2fe'
-                                }}>
-                                    <Package size={14} /> PO: {formData.customer_po_no}
-                                </div>
-                            )}
+                        <div style={{ display: 'flex', alignItems: 'center' }}>
+                            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                <input 
+                                    type="text" 
+                                    value={formData.document_no || ''} 
+                                    onChange={(e) => setFormData({...formData, document_no: e.target.value.toUpperCase()})}
+                                    className="doc-no-input"
+                                    style={{
+                                        fontSize: '1.25rem',
+                                        fontWeight: 800,
+                                        color: 'var(--text-primary)',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        padding: '0 4px',
+                                        margin: 0,
+                                        width: 'auto',
+                                        minWidth: '150px',
+                                        outline: 'none',
+                                        fontFamily: 'inherit',
+                                        cursor: 'text'
+                                    }}
+                                    placeholder="Draft"
+                                    title="Click to edit document number"
+                                />
+                                <Pencil size={12} style={{ color: '#94a3b8', pointerEvents: 'none', opacity: 0.5 }} />
+                            </div>
                         </div>
-                        {formData.document_type === 'Enquiry' && (
-                            <button 
-                                className="btn-vibrant" 
-                                onClick={() => setShowFloatModal(true)}
-                                style={{ background: '#f59e0b', marginTop: '8px' }}
-                            >
-                                <ArrowRightLeft size={18} /> Float to Suppliers
-                            </button>
-                        )}
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '12px' }}>
-                    <button className="btn-vibrant" onClick={handleSave} disabled={saving}>
-                        <Save size={18} /> {saving ? 'Saving...' : 'Save'}
-                    </button>
-                    <button className="btn-vibrant-secondary" onClick={handlePrint}>
-                        <Printer size={18} /> Print PDF
-                    </button>
-                    <button className="btn-vibrant-secondary" onClick={handleAnnotate} disabled={saving}>
-                        <Pencil size={18} /> {saving ? 'Preparing...' : 'Sign & Annotate'}
-                    </button>
-                    <button className="btn-vibrant-secondary" onClick={handleEmail}>
-                        <Send size={18} /> Send by Email
-                    </button>
-                    <button className="btn-vibrant-secondary" style={{ background: '#25D366', color: '#fff', border: 'none' }} onClick={handleWhatsApp}>
-                        <MessageSquare size={18} /> Share via WhatsApp
-                    </button>
-                    {!isNew && (
-                        <button className="btn-vibrant-secondary" onClick={handleRevision}>
-                            <FileText size={18} /> Create Revision
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {/* Primary Actions */}
+                    <div style={{ display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '10px', gap: '4px' }}>
+                        <button className="btn-vibrant" onClick={handleSave} disabled={saving} style={{ padding: '8px 16px', fontSize: '0.85rem' }}>
+                            <Save size={16} /> {saving ? 'Saving...' : 'Save'}
                         </button>
-                    )}
-                    {!isNew && (formData.document_type?.toUpperCase() === 'QUOTATION' || formData.document_type?.toUpperCase() === 'ENQUIRY') && (
                         <button 
-                            className="btn-vibrant" 
-                            onClick={handleConvertToJob} 
-                            disabled={saving || formData.is_job} 
+                            className={`btn-vibrant-secondary ${!showSignature ? 'off' : ''}`} 
+                            onClick={() => setShowSignature(!showSignature)}
                             style={{ 
-                                background: formData.is_job ? '#94a3b8' : '#10b981', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '8px', 
-                                opacity: (saving || formData.is_job) ? 0.7 : 1,
-                                cursor: formData.is_job ? 'default' : 'pointer'
+                                background: showSignature ? '#fff' : 'transparent', 
+                                border: showSignature ? '1px solid #e2e8f0' : 'none',
+                                padding: '8px 12px',
+                                fontSize: '0.85rem'
                             }}
+                            title={showSignature ? "Signature Visible" : "Signature Hidden"}
                         >
-                            {formData.is_job ? <FileCheck size={18} /> : <Package size={18} />} 
-                            {formData.is_job ? 'Already Job' : (saving ? 'Processing...' : 'Convert to Job')}
+                            {showSignature ? <Eye size={16} /> : <EyeOff size={16} color="#94a3b8" />}
                         </button>
-                    )}
+                        <button className="btn-vibrant-secondary" onClick={handlePrint} style={{ border: 'none', background: 'transparent', padding: '8px 12px', fontSize: '0.85rem' }} title="Print PDF">
+                            <Printer size={16} /> <span className="hide-sm">Print</span>
+                        </button>
+                        <button className="btn-vibrant-secondary" onClick={handleAnnotate} disabled={saving} style={{ border: 'none', background: 'transparent', padding: '8px 12px', fontSize: '0.85rem' }} title="Sign & Annotate">
+                            <Pencil size={16} /> <span className="hide-sm">Sign</span>
+                        </button>
+                    </div>
 
-                    {!isNew && formData.is_job && (
-                        <div className="dropdown">
-                            <button className="btn-vibrant-secondary" style={{ background: '#8b5cf6', color: '#fff', border: 'none' }}>
-                                <Plus size={18} /> Generate Suite Document <ChevronDown size={14} />
+                    {/* Communication */}
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                        <button className="btn-vibrant-secondary" onClick={handleEmail} style={{ padding: '8px 12px', fontSize: '0.85rem' }}>
+                            <Send size={16} /> <span className="hide-sm">Email</span>
+                        </button>
+                        <button className="btn-vibrant-secondary" style={{ background: '#25D366', color: '#fff', border: 'none', padding: '8px 12px', fontSize: '0.85rem' }} onClick={handleWhatsApp}>
+                            <MessageSquare size={16} /> <span className="hide-sm">WhatsApp</span>
+                        </button>
+                    </div>
+
+                    {/* Financial / Ops */}
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                        {(formData.document_type === 'Tax Invoice' || formData.document_type === 'Proforma Invoice') && !isNew && (
+                            <button 
+                                className="btn-vibrant" 
+                                style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '8px 12px', fontSize: '0.85rem' }} 
+                                onClick={() => {
+                                    setPaymentPrefill(formData);
+                                    setShowPaymentModal(true);
+                                }}
+                            >
+                                <CreditCard size={16} /> <span className="hide-sm">Payment</span>
                             </button>
-                            <div className="dropdown-content">
-                                <button onClick={() => handleGenerateAssociatedDoc('Order Acknowledgment')}>Order Acknowledgment (ORA)</button>
-                                <button onClick={() => handleGenerateAssociatedDoc('Delivery Order')}>Delivery Order (DO)</button>
-                                <button onClick={() => handleGenerateAssociatedDoc('Packing List')}>Packing List (PKL)</button>
-                                <button onClick={() => handleGenerateAssociatedDoc('Proforma Invoice')}>Proforma Invoice (PRO)</button>
-                                <button onClick={() => handleGenerateAssociatedDoc('Tax Invoice')}>Tax Invoice (INV)</button>
-                                <button onClick={() => handleGenerateAssociatedDoc('Certificate')}>Certificate (CERT)</button>
-                                <button onClick={() => handleGenerateAssociatedDoc('Service Report')}>Service Report (SR)</button>
+                        )}
+                        {!isNew && (
+                            <button className="btn-vibrant-secondary" onClick={handleRevision} style={{ padding: '8px 12px', fontSize: '0.85rem' }}>
+                                <FileText size={16} /> <span className="hide-sm">Revision</span>
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Administrative Actions */}
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                        {!isNew && canAdmin && (
+                            <div className="dropdown" style={{ position: 'relative' }}>
+                                <button className="btn-vibrant-secondary" style={{ background: '#64748b', color: '#fff', border: 'none', padding: '8px 12px', fontSize: '0.85rem' }}>
+                                    <RefreshCw size={16} /> <span className="hide-sm">Reverse</span> <ChevronDown size={14} />
+                                </button>
+                                <div className="dropdown-content">
+                                    {formData.document_type === 'Quotation' && (
+                                        <button onClick={handleRevertQuotationToEnquiry}>Revert Quotation to Enquiry</button>
+                                    )}
+                                    {(formData.document_type === 'Tax Invoice' || formData.document_type === 'Proforma Invoice') && !formData.is_job && (
+                                        <button onClick={handleConvertInvoiceToJob}>Convert to Job Suite</button>
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )}
 
-                    {!isNew && formData.document_type === 'Proforma Invoice' && (
-                        <button 
-                            className="btn-vibrant" 
-                            onClick={handleConvertToTaxInvoice} 
-                            disabled={saving} 
-                            style={{ 
-                                background: '#ef4444', 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '8px', 
-                                opacity: saving ? 0.7 : 1
-                            }}
-                        >
-                            <FileText size={18} /> {saving ? 'Converting...' : 'Convert to Tax Invoice'}
-                        </button>
-                    )}
+                        {!isNew && (formData.document_type?.toUpperCase() === 'QUOTATION' || formData.document_type?.toUpperCase() === 'ENQUIRY') && (
+                            <button 
+                                className="btn-vibrant" 
+                                onClick={handleConvertToJob} 
+                                disabled={saving || formData.is_job} 
+                                style={{ 
+                                    background: formData.is_job ? '#94a3b8' : '#10b981', 
+                                    padding: '8px 12px',
+                                    fontSize: '0.85rem',
+                                    opacity: (saving || formData.is_job) ? 0.7 : 1,
+                                    cursor: formData.is_job ? 'default' : 'pointer'
+                                }}
+                            >
+                                {formData.is_job ? <FileCheck size={16} /> : <Package size={16} />} 
+                                <span className="hide-sm">{formData.is_job ? 'Already Job' : 'To Job'}</span>
+                            </button>
+                        )}
 
-                    <button className="icon-btn" onClick={() => navigate('/workflows')}>
+                        {!isNew && formData.is_job && (
+                            <div className="dropdown" style={{ position: 'relative' }}>
+                                <button className="btn-vibrant" style={{ background: '#8b5cf6', color: '#fff', border: 'none', padding: '8px 12px', fontSize: '0.85rem' }}>
+                                    <Plus size={16} /> <span className="hide-sm">Suite</span> <ChevronDown size={14} />
+                                </button>
+                                <div className="dropdown-content">
+                                    <button onClick={() => handleGenerateAssociatedDoc('Order Acknowledgment')}>Order Acknowledgment (ORA)</button>
+                                    <button onClick={() => handleGenerateAssociatedDoc('Delivery Order')}>Delivery Order (DO)</button>
+                                    <button onClick={() => handleGenerateAssociatedDoc('Packing List')}>Packing List (PKL)</button>
+                                    <button onClick={() => handleGenerateAssociatedDoc('Proforma Invoice')}>Proforma Invoice (PRO)</button>
+                                    <button onClick={() => handleGenerateAssociatedDoc('Tax Invoice')}>Tax Invoice (INV)</button>
+                                    <button onClick={() => handleGenerateAssociatedDoc('Certificate')}>Certificate (CERT)</button>
+                                    <button onClick={() => handleGenerateAssociatedDoc('Service Report')}>Service Report (SR)</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {!isNew && formData.document_type === 'Proforma Invoice' && (
+                            <button 
+                                className="btn-vibrant" 
+                                onClick={handleConvertToTaxInvoice} 
+                                disabled={saving} 
+                                style={{ background: '#ef4444', padding: '8px 12px', fontSize: '0.85rem' }}
+                            >
+                                <FileText size={16} /> <span className="hide-sm">To Invoice</span>
+                            </button>
+                        )}
+                    </div>
+
+                    <button className="icon-btn" onClick={() => navigate(-1)} style={{ background: '#fee2e2', color: '#ef4444', border: 'none' }} title="Close Editor">
                         <X size={20} />
                     </button>
                 </div>
@@ -2108,10 +2226,37 @@ export default function WorkflowEditor() {
 
             {/* Breadcrumb Status */}
             <div className="status-container">
-                <div className={`status-step ${formData.status === 'Draft' ? 'active' : ''}`}>Draft</div>
-                <div className={`status-step ${formData.status === 'Sent' ? 'active' : ''}`}>Sent</div>
-                <div className={`status-step ${formData.status === 'Confirmed' ? 'active' : 'confirmed'}`}>Confirmed</div>
-                <div className={`status-step ${formData.status === 'Cancelled' ? 'cancelled' : ''}`}>Cancelled</div>
+                {['Draft', 'Sent', 'Confirmed', 'Cancelled'].map((s) => (
+                    <div 
+                        key={s}
+                        className={`status-step ${formData.status === s ? (s === 'Confirmed' ? 'confirmed' : s === 'Cancelled' ? 'cancelled' : 'active') : ''}`}
+                        onClick={async () => {
+                            if (!canAdmin) return;
+                            if (formData.status === s) return;
+                            const confirmed = window.confirm(`Change status to ${s}?`);
+                            if (confirmed) {
+                                try {
+                                    const { error } = await supabase.from('workflow_documents').update({ status: s }).eq('id', id);
+                                    if (error) throw error;
+                                    setFormData(prev => ({ ...prev, status: s }));
+                                    toast.success(`Status updated to ${s}`);
+                                } catch (err) {
+                                    toast.error('Failed to update status');
+                                }
+                            }
+                        }}
+                        style={{ cursor: canAdmin ? 'pointer' : 'default', position: 'relative' }}
+                        title={
+                            s === 'Draft' ? 'Working copy, not yet finalized' :
+                            s === 'Sent' ? 'Document shared with customer/supplier' :
+                            s === 'Confirmed' ? 'Officially accepted/Job started' :
+                            'Document voided'
+                        }
+                    >
+                        {s}
+                        {formData.status === s && <Info size={10} style={{ position: 'absolute', top: 2, right: 2 }} />}
+                    </div>
+                ))}
             </div>
 
             <div className="editor-content">
@@ -2123,13 +2268,14 @@ export default function WorkflowEditor() {
                                 <label><User size={14} /> {formData.document_type === 'Purchase Order' ? 'Supplier' : 'Customer'}</label>
                                 <div style={{ position: 'relative' }}>
                                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                        <select className="form-select" name="partner_id" value={formData.partner_id} onChange={handleHeaderChange} style={{ flex: 1 }}>
-                                            <option value="">Choose {formData.document_type === 'Purchase Order' ? 'supplier' : 'partner'}...</option>
-                                            <option value="ADD_NEW" style={{ fontWeight: 700, color: 'var(--accent)' }}>+ Add New {formData.document_type === 'Purchase Order' ? 'Supplier' : 'Customer'}</option>
-                                            {partners
-                                                .filter(p => formData.document_type !== 'Purchase Order' || (p.types && p.types.includes('Supplier')) || p.category === 'Supplier')
-                                                .map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                                        </select>
+                                        <SearchableSelect 
+                                            options={partners.filter(p => formData.document_type !== 'Purchase Order' || (p.types && p.types.includes('Supplier')) || p.category === 'Supplier')}
+                                            value={formData.partner_id}
+                                            onChange={handleHeaderChange}
+                                            name="partner_id"
+                                            placeholder={`Choose ${formData.document_type === 'Purchase Order' ? 'supplier' : 'partner'}...`}
+                                            className="flex-1"
+                                        />
                                         {formData.partner_id && (
                                             <button 
                                                 className="icon-btn" 
@@ -2243,7 +2389,9 @@ export default function WorkflowEditor() {
                                 <input type="date" className="form-input" name="expiry_date" value={formData.expiry_date} onChange={handleHeaderChange} />
                             </div>
                             <div className="form-item">
-                                <label><Ship size={14} /> Vessel / Service Location</label>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <label><Ship size={14} /> Vessel / Service Location</label>
+                                </div>
                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                                     <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'center' }}>
                                         <select 
@@ -2272,6 +2420,18 @@ export default function WorkflowEditor() {
                                             >
                                                 <Pencil size={16} />
                                             </button>
+                                        )}
+                                        {formData.vessel_id && (
+                                            <a 
+                                                href={`https://www.google.com/search?q=${encodeURIComponent((vessels.find(v => v.id === formData.vessel_id)?.vessel_name || '') + ' vessel')}`} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="btn btn-sm btn-secondary"
+                                                style={{ padding: '8px', color: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                                title="Search Vessel on Google"
+                                            >
+                                                <Search size={16} />
+                                            </a>
                                         )}
                                     </div>
                                     <div style={{ flex: 1, display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -3925,7 +4085,7 @@ export default function WorkflowEditor() {
                                 {getSuggestedEmails().length > 0 && (
                                     <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                         <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
-                                            Select Contacts from Company
+                                            SELECT CONTACTS FROM COMPANY
                                         </label>
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                             {getSuggestedEmails().map((contact, idx) => (
@@ -4191,7 +4351,7 @@ export default function WorkflowEditor() {
                                                             description: item.name,
                                                             details: item.specification,
                                                             quantity: item.quantity || 1,
-                                                            uom: item.uom || 'PC(S)',
+                                                            uom: item.uom || 'UNIT(S)',
                                                             unit_price: item.unit_price || 0,
                                                             amount: (item.quantity || 1) * (item.unit_price || 0),
                                                             tax_enabled: true,
@@ -4270,7 +4430,17 @@ export default function WorkflowEditor() {
                 background: #f1f5f9;
             color: var(--accent);
                 }
-            .btn-vibrant {
+            .hide-sm {
+  display: inline-block;
+}
+
+@media (max-width: 1400px) {
+  .hide-sm {
+    display: none;
+  }
+}
+
+.btn-vibrant {
                 background: var(--accent);
             color: #fff;
             border: none;
@@ -4675,6 +4845,18 @@ export default function WorkflowEditor() {
                 documentData={formData}
                 onShareFile={performWhatsAppShare}
             />
+            {showPaymentModal && (
+                <ReceivePaymentModal 
+                    isOpen={showPaymentModal}
+                    onClose={() => {
+                        setShowPaymentModal(false);
+                        setPaymentPrefill(null);
+                        fetchPayments();
+                    }}
+                    prefillData={paymentPrefill}
+                    companyId={profile.company_id}
+                />
+            )}
         </div>
     );
 }

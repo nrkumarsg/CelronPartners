@@ -34,6 +34,8 @@ export default function EnquiryList() {
     const [editingEnquiry, setEditingEnquiry] = useState(null);
     const [editingJob, setEditingJob] = useState(null);
     const [newJobCount, setNewJobCount] = useState(0);
+    const [partners, setPartners] = useState([]);
+    const [selectedPartnerId, setSelectedPartnerId] = useState('');
 
     useEffect(() => {
         const tab = queryParams.get('tab') || 'enquiries';
@@ -45,8 +47,19 @@ export default function EnquiryList() {
     useEffect(() => {
         if (profile?.company_id) {
             fetchData();
+            fetchPartners();
         }
     }, [profile, activeTab]);
+
+    const fetchPartners = async () => {
+        const { supabase } = await import('../../lib/supabase');
+        const { data } = await supabase
+            .from('partners')
+            .select('id, name')
+            .eq('company_id', profile.company_id)
+            .order('name');
+        if (data) setPartners(data);
+    };
 
     const fetchData = async () => {
         setLoading(true);
@@ -275,8 +288,13 @@ export default function EnquiryList() {
             ref.toLowerCase().includes(query);
 
         const matchesStatus = statusFilter === 'All' || item.status === statusFilter;
+        
+        const matchesPartner = !selectedPartnerId || 
+            (activeTab === 'enquiries' ? item.customer_id === selectedPartnerId :
+             activeTab === 'jobs' ? item.customer_id === selectedPartnerId :
+             activeTab === 'rfqs' ? item.partner_id === selectedPartnerId : true);
 
-        return matchesSearch && matchesStatus;
+        return matchesSearch && matchesStatus && matchesPartner;
     });
 
     return (
@@ -456,6 +474,19 @@ export default function EnquiryList() {
                                 </>
                             )}
                         </select>
+                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '0 12px', minWidth: '220px' }}>
+                            <Filter size={16} color="var(--text-secondary)" style={{ marginRight: '8px' }} />
+                            <select
+                                style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, color: 'var(--text-primary)', fontSize: '0.9rem', cursor: 'pointer', height: '38px' }}
+                                value={selectedPartnerId}
+                                onChange={(e) => setSelectedPartnerId(e.target.value)}
+                            >
+                                <option value="">All Customers</option>
+                                {partners.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 </div>
 

@@ -152,7 +152,10 @@ export const generateDocumentPDF = async (job, documentType) => {
                 <div style="flex: 1;">
                     <h3 style="margin: 0 0 12px 0; font-size: 12px; color: #6366f1; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">CUSTOMER DETAILS</h3>
                     <p style="margin: 0 0 6px 0; font-weight: 800; font-size: 16px; color: #0f172a;">${customer?.name || 'Walk-in Customer'}</p>
-                    <p style="margin: 0 0 6px 0; font-size: 13px; color: #334155; line-height: 1.5; white-space: pre-wrap;">${customer?.address || 'N/A'}</p>
+                    <p style="margin: 0 0 6px 0; font-size: 13px; color: #334155; line-height: 1.5; white-space: pre-wrap;">
+                        ${customer?.address || 'N/A'}
+                        ${(customer?.city || customer?.country || customer?.pincode) ? `\n${[customer?.city, customer?.country, customer?.pincode].filter(Boolean).join(', ')}` : ''}
+                    </p>
                     <p style="margin: 0; font-size: 13px; color: #64748b;"><strong>Contact:</strong> ${customer?.contact_person || 'N/A'}</p>
                 </div>
             </div>

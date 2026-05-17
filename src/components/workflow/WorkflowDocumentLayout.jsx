@@ -38,7 +38,7 @@ const amountToWords = (amount, currency = 'SGD') => {
  * 1. Screen Preview / Print Page
  * 2. Background PDF generation for emails
  */
-const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, paynowBase64 }) => {
+const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, paynowBase64, showSignature = true }) => {
     if (!doc) return null;
 
     // Design Tokens / Standard Typography
@@ -177,10 +177,31 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
             <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', alignItems: 'stretch' }}>
                 <div style={{ flex: 1, border: styles.border, borderRadius: '10px', padding: '12px', display: 'flex', flexDirection: 'column' }}>
                     <div style={{ ...styles.h3, marginBottom: '4px' }}>{isPayment ? 'RECEIVED FROM:' : 'TO:'}</div>
-                    <div style={styles.bodyBold}>{doc.partners?.name || 'Walk-in Customer'}</div>
-                    <div style={{ ...styles.small, marginTop: '2px' }}>{doc.partners?.address || ''}</div>
+                    {hasVessel && !hasLocation && ['Tax Invoice', 'Proforma Invoice', 'Delivery Order', 'Packing List'].includes(doc.document_type) && (
+                        <div style={styles.bodyBold}>MASTER AND OWNER OF {vesselName.toUpperCase()}</div>
+                    )}
+                    <div style={styles.bodyBold}>
+                        {hasVessel && !hasLocation && ['Tax Invoice', 'Proforma Invoice', 'Delivery Order', 'Packing List'].includes(doc.document_type) ? 'C/O ' : ''}
+                        {doc.partners?.name || 'Walk-in Customer'}
+                    </div>
+                    <div style={{ ...styles.small, marginTop: '2px', whiteSpace: 'pre-line' }}>
+                        {doc.partners?.address || ''}
+                        {(doc.partners?.city || doc.partners?.pincode || doc.partners?.country) && (
+                            <div>
+                                {[doc.partners?.city, doc.partners?.country, doc.partners?.pincode].filter(Boolean).join(', ')}
+                            </div>
+                        )}
+                    </div>
                     <div style={{ ...styles.small, marginTop: '4px' }}>
-                        <strong>Phone:</strong> {doc.partners?.phone1 || doc.partners?.phone2 || '-'} &nbsp;&nbsp; <strong>Email:</strong> {doc.partners?.email1 || doc.partners?.email2 || '-'}
+                        {(doc.partners?.phone1 || doc.partners?.phone || doc.partners?.phone2) && (
+                            <span><strong>Phone:</strong> {doc.partners?.phone1 || doc.partners?.phone || doc.partners?.phone2} &nbsp;&nbsp;</span>
+                        )}
+                        {(doc.partners?.email1 || doc.partners?.email || doc.partners?.email2) && (
+                            <span><strong>Email:</strong> {doc.partners?.email1 || doc.partners?.email || doc.partners?.email2}</span>
+                        )}
+                        {doc.partners?.weblink && (
+                            <div style={{ color: '#1e3a8a', fontSize: '9px', marginTop: '2px' }}>{doc.partners.weblink}</div>
+                        )}
                     </div>
                     <div style={{ borderTop: '1px solid #e2e8f0', marginTop: '8px', paddingTop: '8px' }}>
                         <div style={styles.bodyBold}>ATTN: {doc.contacts?.name || doc.partners?.contact_person || 'N/A'}</div>
@@ -230,8 +251,8 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                             <tr>
                                 <td style={{ padding: '4px 10px', background: '#f8fafc', ...styles.h3, borderRight: styles.border, verticalAlign: 'top' }}>SALESPERSON</td>
                                 <td style={{ padding: '4px 10px', ...styles.bodyBold }}>
-                                    {((isAnithaType && (doc.salesperson_name === 'N.R.KUMAR' || doc.salesperson_name === 'KUMAR' || !doc.salesperson_name)) ? 'ANITHA' : (doc.salesperson_name || 'ANITHA')).toUpperCase()}<br/>
-                                    <span style={{ fontWeight: 600 }}>{(isAnithaType && (doc.salesperson_phone === '+65 97686891' || doc.salesperson_phone === '+65 81962270' || !doc.salesperson_phone)) ? '+65 91090347' : (doc.salesperson_phone || '+65 8196 2270')}</span>
+                                    {((isAnithaType && (doc.salesperson_name === 'N.R.KUMAR' || doc.salesperson_name === 'KUMAR' || !doc.salesperson_name)) ? 'ANITHA (Ms)' : (doc.salesperson_name || 'ANITHA (Ms)')).toUpperCase()}<br/>
+                                    <span style={{ fontWeight: 600 }}>{(isAnithaType && (doc.salesperson_phone === '+65 97686891' || doc.salesperson_phone === '+65 81962270' || !doc.salesperson_phone)) ? '+6581962270' : (doc.salesperson_phone || '+6581962270')}</span>
                                     <span style={{ fontWeight: 400, fontSize: '9px', color: '#64748b', marginLeft: '10px' }}>| {(isAnithaType && (doc.salesperson_email === 'sales@celron.net' || doc.salesperson_email === 'kumar@celron.net' || !doc.salesperson_email)) ? 'accounts@celron.net' : (doc.salesperson_email || 'sales@celron.net')}</span>
                                 </td>
                             </tr>
@@ -426,7 +447,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                             overflow: 'hidden'
                         }}>
                             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                {signatureBase64 && <img src={signatureBase64} alt="Signature" style={{ maxHeight: '60px' }} />}
+                                {showSignature && signatureBase64 && <img src={signatureBase64} alt="Signature" style={{ maxHeight: '60px' }} />}
                             </div>
                             <div style={{ background: '#f8fafc', borderTop: '1px solid #e2e8f0', padding: '2px 0' }}>
                                 <div style={{ ...styles.bodyBold, fontSize: '8px' }}>AUTHORIZED SIGNATURE</div>

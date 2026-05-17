@@ -36,9 +36,9 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
 
     const isAnithaType = ['Tax Invoice', 'Purchase Order', 'Delivery Order', 'Proforma Invoice', 'Packing List', 'Statement Of Account', 'Order Acknowledgment'].includes(document_type);
     
-    const effectiveSalesperson = (isAnithaType && (salesperson_name === 'N.R.KUMAR' || salesperson_name === 'KUMAR' || !salesperson_name)) ? 'ANITHA' : (salesperson_name || 'ANITHA');
+    const effectiveSalesperson = (isAnithaType && (salesperson_name === 'N.R.KUMAR' || salesperson_name === 'KUMAR' || !salesperson_name)) ? 'ANITHA (Ms)' : (salesperson_name || 'ANITHA (Ms)');
     const effectiveEmail = (isAnithaType && (documentData.salesperson_email === 'sales@celron.net' || documentData.salesperson_email === 'kumar@celron.net' || !documentData.salesperson_email)) ? 'accounts@celron.net' : (documentData.salesperson_email || 'sales@celron.net');
-    const effectivePhone = (isAnithaType && (documentData.salesperson_phone === '+65 97686891' || documentData.salesperson_phone === '+65 81962270' || !documentData.salesperson_phone)) ? '+65 91090347' : (documentData.salesperson_phone || '+65 8196 2270');
+    const effectivePhone = (isAnithaType && (documentData.salesperson_phone === '+65 97686891' || documentData.salesperson_phone === '+65 81962270' || !documentData.salesperson_phone)) ? '+6581962270' : (documentData.salesperson_phone || '+6581962270');
 
     // Helper to convert image URL to base64 for reliable rendering
     const getBase64Image = async (url) => {
@@ -129,7 +129,13 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
             <div style="padding: 20px 50px 10px 50px;">
                 <div style="margin-bottom: 20px;">
                     <div style="font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 4px;">${partners?.name || 'Walk-in Customer'}</div>
-                    <div style="font-size: 11px; color: #475569; line-height: 1.5; max-width: 450px; white-space: pre-wrap;">${partners?.address || ''}</div>
+                    <div style="font-size: 11px; color: #475569; line-height: 1.5; max-width: 450px; white-space: pre-wrap;">
+                        ${partners?.address || ''}
+                        ${(partners?.city || partners?.country || partners?.pincode) ? `\n${[partners?.city, partners?.country, partners?.pincode].filter(Boolean).join(', ')}` : ''}
+                        ${(partners?.phone1 || partners?.phone) ? `\nTel: ${partners?.phone1 || partners?.phone}` : ''}
+                        ${(partners?.email1 || partners?.email) ? `\nEmail: ${partners?.email1 || partners?.email}` : ''}
+                        ${partners?.weblink ? `\n${partners.weblink}` : ''}
+                    </div>
                     ${partners?.registration_no ? `<div style="font-size: 11px; color: #475569; margin-top: 2px;">GST No.: ${partners.registration_no}</div>` : ''}
                 </div>
 

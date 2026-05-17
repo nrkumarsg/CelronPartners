@@ -28,6 +28,7 @@
     "react": "^19.2.0",
     "react-barcode": "^1.6.1",
     "react-dom": "^19.2.0",
+    "react-hot-toast": "^2.6.0",
     "react-image-crop": "^11.0.10",
     "react-markdown": "^10.1.0",
     "react-quill-new": "^3.8.3",

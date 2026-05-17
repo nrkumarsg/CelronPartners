@@ -1,5 +1,5 @@
 export const ITEM_UNITS = [
-    "AS ACTUAL",
+    "UNIT(S)",
     "DRUM/ROL",
     "LENGTH(S)",
     "CTRN(S)",
@@ -29,6 +29,5 @@ export const ITEM_UNITS = [
     "TRIP(S)",
     "KG(S)",
     "MTR(S)",
-    "UNIT(S)",
     "CONTAINER(S)"
 ];

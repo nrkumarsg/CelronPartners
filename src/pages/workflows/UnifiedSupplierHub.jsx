@@ -49,13 +49,25 @@ export default function UnifiedSupplierHub() {
     const [selectedEnquiry, setSelectedEnquiry] = useState(null);
     const [isFloatModalOpen, setIsFloatModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [partners, setPartners] = useState([]);
+    const [selectedPartnerId, setSelectedPartnerId] = useState('');
 
     useEffect(() => {
         if (profile?.company_id) {
             fetchStats();
             fetchData();
+            fetchPartners();
         }
     }, [profile, activeTab]);
+
+    const fetchPartners = async () => {
+        const { data: pData } = await supabase
+            .from('partners')
+            .select('id, name')
+            .eq('company_id', profile.company_id)
+            .order('name');
+        if (pData) setPartners(pData);
+    };
 
     const fetchStats = async () => {
         try {
@@ -134,26 +146,29 @@ export default function UnifiedSupplierHub() {
         }
     };
 
-    const filteredData = data.filter(item => {
-        const query = searchQuery.toLowerCase();
+        const matchesPartner = !selectedPartnerId || 
+            (activeTab === 'customer_enquiries' ? item.partner_id === selectedPartnerId :
+             activeTab === 'rfq_floats' ? item.partner_id === selectedPartnerId :
+             activeTab === 'supplier_quotes' ? item.partner_id === selectedPartnerId :
+             activeTab === 'orders_to_suppliers' ? item.partner_id === selectedPartnerId : true);
+
         if (activeTab === 'customer_enquiries') {
-            return (item.enquiry_no?.toLowerCase().includes(query) || 
+            return matchesPartner && (item.enquiry_no?.toLowerCase().includes(query) || 
                     item.customer?.name?.toLowerCase().includes(query) ||
                     item.subject?.toLowerCase().includes(query));
         } else if (activeTab === 'rfq_floats') {
-            return (item.document_no?.toLowerCase().includes(query) || 
+            return matchesPartner && (item.document_no?.toLowerCase().includes(query) || 
                     item.partners?.name?.toLowerCase().includes(query) ||
                     item.subject?.toLowerCase().includes(query));
         } else if (activeTab === 'supplier_quotes') {
-            return (item.enquiry?.enquiry_no?.toLowerCase().includes(query) || 
+            return matchesPartner && (item.enquiry?.enquiry_no?.toLowerCase().includes(query) || 
                     item.supplier?.name?.toLowerCase().includes(query));
         } else if (activeTab === 'orders_to_suppliers') {
-            return (item.document_no?.toLowerCase().includes(query) || 
+            return matchesPartner && (item.document_no?.toLowerCase().includes(query) || 
                     item.partners?.name?.toLowerCase().includes(query) ||
                     item.subject?.toLowerCase().includes(query));
         }
-        return true;
-    });
+        return matchesPartner;
 
     const stripHtml = (html) => {
         if (!html) return '';
@@ -248,15 +263,31 @@ export default function UnifiedSupplierHub() {
                             </button>
                         );
                     })()}
-                    <div style={{ position: 'relative', width: '300px' }}>
-                        <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                        <input 
-                            type="text" 
-                            placeholder="Quick Search..."
-                            style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '0.9rem' }}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
+                    <div style={{ display: 'flex', gap: '12px' }}>
+                        <div style={{ position: 'relative', width: '250px' }}>
+                            <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                            <input 
+                                type="text" 
+                                placeholder="Quick Search..."
+                                style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '0.9rem' }}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                        <div style={{ position: 'relative', width: '220px' }}>
+                            <Filter size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                            <select
+                                style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '0.9rem', cursor: 'pointer', appearance: 'none' }}
+                                value={selectedPartnerId}
+                                onChange={(e) => setSelectedPartnerId(e.target.value)}
+                            >
+                                <option value="">All Partners</option>
+                                {partners.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }} />
+                        </div>
                     </div>
                 </div>
             </header>

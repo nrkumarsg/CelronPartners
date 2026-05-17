@@ -17,6 +17,13 @@ export default function WorkflowPrintPreview() {
     const [logoBase64, setLogoBase64] = useState('');
     const [signatureBase64, setSignatureBase64] = useState('');
     const [paynowBase64, setPaynowBase64] = useState('');
+    const [showSignature, setShowSignature] = useState(true);
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const sigParam = params.get('showSignature');
+        if (sigParam === 'false') setShowSignature(false);
+    }, []);
 
     const toBase64 = url => fetch(url, { mode: 'cors' })
         .then(response => response.blob())
@@ -32,6 +39,27 @@ export default function WorkflowPrintPreview() {
             fetchData();
         }
     }, [id, profile]);
+
+    useEffect(() => {
+        const searchParams = new URLSearchParams(window.location.search);
+        const autoDownload = searchParams.get('autoDownload');
+        
+        // Wait until document, settings and essential images are loaded
+        const logoReady = !settings?.logo_url || logoBase64;
+        const sigReady = !settings?.signature_url || signatureBase64;
+        const paynowReady = !settings?.paynow_url || paynowBase64;
+
+        if (autoDownload === 'true' && doc && settings && !loading && logoReady && sigReady && paynowReady) {
+            const timer = setTimeout(() => {
+                handleDownload();
+                // Close the tab after download starts to keep user experience clean
+                setTimeout(() => {
+                    window.close();
+                }, 2000);
+            }, 1000);
+            return () => clearTimeout(timer);
+        }
+    }, [doc, settings, loading, logoBase64, signatureBase64, paynowBase64]);
 
     const fetchData = async () => {
         setLoading(true);
@@ -75,38 +103,52 @@ export default function WorkflowPrintPreview() {
 
     const handleDownload = () => {
         const element = document.getElementById('print-paper-content');
+        if (!element) {
+            alert("Error: Content not found");
+            return;
+        }
         
-        // Build descriptive filename: Type_No - Customer - Project/Vessel
-        const customerName = doc.partners?.name || 'Customer';
-        const projectOrVessel = doc.vessels?.name || doc.subject || 'Project';
-        const effectiveType = (doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : (doc.document_type || 'Document');
-        const rawFilename = `${effectiveType}_${doc.document_no || 'Draft'} - ${customerName} - ${projectOrVessel}`;
+        // Build descriptive filename: Type_No - Customer
+        const customerName = (doc.partners?.name || 'Customer').substring(0, 30);
+        const docNo = doc.document_no || 'Draft';
+        const type = doc.document_type || 'Document';
         
-        // Sanitize filename to remove invalid characters
-        const safeFilename = rawFilename.replace(/[/\\?%*:|"<>]/g, '-').trim();
+        // Sanitize filename to remove invalid characters and ensure .pdf extension
+        const safeFilename = `${type}_${docNo}_${customerName}`.replace(/[/\\?%*:|"<>]/g, '-').trim();
+        const finalFilename = `${safeFilename}.pdf`;
 
         const opt = {
-            margin: 0,
-            filename: `${safeFilename}.pdf`,
+            margin: [0, 0, 0, 0],
+            filename: finalFilename,
             image: { type: 'jpeg', quality: 0.98 },
             html2canvas: { scale: 2, useCORS: true, logging: false },
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
         
-        // Add page numbers to each page
-        html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf) => {
+        // Add page numbers and save
+        html2pdf().from(element).set(opt).toPdf().get('pdf').then((pdf) => {
             const totalPages = pdf.internal.getNumberOfPages();
             for (let i = 1; i <= totalPages; i++) {
                 pdf.setPage(i);
                 pdf.setFontSize(8);
-                pdf.setTextColor(150); // Gray color
+                pdf.setTextColor(150);
                 pdf.text(
                     `Page ${i} of ${totalPages}`, 
                     pdf.internal.pageSize.getWidth() - 25, 
                     pdf.internal.pageSize.getHeight() - 10
                 );
             }
-        }).save();
+            return pdf.output('blob');
+        }).then((blob) => {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = finalFilename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 2000);
+        });
     };
 
     if (loading) return <div className="text-center py-20">Loading Document Preview...</div>;
@@ -180,6 +222,7 @@ export default function WorkflowPrintPreview() {
                     logoBase64={logoBase64}
                     signatureBase64={signatureBase64}
                     paynowBase64={paynowBase64}
+                    showSignature={showSignature}
                 />
                 <div className="page-footer"></div>
             </div>

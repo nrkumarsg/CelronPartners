@@ -254,6 +254,15 @@ export default function Sidebar() {
                     <span className="nav-text" style={{ fontWeight: 800, color: '#10b981' }}>JOBS</span>
                 </NavLink>
 
+                <NavLink 
+                    to="/invoices" 
+                    className={`nav-link ${(location.pathname === '/invoices' || (location.pathname === '/workflows' && location.search.includes('type=Tax+Invoice'))) ? 'active' : ''}`} 
+                    title="Invoices"
+                >
+                    <DollarSign size={20} color="#14b8a6" />
+                    <span className="nav-text" style={{ fontWeight: 800, color: '#14b8a6' }}>Invoices</span>
+                </NavLink>
+
                 <NavLink to="/soa" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Statement of Account">
                     <ClipboardList size={20} color="#ec4899" />
                     <span className="nav-text" style={{ fontWeight: 800, color: '#ec4899' }}>Statement of Account</span>

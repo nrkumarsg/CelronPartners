@@ -2,6 +2,7 @@ import { provisionPartnerStructure, uploadFileToDrive, makeFilePublic } from '..
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { 
     Search, Printer, Send, Filter, Calendar, 
     ChevronRight, ArrowLeft, Download, Loader2,
@@ -402,7 +403,7 @@ export default function StatementOfAccount() {
             handleGenerate(); // Refresh
         } catch (err) {
             console.error('Delete Error:', err);
-            alert(`Failed to delete: ${err.message}`);
+            toast.error(`Failed to delete: ${err.message}`);
         }
     };
 
@@ -416,7 +417,7 @@ export default function StatementOfAccount() {
         try {
             const token = await getStoredToken();
             if (!token) {
-                alert('Google Drive connection required. Please connect via Corporate Vault > Connect Google.');
+                toast.error('Google Drive connection required. Please connect via Corporate Vault > Connect Google.');
                 setLoading(false);
                 return;
             }
@@ -451,7 +452,7 @@ export default function StatementOfAccount() {
                     window.open(waUrl, '_blank');
                 } else {
                     const subject = subjectOverride || `Statement of Account - ${statementData.partner?.name}`;
-                    const body = `${message}\n\nYou can view/download the full statement here:\n${link}\n\nBest Regards,\n${profile?.full_name || 'Accounts Team'}`;
+                    const body = `${message}\n\nView/Download Statement: ${link}`;
                     let mailtoUrl = `mailto:${recipient || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                     if (cc) mailtoUrl += `&cc=${encodeURIComponent(cc)}`;
                     if (bcc) mailtoUrl += `&bcc=${encodeURIComponent(bcc)}`;
@@ -460,19 +461,19 @@ export default function StatementOfAccount() {
             }
         } catch (err) {
             console.error('File sharing failed:', err);
-            alert('Failed to share file: ' + err.message);
+            toast.error('Failed to share file: ' + err.message);
         } finally {
             setLoading(false);
         }
     };
 
     const handleArchive = async () => {
-        if (!statementData) return alert('Please generate a statement first.');
+        if (!statementData) return toast.error('Please generate a statement first.');
         setLoading(true);
         try {
             const token = await getStoredToken();
             if (!token) {
-                alert('Google Drive connection required. Please connect via Corporate Vault > Connect Google.');
+                toast.error('Google Drive connection required. Please connect via Corporate Vault > Connect Google.');
                 setLoading(false);
                 return;
             }
@@ -502,7 +503,7 @@ export default function StatementOfAccount() {
             const uploadRes = await uploadFileToDrive(token, file, { folderId });
 
             if (uploadRes?.id) {
-                alert(`SUCCESS: Statement Archived!\n\nFolder: ${archivePath}\nFilename: ${opt.filename}`);
+                toast.success(`Statement Archived!\nFolder: ${archivePath}`);
             }
         } catch (err) {
             console.error('Archive failed:', err);
@@ -513,12 +514,12 @@ export default function StatementOfAccount() {
     };
 
     const handleViewArchives = async () => {
-        if (!statementData) return alert('Please select a customer first.');
+        if (!statementData) return toast.error('Please select a customer first.');
         setLoading(true);
         try {
             const token = await getStoredToken();
             if (!token) {
-                alert('Google Drive connection required. Please connect via Corporate Vault > Connect Google.');
+                toast.error('Google Drive connection required. Please connect via Corporate Vault > Connect Google.');
                 setLoading(false);
                 return;
             }
@@ -539,12 +540,13 @@ export default function StatementOfAccount() {
     };
 
     const handleEmail = () => {
-        if (!statementData) return alert('Please generate a statement first.');
-        handleShareFile('email', `Dear ${statementData.partner?.name},\n\nPlease find the Statement of Account for your reference.\n\nTotal Outstanding: SGD ${statementData.closingBalance.toLocaleString()}`);
+        if (!statementData) return toast.error('Please generate a statement first.');
+        const defaultMsg = `Dear ${statementData.partner?.name || 'Accounts Team'},\n\nPlease find the Statement of Account (SOA-${new Date().toISOString().split('T')[0]}) for your review and reference.\n\nAwaiting for your valuable payment.\n\nTotal Due: SGD ${statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}.\n\nKind Regards,\nANITHA (Ms)\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6581962270\nweb: www.celron.net / www.celron.shop`;
+        handleShareFile('email', defaultMsg);
     };
 
     const handleWhatsApp = () => {
-        if (!statementData) return alert('Please generate a statement first.');
+        if (!statementData) return toast.error('Please generate a statement first.');
         setShowWhatsAppModal(true);
     };
 
@@ -1047,8 +1049,8 @@ export default function StatementOfAccount() {
                                 <div style={{ textAlign: 'right' }}>
                                     <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#1e3a8a' }}>{profile?.company_name || 'CEL-RON ENTERPRISES PTE LTD'}</h2>
                                     <div style={{ fontSize: '0.6rem', color: '#64748b', marginTop: '4px', lineHeight: 1.3 }}>
-                                        <div>{settings?.address || '10, Jln, Besar, #03-05, Singapore 208787'}</div>
-                                        <div>Tel: {settings?.phone || '+65 8196 2270'} | Email: {settings?.email || 'accounts@celron.net'} | www.celron.net</div>
+                                        <div>{settings?.address || '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787'}</div>
+                                        <div>Tel: {settings?.phone || '+6581962270'} | Email: {settings?.email || 'accounts@celron.net'} | www.celron.net</div>
                                     </div>
                                 </div>
                             </div>
@@ -1059,16 +1061,30 @@ export default function StatementOfAccount() {
                                     <div style={{ fontSize: '0.55rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Statement To</div>
                                     <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, color: '#0f172a' }}>{statementData.partner?.name}</h3>
                                     <div style={{ marginTop: '6px', color: '#475569', fontSize: '0.65rem', lineHeight: 1.4 }}>
-                                        {statementData.partner?.address && (
-                                            <div style={{ whiteSpace: 'pre-line' }}>
-                                                {statementData.partner.address.includes('Henderson Industrial Park') && !statementData.partner.address.includes('159507') 
-                                                    ? `${statementData.partner.address.replace(/^Singapore,?\s*/i, '')}, Singapore 159507` 
-                                                    : statementData.partner.address}
-                                            </div>
-                                        )}
-                                        {statementData.partner?.phone && <div>Tel: {statementData.partner.phone}</div>}
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                                            <div style={{ fontWeight: 600 }}>{statementData.partner?.email}</div>
+                                        <div style={{ whiteSpace: 'pre-line' }}>
+                                            {statementData.partner?.address}
+                                            {(statementData.partner?.city || statementData.partner?.pincode || statementData.partner?.country) && (
+                                                <div>
+                                                    {[
+                                                        statementData.partner?.city,
+                                                        statementData.partner?.country,
+                                                        statementData.partner?.pincode
+                                                    ].filter(Boolean).join(', ')}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div style={{ marginTop: '4px' }}>
+                                            {(statementData.partner?.phone1 || statementData.partner?.phone) && (
+                                                <div>Tel: {statementData.partner.phone1 || statementData.partner.phone}</div>
+                                            )}
+                                            {(statementData.partner?.email1 || statementData.partner?.email) && (
+                                                <div style={{ fontWeight: 600 }}>{statementData.partner.email1 || statementData.partner.email}</div>
+                                            )}
+                                            {statementData.partner?.weblink && (
+                                                <div style={{ color: '#1e3a8a', fontSize: '0.6rem' }}>{statementData.partner.weblink}</div>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-12px' }}>
                                             <div style={{ fontSize: '0.6rem', background: '#e2e8f0', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, color: '#1e3a8a' }}>
                                                 TERMS: {statementData.partner?.customerCreditTime && statementData.partner.customerCreditTime !== '0' ? `${statementData.partner.customerCreditTime} DAYS` : 'C.O.D'}
                                             </div>
@@ -1299,7 +1315,7 @@ export default function StatementOfAccount() {
                 <WhatsAppShareModal 
                     isOpen={showWhatsAppModal}
                     onClose={() => setShowWhatsAppModal(false)}
-                    contacts={selectedPartner ? contacts.filter(c => c.partner_id === selectedPartner) : []}
+                    contacts={selectedPartner ? contacts.filter(c => c.partnerId === selectedPartner) : []}
                     partner={statementData?.partner || null}
                     documentData={{
                         document_type: statementData ? 'Statement of Account' : 'Aging Summary Report',
@@ -1319,6 +1335,7 @@ export default function StatementOfAccount() {
                     onClose={() => setShowEmailModal(false)}
                     partner={statementData?.partner || null}
                     contacts={contacts}
+                    dateRange={dateRange}
                     documentData={{
                         document_type: statementData ? 'Statement of Account' : 'Aging Summary Report',
                         document_no: statementData ? `SOA-${new Date().toISOString().split('T')[0]}` : `SUM-${new Date().toISOString().split('T')[0]}`,
@@ -1331,7 +1348,7 @@ export default function StatementOfAccount() {
     );
 }
 
-function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, contacts = [] }) {
+function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, contacts = [], dateRange }) {
     const [emailPreview, setEmailPreview] = useState({
         to: partner?.email || 'accounts@celron.net',
         cc: '',
@@ -1341,29 +1358,54 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
         attachments: []
     });
 
+    const formatDate = (d) => {
+        if (!d) return '-';
+        const date = new Date(d);
+        const dd = String(date.getDate()).padStart(2, '0');
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const yyyy = date.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+    };
+
     useEffect(() => {
         if (isOpen) {
-            const defaultMsg = `Dear ${partner?.name || 'Accounts Team'},\n\nPlease find the ${documentData.document_type} (${documentData.document_no}) for your review and reference.\n\nTotal Due: SGD ${documentData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}\n\nKind Regards,`;
+            const periodStr = dateRange ? `Period: ${formatDate(dateRange.start)} - ${formatDate(dateRange.end)}\n\n` : '';
+            const defaultMsg = `Dear ${partner?.name || 'Accounts Team'},\n\n${periodStr}Please find the ${documentData.document_type} (${documentData.document_no}) for your review and reference.\n\nAwaiting for your valuable payment.\n\nTotal Due: SGD ${documentData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}.\n\nKind Regards,\nANITHA (Ms)\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6581962270\nweb: www.celron.net / www.celron.shop`;
             setEmailPreview(prev => ({ ...prev, body: defaultMsg }));
         }
-    }, [isOpen, partner, documentData]);
+    }, [isOpen, partner, documentData, dateRange]);
 
     const getSuggestedEmails = () => {
-        const companyContacts = partner ? contacts.filter(c => c.partner_id === partner.id) : [];
-        const suggestions = companyContacts.filter(c => c.email).map(c => ({ name: c.name, email: c.email }));
-        suggestions.push({ name: 'Accounts Team', email: 'accounts@celron.net' });
-        suggestions.push({ name: 'Director Review', email: 'director@celron.net' });
-        if (partner?.email && !suggestions.find(s => s.email === partner.email)) {
-            suggestions.unshift({ name: partner.name, email: partner.email });
+        const suggestions = [];
+        
+        // 1. Partner main email (Company)
+        if (partner?.email) {
+            suggestions.push({ name: partner.name, email: partner.email, type: 'Company' });
         }
+        
+        // 2. Individual Contacts
+        const companyContacts = partner ? contacts.filter(c => c.partnerId === partner.id) : [];
+        companyContacts.forEach(c => {
+            if (c.email && !suggestions.find(s => s.email === c.email)) {
+                suggestions.push({ name: c.name, email: c.email, type: 'Contact' });
+            }
+        });
+        
+        // 3. Office emails
+        suggestions.push({ name: 'Our Office', email: 'accounts@celron.net', type: 'Internal' });
+        suggestions.push({ name: 'Director Review', email: 'director@celron.net', type: 'Internal' });
+        
         return suggestions;
     };
 
     const addEmailToField = (field, emailToAdd) => {
         setEmailPreview(prev => {
             const current = prev[field] || '';
-            const newEmails = current ? `${current}; ${emailToAdd}` : emailToAdd;
-            return { ...prev, [field]: newEmails };
+            const emails = current.split(';').map(e => e.trim()).filter(Boolean);
+            if (!emails.includes(emailToAdd)) {
+                emails.push(emailToAdd);
+            }
+            return { ...prev, [field]: emails.join('; ') };
         });
     };
 
@@ -1386,14 +1428,12 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '16px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>To</label>
-                            <div style={{ position: 'relative', display: 'flex', gap: '8px' }}>
-                                <input
-                                    type="email"
-                                    style={{ flex: 1, padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
-                                    value={emailPreview.to}
-                                    onChange={(e) => setEmailPreview(prev => ({ ...prev, to: e.target.value }))}
-                                />
-                            </div>
+                            <input
+                                type="email"
+                                style={{ flex: 1, padding: '10px 14px', border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none', fontSize: '14px', boxSizing: 'border-box' }}
+                                value={emailPreview.to}
+                                onChange={(e) => setEmailPreview(prev => ({ ...prev, to: e.target.value }))}
+                            />
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1421,7 +1461,7 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
                         {getSuggestedEmails().length > 0 && (
                             <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                                 <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
-                                    Select Contacts
+                                    SELECT CONTACTS FROM COMPANY
                                 </label>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                     {getSuggestedEmails().map((contact, idx) => (

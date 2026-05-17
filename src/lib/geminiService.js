@@ -399,3 +399,49 @@ export async function researchLocationPincodeWithGemini(locationName) {
         return { pincode: '' };
     }
 }
+
+export async function extractDualPartnerContact(text) {
+    const prompt = `
+        Analyze this text (likely from an email signature or business card OCR).
+        Extract structured data for BOTH a Company (Partner) and a Contact Person.
+        
+        Text: "${text}"
+        
+        Return ONLY a JSON object with these fields:
+        {
+          "partner": {
+            "name": "string (Company Name)",
+            "uen": "string",
+            "address": "string",
+            "country": "string",
+            "city": "string",
+            "pincode": "string",
+            "email": "string (General company email if found, else empty)",
+            "phone": "string (General company phone if found, else empty)",
+            "website": "string"
+          },
+          "contact": {
+            "name": "string (Person Name)",
+            "email": "string (Person's email)",
+            "handphone": "string (Mobile/Cell)",
+            "phone": "string (Office phone)",
+            "post": "string (Designation/Title)",
+            "department": "string"
+          }
+        }
+        
+        Rules:
+        1. If a piece of info is a personal mobile, put it in contact.handphone.
+        2. If it's a general office line, put it in partner.phone.
+        3. If the company name is present, ensure it's in partner.name.
+        4. Do NOT use placeholder values like "N/A" or "Unknown". Use empty string "".
+    `;
+
+    try {
+        const response = await runAI('autofill', { prompt });
+        return response;
+    } catch (err) {
+        console.error('Dual Extraction Error:', err);
+        return null;
+    }
+}

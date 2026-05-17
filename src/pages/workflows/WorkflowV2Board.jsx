@@ -1,14 +1,28 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { getWorkflowDocuments, deleteWorkflowDocument, duplicateWorkflowDocument, convertQuotationToJob, revertJobToQuotation, convertProformaToTaxInvoice, getDocumentHistory } from '../../lib/workflowV2Service';
+import toast from 'react-hot-toast';
+import { 
+    getWorkflowDocuments, 
+    deleteWorkflowDocument, 
+    duplicateWorkflowDocument, 
+    convertQuotationToJob, 
+    revertJobToQuotation, 
+    revertQuotationToEnquiry,
+    convertInvoiceToJob,
+    convertProformaToTaxInvoice, 
+    getDocumentHistory,
+    getWorkflowDocumentsByJob
+} from '../../lib/workflowV2Service';
 import {
     FileCheck, Play, Briefcase, X, Loader2, PlayCircle, Folder, Upload,
     ArrowRightLeft, Filter, Eye, Printer, Search, Trash2, Plus, FileText, Copy, Clock,
-    ArrowUp, ArrowDown
+    ArrowUp, ArrowDown, RefreshCw, Download, CreditCard
 } from 'lucide-react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import CustomerEnquiryForm from '../../components/CustomerEnquiryForm';
 import JobEditV2Modal from '../../components/workflows/JobEditV2Modal';
+import ReceivePaymentModal from '../../components/workflow/ReceivePaymentModal';
+import { getPartners } from '../../lib/store';
 
 const DOC_TYPES = [
     'Enquiry', 'Quotation', 'Job', 'Purchase Order', 'Order Acknowledgment',
@@ -19,6 +33,7 @@ const DOC_TYPES = [
 
 export default function WorkflowV2Board() {
     const { profile } = useAuth();
+    const canAdmin = ['admin', 'finance', 'superadmin'].includes(profile?.role);
     const navigate = useNavigate();
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -37,6 +52,10 @@ export default function WorkflowV2Board() {
     const [historyDoc, setHistoryDoc] = useState(null);
     const [historyItems, setHistoryItems] = useState([]);
     const [loadingHistory, setLoadingHistory] = useState(false);
+
+    // Payment Modal States
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [paymentPrefill, setPaymentPrefill] = useState(null);
     
     // SOA Aging View State
     const [soaGroups, setSoaGroups] = useState([]);
@@ -45,6 +64,8 @@ export default function WorkflowV2Board() {
     const [customerDocs, setCustomerDocs] = useState([]);
     const [loadingCustomerDocs, setLoadingCustomerDocs] = useState(false);
     const [poFile, setPoFile] = useState(null);
+    const [partners, setPartners] = useState([]);
+    const [selectedPartnerId, setSelectedPartnerId] = useState('');
 
     const dropdownRef = useRef(null);
 
@@ -66,8 +87,25 @@ export default function WorkflowV2Board() {
             (t + 's').toLowerCase() === path.toLowerCase()
         );
 
+        const aliasMap = {
+            'invoices': 'Tax Invoice',
+            'quotations': 'Quotation',
+            'purchase-orders': 'Purchase Order',
+            'delivery-orders': 'Delivery Order',
+            'proforma-invoices': 'Proforma Invoice',
+            'packing-lists': 'Packing List',
+            'certificates': 'Certificate',
+            'service-reports': 'Service Report',
+            'payment-received': 'Payment Received'
+        };
+
+        const rawPath = location.pathname.substring(1);
+        const aliasMatch = aliasMap[rawPath];
+
         if (paramType && DOC_TYPES.includes(paramType)) {
             setActiveType(paramType);
+        } else if (aliasMatch) {
+            setActiveType(aliasMatch);
         } else if (foundDocType) {
             setActiveType(foundDocType);
         } else if (location.pathname === '/workflows') {
@@ -90,6 +128,21 @@ export default function WorkflowV2Board() {
         document.addEventListener("mousedown", handleClickOutside);
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [dropdownRef]);
+
+    useEffect(() => {
+        if (profile?.company_id) {
+            const fetchPartners = async () => {
+                const { supabase } = await import('../../lib/supabase');
+                const { data } = await supabase
+                    .from('partners')
+                    .select('id, name')
+                    .eq('company_id', profile.company_id)
+                    .order('name');
+                if (data) setPartners(data);
+            };
+            fetchPartners();
+        }
+    }, [profile]);
 
     const fetchDocs = async () => {
         setLoading(true);
@@ -158,14 +211,48 @@ export default function WorkflowV2Board() {
         setLoading(false);
     };
 
-    const handleDelete = async (id) => {
-        if (window.confirm('Are you sure you want to delete this document?')) {
-            const { error } = await deleteWorkflowDocument(id);
-            if (error) {
-                console.error("Delete failed:", error);
-                alert("Failed to delete the document. Error: " + (error.message || error.details || "Unknown database error."));
-            } else {
+    const handleDelete = async (doc) => {
+        const id = doc.id;
+        if (!id) {
+            toast.error("Invalid document ID");
+            return;
+        }
+
+        const isJobGroup = activeType === 'Job' && doc.assigned_job_no;
+        const confirmMsg = isJobGroup 
+            ? `Are you sure you want to delete the ENTIRE Job suite ${doc.assigned_job_no}? This will delete all associated documents (Enquiry, Quotation, PO, INV, etc.) linked to this job.`
+            : 'Are you sure you want to delete this document? This action cannot be undone.';
+        
+        if (window.confirm(confirmMsg)) {
+            try {
+                if (isJobGroup) {
+                    setLoading(true);
+                    // 1. Fetch all docs in the job
+                    const { data: jobDocs } = await getWorkflowDocumentsByJob(doc.job_id || doc.id);
+                    if (jobDocs && jobDocs.length > 0) {
+                        for (const jd of jobDocs) {
+                            await deleteWorkflowDocument(jd.id);
+                        }
+                    } else {
+                        // Fallback to just this doc if no job_id link found
+                        await deleteWorkflowDocument(id);
+                    }
+                } else {
+                    const { error } = await deleteWorkflowDocument(id);
+                    if (error) throw error;
+                }
+                
+                toast.success(isJobGroup ? "Job suite deleted successfully" : "Document deleted successfully");
                 fetchDocs();
+            } catch (error) {
+                console.error("Delete failed:", error);
+                let msg = error.message || error.details || "Unknown database error.";
+                if (msg.includes('foreign key constraint')) {
+                    msg = "Cannot delete this document because it is referenced by other records.";
+                }
+                toast.error("Failed to delete: " + msg, { duration: 5000 });
+            } finally {
+                setLoading(false);
             }
         }
     };
@@ -177,7 +264,7 @@ export default function WorkflowV2Board() {
                 fetchDocs();
             } catch (error) {
                 console.error("Duplicate failed:", error);
-                alert("Failed to duplicate document. Error: " + (error.message || "Unknown error."));
+                toast.error("Failed to duplicate document. Error: " + (error.message || "Unknown error."));
             }
         }
     };
@@ -191,7 +278,7 @@ export default function WorkflowV2Board() {
             if (error) throw error;
         } catch (err) {
             console.error("History fetch error:", err);
-            alert("Failed to fetch history: " + err.message);
+            toast.error("Failed to fetch history: " + err.message);
         } finally {
             setLoadingHistory(false);
         }
@@ -214,7 +301,13 @@ export default function WorkflowV2Board() {
 
         setConversionLoading(true);
         try {
-            const { jobNo } = await convertQuotationToJob(conversionTarget.id, poData, options);
+            let result;
+            if (conversionTarget.document_type.includes('Invoice')) {
+                result = await convertInvoiceToJob(conversionTarget.id, poData);
+            } else {
+                result = await convertQuotationToJob(conversionTarget.id, poData, options);
+            }
+            const { jobNo } = result;
             
             // Handle PO File Upload if present
             if (poFile) {
@@ -298,6 +391,39 @@ export default function WorkflowV2Board() {
         }
     };
 
+    const handleRevertJob = async (doc) => {
+        if (!window.confirm(`Are you sure you want to revert Job ${doc.assigned_job_no} back to a Quotation? \n\nThis will DELETE all associated suite documents (CEL, ORA, DO, etc.) and restore the original Quotation to Draft status.`)) return;
+        
+        setConversionLoading(true);
+        try {
+            await revertJobToQuotation(doc.assigned_job_no);
+            alert('Job reverted successfully.');
+            fetchDocs();
+        } catch (error) {
+            console.error("Revert failed:", error);
+            alert("Failed to revert job: " + (error.message || "Unknown error"));
+        } finally {
+            setConversionLoading(false);
+        }
+    };
+
+    const handleRevertQuotation = async (doc) => {
+        if (!window.confirm(`Are you sure you want to revert Quotation ${doc.document_no} back to an Enquiry? \n\nThis will DELETE the current Quotation and create a new draft Enquiry.`)) return;
+        
+        setConversionLoading(true);
+        try {
+            const savedEnq = await revertQuotationToEnquiry(doc.id);
+            alert(`Quotation reverted to Enquiry ${savedEnq.document_no} successfully!`);
+            fetchDocs();
+            navigate('/workflows?type=Enquiry');
+        } catch (error) {
+            console.error("Revert failed:", error);
+            alert("Failed to revert quotation: " + (error.message || "Unknown error"));
+        } finally {
+            setConversionLoading(false);
+        }
+    };
+
 
     const formatDate = (dateStr) => {
         if (!dateStr) return '-';
@@ -361,11 +487,11 @@ export default function WorkflowV2Board() {
                 status: 'Confirmed' 
             }).eq('id', doc.id);
 
-            alert('Signed proof uploaded successfully to Folder 6!');
+            toast.success('Signed proof uploaded successfully to Folder 6!');
             fetchDocs();
         } catch (error) {
             console.error('Upload failed:', error);
-            alert('Upload failed: ' + error.message);
+            toast.error('Upload failed: ' + error.message);
         } finally {
             setLoading(false);
         }
@@ -389,7 +515,10 @@ export default function WorkflowV2Board() {
             (doc.partners?.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (doc.subject || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (doc.customer_ref || '').toLowerCase().includes(searchQuery.toLowerCase());
-        return matchesType && matchesSearch;
+        
+        const matchesPartner = !selectedPartnerId || doc.partner_id === selectedPartnerId;
+
+        return matchesType && matchesSearch && matchesPartner;
     });
 
     const handleOpenDocument = (type, id) => {
@@ -448,12 +577,12 @@ export default function WorkflowV2Board() {
             const { supabase } = await import('../../lib/supabase');
             await supabase.from('workflow_documents').update({ drive_folder_id: targetFolderId }).eq('id', doc.id);
 
-            alert('Folder provisioned successfully!');
+            toast.success('Folder provisioned successfully!');
             fetchDocs();
             window.open(`https://drive.google.com/drive/folders/${targetFolderId}`, '_blank');
         } catch (error) {
             console.error('Provisioning failed:', error);
-            alert('Failed to provision: ' + error.message);
+            toast.error('Failed to provision: ' + error.message);
         } finally {
             setLoading(false);
         }
@@ -462,6 +591,10 @@ export default function WorkflowV2Board() {
     const handlePrintPreview = (id) => {
         const url = `/workflows/print/${id}`;
         window.open(url, '_blank');
+    };
+
+    const handleDirectDownload = (id) => {
+        window.open(`/workflows/print/${id}?autoDownload=true`, '_blank');
     };
 
     const getPageTitle = () => {
@@ -710,15 +843,32 @@ export default function WorkflowV2Board() {
 
             <div className="glass-panel">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 16px', minWidth: '350px' }}>
-                        <Search size={18} color="var(--text-secondary)" style={{ marginRight: '8px' }} />
-                        <input
-                            type="text"
-                            placeholder="Search document no, customer, subject..."
-                            style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, color: 'var(--text-primary)' }}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 16px', minWidth: '350px' }}>
+                            <Search size={18} color="var(--text-secondary)" style={{ marginRight: '8px' }} />
+                            <input
+                                type="text"
+                                placeholder="Search document no, customer, subject..."
+                                style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, color: 'var(--text-primary)' }}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+
+                        {/* Customer Filter Dropdown */}
+                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 16px', minWidth: '250px' }}>
+                            <Filter size={18} color="var(--text-secondary)" style={{ marginRight: '8px' }} />
+                            <select
+                                style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, color: 'var(--text-primary)', cursor: 'pointer' }}
+                                value={selectedPartnerId}
+                                onChange={(e) => setSelectedPartnerId(e.target.value)}
+                            >
+                                <option value="">All Customers</option>
+                                {partners.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
                 </div>
@@ -744,7 +894,6 @@ export default function WorkflowV2Board() {
                                     <th>Purchase Order Info</th>
                                     <th>Description</th>
                                     <th>Value (SGD)</th>
-                                    <th>Signature</th>
                                     <th>Attachment</th>
                                     <th style={{ textAlign: 'center' }}>Folder</th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
@@ -757,7 +906,6 @@ export default function WorkflowV2Board() {
                                     <th>Customer</th>
                                     <th>Vessel / Work Location</th>
                                     <th>Total</th>
-                                    <th>Signature</th>
                                     <th>Status</th>
                                     <th style={{ textAlign: 'center' }}>Folder</th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
@@ -778,6 +926,7 @@ export default function WorkflowV2Board() {
                                 </tr>
                             ) : activeType === 'Statement of Account' ? (
                                 soaGroups
+                                    .filter(g => !selectedPartnerId || g.partner_id === selectedPartnerId)
                                     .sort((a, b) => sortDirection === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name))
                                     .map((group) => (
                                         <tr key={group.name} className="table-row">
@@ -858,13 +1007,6 @@ export default function WorkflowV2Board() {
                                             </td>
                                             <td className="font-bold">SGD {doc.delivery_verification?.po_value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '-'}</td>
                                             <td>
-                                                {doc.signature_url ? (
-                                                    <img src={doc.signature_url} alt="Sig" style={{ height: '24px', maxWidth: '80px', objectFit: 'contain' }} />
-                                                ) : (
-                                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>-</span>
-                                                )}
-                                            </td>
-                                            <td>
                                                 {doc.customer_po_attachment_url ? (
                                                     <a href={doc.customer_po_attachment_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
                                                         <FileText size={12} /> View PO
@@ -934,7 +1076,7 @@ export default function WorkflowV2Board() {
                                                         type="button"
                                                         className="btn btn-sm btn-secondary"
                                                         style={{ color: 'var(--danger)' }}
-                                                        onClick={() => handleDelete(doc.id)}
+                                                        onClick={() => handleDelete(doc)}
                                                         title="Delete Job Completely"
                                                     >
                                                         <Trash2 size={14} />
@@ -997,13 +1139,6 @@ export default function WorkflowV2Board() {
                                                 {doc.currency} {doc.total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                             </td>
                                             <td>
-                                                {doc.signature_url ? (
-                                                    <img src={doc.signature_url} alt="Sig" style={{ height: '24px', maxWidth: '80px', objectFit: 'contain' }} />
-                                                ) : (
-                                                    <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>-</span>
-                                                )}
-                                            </td>
-                                            <td>
                                                 <span style={{
                                                     padding: '4px 10px',
                                                     borderRadius: '12px',
@@ -1059,15 +1194,15 @@ export default function WorkflowV2Board() {
                                                     <button
                                                         type="button"
                                                         className="btn btn-sm btn-secondary"
-                                                        style={{ color: '#3b82f6', position: 'relative', zIndex: 20, cursor: 'pointer' }}
+                                                        style={{ color: '#10b981', position: 'relative', zIndex: 20, cursor: 'pointer' }}
                                                         onClick={(e) => {
                                                             e.preventDefault();
                                                             e.stopPropagation();
-                                                            handleDuplicate(doc.id);
+                                                            handleDirectDownload(doc.id);
                                                         }}
-                                                        title="Duplicate Document"
+                                                        title="Download PDF"
                                                     >
-                                                        <Copy size={14} />
+                                                        <Download size={14} />
                                                     </button>
 
                                                     {doc.document_type === 'Certificate' && (
@@ -1148,6 +1283,119 @@ export default function WorkflowV2Board() {
                                                         </button>
                                                     )}
 
+                                                    {doc.is_job && doc.document_type === 'Job' && (
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-sm"
+                                                            style={{ 
+                                                                position: 'relative', 
+                                                                zIndex: 20, 
+                                                                cursor: 'pointer', 
+                                                                display: 'flex', 
+                                                                alignItems: 'center', 
+                                                                gap: '4px', 
+                                                                padding: '4px 10px', 
+                                                                background: '#64748b',
+                                                                borderColor: '#64748b',
+                                                                color: '#fff'
+                                                            }}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                handleRevertJob(doc);
+                                                            }}
+                                                            title="Revert Job to Quotation"
+                                                        >
+                                                            <RefreshCw size={12} />
+                                                            <span>Revert</span>
+                                                        </button>
+                                                    )}
+
+                                                    {doc.document_type === 'Quotation' && !doc.is_job && (
+                                                        <button
+                                                            type="button"
+                                                            className="btn btn-sm"
+                                                            style={{ 
+                                                                position: 'relative', 
+                                                                zIndex: 20, 
+                                                                cursor: 'pointer', 
+                                                                display: 'flex', 
+                                                                alignItems: 'center', 
+                                                                gap: '4px', 
+                                                                padding: '4px 10px', 
+                                                                background: '#64748b',
+                                                                borderColor: '#64748b',
+                                                                color: '#fff'
+                                                            }}
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                handleRevertQuotation(doc);
+                                                            }}
+                                                            title="Revert Quotation to Enquiry"
+                                                        >
+                                                            <RefreshCw size={12} />
+                                                            <span>Revert</span>
+                                                        </button>
+                                                    )}
+
+                                                    {(doc.document_type === 'Tax Invoice' || doc.document_type === 'Proforma Invoice') && (
+                                                        <div style={{ display: 'flex', gap: '4px' }}>
+                                                            {!doc.is_job && (
+                                                                <button
+                                                                    type="button"
+                                                                    className="btn btn-sm"
+                                                                    style={{ 
+                                                                        background: '#10b981',
+                                                                        borderColor: '#10b981',
+                                                                        color: '#fff',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px',
+                                                                        padding: '4px 8px',
+                                                                        position: 'relative',
+                                                                        zIndex: 20
+                                                                    }}
+                                                                    onClick={(e) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        setConversionTarget(doc);
+                                                                        setShowConversionModal(true);
+                                                                    }}
+                                                                    title="Convert to Job Suite"
+                                                                >
+                                                                    <Play size={10} fill="currentColor" />
+                                                                    <span>Job</span>
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                className="btn btn-sm"
+                                                                style={{ 
+                                                                    background: '#ef4444',
+                                                                    borderColor: '#ef4444',
+                                                                    color: '#fff',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '4px',
+                                                                    padding: '4px 8px',
+                                                                    position: 'relative',
+                                                                    zIndex: 20
+                                                                }}
+                                                                onClick={(e) => {
+                                                                    e.preventDefault();
+                                                                    e.stopPropagation();
+                                                                    setPaymentPrefill(doc);
+                                                                    setShowPaymentModal(true);
+                                                                }}
+                                                                title="Record Payment"
+                                                            >
+                                                                <CreditCard size={12} />
+                                                                <span>Payment Entry</span>
+                                                            </button>
+                                                        </div>
+                                                    )}
+
 
                                                     <button
                                                         type="button"
@@ -1156,7 +1404,7 @@ export default function WorkflowV2Board() {
                                                         onClick={(e) => {
                                                             e.preventDefault();
                                                             e.stopPropagation();
-                                                            handleDelete(doc.id);
+                                                            handleDelete(doc);
                                                         }}
                                                     >
                                                         <Trash2 size={14} />
@@ -1568,6 +1816,20 @@ export default function WorkflowV2Board() {
                         </div>
                     </div>
                 </div>
+            )}
+            {showPaymentModal && (
+                <ReceivePaymentModal 
+                    isOpen={showPaymentModal}
+                    onClose={() => setShowPaymentModal(false)}
+                    onSuccess={() => {
+                        setShowPaymentModal(false);
+                        toast.success('Payment recorded successfully');
+                        fetchDocs();
+                    }}
+                    partners={partners}
+                    company_id={profile?.company_id}
+                    prefill={paymentPrefill}
+                />
             )}
         </div>
     );

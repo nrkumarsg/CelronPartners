@@ -5,7 +5,8 @@ import { savePartner } from '../../lib/store';
 import { saveJobExpense } from '../../lib/jobExpenseService';
 import BusinessCardUpload from '../common/BusinessCardUpload';
 import { COUNTRIES, PARTNER_CATEGORIES } from '../../lib/constants';
-import { smartSearchCompany, researchContactWithGemini, researchVesselWithGemini, parseOCRBusinessCard } from '../../lib/geminiService';
+import { smartSearchCompany, researchContactWithGemini, researchVesselWithGemini, parseOCRBusinessCard, extractDualPartnerContact } from '../../lib/geminiService';
+import { performOCR } from '../../lib/googleAuthService';
 import { runUniversalSearch } from '../../lib/universalFinder';
 import { parseSupplierBillWithAi } from '../../lib/BillOcrService';
 import RichTextEditor from '../common/RichTextEditor';
@@ -1276,6 +1277,111 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
     });
     const [loading, setLoading] = useState(false);
     const [existingContacts, setExistingContacts] = useState([]);
+    const [isExtracting, setIsExtracting] = useState(false);
+    const [aiResult, setAiResult] = useState(null);
+    const [showReview, setShowReview] = useState(false);
+
+    const processExtractedData = async (data) => {
+        if (!data) return;
+        
+        let processed = { ...data };
+        
+        // If UEN is missing but company name exists, perform deep research
+        if (processed.partner?.name && !processed.partner?.uen) {
+            console.log(`[Smart Paste] Missing UEN for ${processed.partner.name}. Triggering deep research...`);
+            try {
+                const research = await smartSearchCompany(processed.partner.name);
+                if (research && research.uen) {
+                    processed.partner = {
+                        ...processed.partner,
+                        uen: research.uen || processed.partner.uen,
+                        address: research.address || processed.partner.address,
+                        city: research.city || processed.partner.city,
+                        country: research.country || processed.partner.country,
+                        pincode: research.postal_code || processed.partner.pincode,
+                        website: research.website || processed.partner.website
+                    };
+                }
+            } catch (err) {
+                console.warn('Smart Research failed during paste processing:', err);
+            }
+        }
+        
+        setAiResult(processed);
+        setShowReview(true);
+    };
+
+    const handlePaste = async (e) => {
+        // Only allow paste on the details tab
+        if (activeTab !== 'details') return;
+
+        const items = e.clipboardData?.items;
+        if (!items) return;
+
+        for (const item of items) {
+            if (item.type.indexOf('image') !== -1) {
+                const file = item.getAsFile();
+                setIsExtracting(true);
+                try {
+                    const text = await performOCR(file);
+                    if (text) {
+                        const result = await extractDualPartnerContact(text);
+                        await processExtractedData(result);
+                    }
+                } catch (err) {
+                    console.error('Paste OCR Error:', err);
+                } finally {
+                    setIsExtracting(false);
+                }
+                break;
+            } else if (item.type === 'text/plain') {
+                item.getAsString(async (text) => {
+                    setIsExtracting(true);
+                    try {
+                        const result = await extractDualPartnerContact(text);
+                        await processExtractedData(result);
+                    } catch (err) {
+                        console.error('Paste AI Error:', err);
+                    } finally {
+                        setIsExtracting(false);
+                    }
+                });
+                break;
+            }
+        }
+    };
+
+
+    const applyAiResult = () => {
+        if (!aiResult) return;
+
+        setPartnerData(prev => ({
+            ...prev,
+            name: aiResult.partner?.name || prev.name,
+            uen: aiResult.partner?.uen || prev.uen,
+            address: aiResult.partner?.address || prev.address,
+            country: aiResult.partner?.country || prev.country,
+            city: aiResult.partner?.city || prev.city,
+            pincode: aiResult.partner?.pincode || prev.pincode,
+            email1: aiResult.partner?.email || prev.email1,
+            phone1: aiResult.partner?.phone || prev.phone1,
+            weblink: aiResult.partner?.website || prev.weblink
+        }));
+
+        setContactData(prev => ({
+            ...prev,
+            name: aiResult.contact?.name || prev.name,
+            email: aiResult.contact?.email || prev.email,
+            handphone: aiResult.contact?.handphone || prev.handphone,
+            phone: aiResult.contact?.phone || prev.phone,
+            post: aiResult.contact?.post || prev.post,
+            department: aiResult.contact?.department || prev.department
+        }));
+
+        setShowReview(false);
+        setAiResult(null);
+    };
+
 
     useEffect(() => {
         if (initialPartner) setPartnerData(initialPartner);
@@ -1339,7 +1445,85 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
     };
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div onPaste={handlePaste} style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+            {isExtracting && (
+                <div style={{
+                    position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.85)',
+                    zIndex: 100, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    backdropFilter: 'blur(4px)', borderRadius: '16px'
+                }}>
+                    <div className="ai-pulse" style={{ background: '#6366f1', padding: '16px', borderRadius: '50%', color: '#fff', marginBottom: '16px' }}>
+                        <Sparkles size={32} />
+                    </div>
+                    <span style={{ fontWeight: 800, color: '#6366f1', fontSize: '1.1rem' }}>AI is analyzing...</span>
+                    <span style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>Extracting partner and contact data from paste</span>
+                </div>
+            )}
+
+            {showReview && aiResult && (
+                <div style={{
+                    position: 'absolute', inset: 0, background: 'rgba(15, 23, 42, 0.4)',
+                    zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    backdropFilter: 'blur(4px)', padding: '20px'
+                }}>
+                    <div style={{
+                        background: '#fff', width: '100%', maxWidth: '520px', borderRadius: '24px',
+                        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', overflow: 'hidden',
+                        border: '1px solid rgba(255,255,255,0.2)'
+                    }}>
+                        <div style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', padding: '24px', color: '#fff' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div style={{ background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '10px' }}>
+                                        <Sparkles size={20} />
+                                    </div>
+                                    <div>
+                                        <div style={{ fontWeight: 800, fontSize: '1.2rem' }}>Review Extraction</div>
+                                        <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>Found Partner & Contact Info</div>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowReview(false)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: '#fff', cursor: 'pointer', padding: '8px', borderRadius: '50%' }}><X size={20} /></button>
+                            </div>
+                        </div>
+                        
+                        <div style={{ padding: '24px', maxHeight: '450px', overflowY: 'auto' }}>
+                            <div style={{ marginBottom: '24px' }}>
+                                <div style={{ fontWeight: 800, fontSize: '0.75rem', color: '#6366f1', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #f1f5f9', pb: '8px' }}>
+                                    <Users size={14} /> 1. Partner (Company)
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <ReviewItem label="Company Name" value={aiResult.partner?.name} />
+                                    <ReviewItem label="UEN / Reg No" value={aiResult.partner?.uen} />
+                                    <ReviewItem label="Email" value={aiResult.partner?.email} />
+                                    <ReviewItem label="Phone" value={aiResult.partner?.phone} />
+                                    <ReviewItem label="Website" value={aiResult.partner?.website} fullWidth />
+                                    <ReviewItem label="Address" value={aiResult.partner?.address} fullWidth />
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <div style={{ fontWeight: 800, fontSize: '0.75rem', color: '#10b981', textTransform: 'uppercase', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #f1f5f9', pb: '8px' }}>
+                                    <User size={14} /> 2. Primary Contact
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <ReviewItem label="Contact Name" value={aiResult.contact?.name} />
+                                    <ReviewItem label="Designation" value={aiResult.contact?.post} />
+                                    <ReviewItem label="Email" value={aiResult.contact?.email} />
+                                    <ReviewItem label="Handphone" value={aiResult.contact?.handphone} />
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div style={{ padding: '20px 24px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', display: 'flex', gap: '12px' }}>
+                            <button onClick={() => setShowReview(false)} className="btn btn-secondary" style={{ flex: 1, height: '48px', borderRadius: '14px', fontWeight: 600 }}>Discard</button>
+                            <button onClick={applyAiResult} className="btn btn-primary" style={{ flex: 2, height: '48px', borderRadius: '14px', background: 'linear-gradient(135deg, #6366f1, #4f46e5)', border: 'none', fontWeight: 700, boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)' }}>
+                                <Check size={18} /> Apply Information
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Tabs Header */}
             <div style={{ display: 'flex', gap: '24px', borderBottom: '1px solid #e2e8f0', marginBottom: '24px', padding: '0 4px' }}>
                 <button 
@@ -1392,10 +1576,16 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
                         alignItems: 'start'
                     }}>
                         <div style={{ borderRight: '1px solid #e2e8f0', paddingRight: '32px' }}>
-                            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#6366f1' }}>
-                                <div style={{ background: '#e0e7ff', p: '6px', borderRadius: '8px' }}><Users size={18} /></div>
-                                <span style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>STEP 1: PARTNER INFORMATION</span>
+                            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6366f1' }}>
+                                    <div style={{ background: '#e0e7ff', padding: '6px', borderRadius: '8px' }}><Users size={18} /></div>
+                                    <span style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>STEP 1: PARTNER INFORMATION</span>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f5f3ff', padding: '4px 10px', borderRadius: '20px', border: '1px solid #ddd6fe', color: '#7c3aed', fontSize: '0.65rem', fontWeight: 700 }}>
+                                    <Sparkles size={12} /> SMART PASTE ACTIVE
+                                </div>
                             </div>
+
                             <QuickPartnerAdd 
                                 company_id={company_id} 
                                 initialData={partnerData} 
@@ -1649,7 +1839,19 @@ export const QuickVesselAdd = ({ company_id, initialData, onSuccess, onCancel })
             </div>
 
             <div className="form-item">
-                <label>Vessel Name *</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <label>Vessel Name *</label>
+                    {formData.vessel_name && (
+                        <a 
+                            href={`https://www.google.com/search?q=${encodeURIComponent(formData.vessel_name + ' vessel')}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            style={{ fontSize: '0.75rem', color: '#6366f1', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none', fontWeight: 600 }}
+                        >
+                            <Search size={12} /> Google Search
+                        </a>
+                    )}
+                </div>
                 <input
                     className="form-input"
                     name="vessel_name"
@@ -2299,6 +2501,16 @@ export const QuickFormAdd = ({ company_id, initialData, onSuccess, onCancel }) =
                     <Save size={18} /> {loading ? 'Saving...' : 'Save Template'}
                 </button>
             </div>
+        </div>
+    );
+};
+
+const ReviewItem = ({ label, value, fullWidth }) => {
+    if (!value) return null;
+    return (
+        <div style={{ gridColumn: fullWidth ? '1 / span 2' : 'span 1', background: '#f1f5f9', padding: '8px 12px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '2px' }}>{label}</div>
+            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</div>
         </div>
     );
 };

@@ -391,7 +391,7 @@ export default function StatementOfAccount() {
                     window.open(waUrl, '_blank');
                 } else {
                     const subject = `Statement of Account - ${statementData.partner?.name}`;
-                    const body = `${message}\n\nYou can view/download the full statement here:\n${link}\n\nBest Regards,\n${profile?.full_name || 'Accounts Team'}`;
+                    const body = `${message}\n\nView/Download Statement: ${link}`;
                     window.location.href = `mailto:${statementData.partner?.email || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                 }
             }
@@ -405,7 +405,9 @@ export default function StatementOfAccount() {
 
     const handleEmail = () => {
         if (!statementData) return alert('Please generate a statement first.');
-        handleShareFile('email', `Dear ${statementData.partner?.name},\n\nPlease find the Statement of Account for your reference.\n\nTotal Outstanding: SGD ${statementData.closingBalance.toLocaleString()}`);
+        const periodStr = `Period: ${formatDate(dateRange.start)} - ${formatDate(dateRange.end)}\n\n`;
+        const defaultMsg = `Dear ${statementData.partner?.name || 'Accounts Team'},\n\n${periodStr}Please find the Statement of Account (SOA-${new Date().toISOString().split('T')[0]}) for your review and reference.\n\nAwaiting for your valuable payment.\n\nTotal Due: SGD ${statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}.\n\nKind Regards,\nANITHA (Ms)\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6581962270\nweb: www.celron.net / www.celron.shop`;
+        handleShareFile('email', defaultMsg);
     };
 
     const handleWhatsApp = () => {
@@ -882,7 +884,7 @@ export default function StatementOfAccount() {
                                 <div style={{ textAlign: 'right' }}>
                                     <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800, color: '#1e3a8a' }}>{profile?.company_name || 'CEL-RON ENTERPRISES PTE LTD'}</h2>
                                     <div style={{ fontSize: '0.6rem', color: '#64748b', marginTop: '4px', lineHeight: 1.3 }}>
-                                        <div>{settings?.address || '10, Jln, Besar, #03-05, Singapore 208787'}</div>
+                                        <div>{settings?.address || '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787'}</div>
                                         <div>Tel: {settings?.phone || '+65 8196 2270'} | Email: {settings?.email || 'accounts@celron.net'} | www.celron.net</div>
                                     </div>
                                 </div>
@@ -894,16 +896,30 @@ export default function StatementOfAccount() {
                                     <div style={{ fontSize: '0.55rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>Statement To</div>
                                     <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 900, color: '#0f172a' }}>{statementData.partner?.name}</h3>
                                     <div style={{ marginTop: '6px', color: '#475569', fontSize: '0.65rem', lineHeight: 1.4 }}>
-                                        {statementData.partner?.address && (
-                                            <div style={{ whiteSpace: 'pre-line' }}>
-                                                {statementData.partner.address.includes('Henderson Industrial Park') && !statementData.partner.address.includes('159507') 
-                                                    ? `${statementData.partner.address.replace(/^Singapore,?\s*/i, '')}, Singapore 159507` 
-                                                    : statementData.partner.address}
-                                            </div>
-                                        )}
-                                        {statementData.partner?.phone && <div>Tel: {statementData.partner.phone}</div>}
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
-                                            <div style={{ fontWeight: 600 }}>{statementData.partner?.email}</div>
+                                        <div style={{ whiteSpace: 'pre-line' }}>
+                                            {statementData.partner?.address}
+                                            {(statementData.partner?.city || statementData.partner?.pincode || statementData.partner?.country) && (
+                                                <div>
+                                                    {[
+                                                        statementData.partner?.city,
+                                                        statementData.partner?.country,
+                                                        statementData.partner?.pincode
+                                                    ].filter(Boolean).join(', ')}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div style={{ marginTop: '4px' }}>
+                                            {(statementData.partner?.phone1 || statementData.partner?.phone) && (
+                                                <div>Tel: {statementData.partner.phone1 || statementData.partner.phone}</div>
+                                            )}
+                                            {(statementData.partner?.email1 || statementData.partner?.email) && (
+                                                <div style={{ fontWeight: 600 }}>{statementData.partner.email1 || statementData.partner.email}</div>
+                                            )}
+                                            {statementData.partner?.weblink && (
+                                                <div style={{ color: '#1e3a8a', fontSize: '0.6rem' }}>{statementData.partner.weblink}</div>
+                                            )}
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-12px' }}>
                                             <div style={{ fontSize: '0.6rem', background: '#e2e8f0', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, color: '#1e3a8a' }}>
                                                 TERMS: {statementData.partner?.customerCreditTime && statementData.partner.customerCreditTime !== '0' ? `${statementData.partner.customerCreditTime} DAYS` : 'C.O.D'}
                                             </div>
@@ -1079,7 +1095,7 @@ export default function StatementOfAccount() {
                 <WhatsAppShareModal 
                     isOpen={showWhatsAppModal}
                     onClose={() => setShowWhatsAppModal(false)}
-                    contacts={contacts.filter(c => c.partner_id === selectedPartner)}
+                    contacts={contacts.filter(c => c.partnerId === selectedPartner)}
                     partner={statementData.partner}
                     documentData={{
                         document_type: 'Statement of Account',

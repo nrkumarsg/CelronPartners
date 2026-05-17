@@ -14,7 +14,7 @@ export default function ModuleSettings() {
     const [settings, setSettings] = useState({
         company_name: 'CELRON ENTERPRISES PTE LTD',
         gst_uen: '201436227C',
-        address: '10, Jln, Besar, #03-05, Singapore 208787',
+        address: '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787',
         phone: '+65 6123 4567',
         email: 'sales@celron.net',
         logo_url: '/logo.png',
