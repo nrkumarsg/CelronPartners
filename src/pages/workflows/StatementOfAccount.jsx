@@ -42,6 +42,8 @@ export default function StatementOfAccount() {
     const printRef = useRef();
     const printSummaryRef = useRef();
 
+    const statementCurrency = statementData?.ledger?.find(d => d.currency)?.currency || 'SGD';
+
     const formatDate = (dateStr) => {
         if (!dateStr) return '-';
         const d = new Date(dateStr);
@@ -303,11 +305,11 @@ export default function StatementOfAccount() {
             const today = new Date();
             
             // Get all invoices for THIS partner (sorted by date ascending for FIFO)
-            const allInvoices = data.filter(d => (d.document_type || '').includes('Invoice'))
+            const allInvoices = filteredData.filter(d => (d.document_type || '').includes('Invoice'))
                 .sort((a, b) => new Date(a.issue_date) - new Date(b.issue_date));
             
             // Total payments received (Credit)
-            let unallocatedCredit = data.filter(d => d.document_type === 'Payment Received')
+            let unallocatedCredit = filteredData.filter(d => d.document_type === 'Payment Received')
                 .reduce((sum, p) => sum + (parseFloat(p.total_amount) || 0), 0);
             
             allInvoices.forEach(inv => {
@@ -484,7 +486,7 @@ export default function StatementOfAccount() {
             const { default: html2pdf } = await import('html2pdf.js');
             const opt = {
                 margin: 1,
-                filename: `SOA_${statementData.partner?.name?.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}_SGD_${statementData.closingBalance.toFixed(0)}.pdf`,
+                filename: `SOA_${statementData.partner?.name?.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}_${statementCurrency}_${statementData.closingBalance.toFixed(0)}.pdf`,
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true, letterRendering: true },
                 jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -541,7 +543,7 @@ export default function StatementOfAccount() {
 
     const handleEmail = () => {
         if (!statementData) return toast.error('Please generate a statement first.');
-        const defaultMsg = `Dear ${statementData.partner?.name || 'Accounts Team'},\n\nPlease find the Statement of Account (SOA-${new Date().toISOString().split('T')[0]}) for your review and reference.\n\nAwaiting for your valuable payment.\n\nTotal Due: SGD ${statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}.\n\nKind Regards,\nANITHA (Ms)\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6581962270\nweb: www.celron.net / www.celron.shop`;
+        const defaultMsg = `Dear ${statementData.partner?.name || 'Accounts Team'},\n\nPlease find the Statement of Account (SOA-${new Date().toISOString().split('T')[0]}) for your review and reference.\n\nAwaiting for your valuable payment.\n\nTotal Due: ${statementCurrency} ${statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}.\n\nBest Regards,\n\nANITHA HP:+65 81962270\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, " Sim Lim Tower" #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6591090347\nweb: www.celron.net / www.celron.shop`;
         handleShareFile('email', defaultMsg);
     };
 
@@ -577,7 +579,7 @@ export default function StatementOfAccount() {
                                     gap: '8px'
                                 }}>
                                     <CreditCard size={16} />
-                                    SGD {statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    {statementCurrency} {statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </div>
                             )}
                             {!statementData && companyAging.length > 0 && (
@@ -762,7 +764,7 @@ export default function StatementOfAccount() {
                             }}>
                                 <div style={{ fontSize: '0.75rem', fontWeight: 800, color: bucket.text, textTransform: 'uppercase', opacity: 0.8 }}>{bucket.label}</div>
                                 <div style={{ fontSize: '1.75rem', fontWeight: 900, color: bucket.text }}>
-                                    SGD {bucket.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    {statementCurrency} {bucket.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </div>
                             </div>
                         ))}
@@ -776,13 +778,13 @@ export default function StatementOfAccount() {
                                     <div style={{ textAlign: 'right' }}>
                                         <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Period Balance</div>
                                         <div style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent)' }}>
-                                            SGD {statementData.ledger.reduce((acc, d) => acc + (d.debit - d.credit), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            {statementCurrency} {statementData.ledger.reduce((acc, d) => acc + (d.debit - d.credit), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                         </div>
                                     </div>
                                     <div style={{ textAlign: 'right' }}>
                                         <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Statement Total</div>
                                         <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a' }}>
-                                            SGD {statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            {statementCurrency} {statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                         </div>
                                     </div>
                                 </div>
@@ -822,8 +824,8 @@ export default function StatementOfAccount() {
                                                     <div style={{ color: '#1e293b' }}>{doc.document_no}</div>
                                                     <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{doc.document_type} {doc.subject ? `- ${doc.subject}` : ''}</div>
                                                 </td>
-                                                <td style={{ padding: '16px 20px', fontSize: '0.85rem', color: '#475569', fontFamily: "'Inter', sans-serif" }}>
-                                                    {doc.order_reference || doc.assigned_job_no || doc.customer_po_no || '-'}
+                                                <td style={{ padding: '16px 20px', fontSize: '0.85rem', fontFamily: "'Inter', sans-serif" }}>
+                                                    <div style={{ fontWeight: 700, color: '#4f46e5' }}>{doc.customer_ref || doc.customer_po_no || doc.order_reference || '-'}</div>
                                                 </td>
                                                 <td style={{ padding: '16px 20px', fontSize: '0.85rem', color: '#64748b', fontFamily: "'Inter', sans-serif" }}>
                                                     {doc.vessels?.vessel_name || doc.work_locations?.location_name || doc.vessel_name || doc.work_location || '-'}
@@ -834,7 +836,7 @@ export default function StatementOfAccount() {
                                                             <span>{doc.debit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                                                             {doc.outstanding !== undefined && doc.outstanding !== doc.debit && (
                                                                 <span style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '2px', fontWeight: 700 }}>
-                                                                    BAL: SGD {doc.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                                    BAL: {doc.currency || 'SGD'} {doc.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                                 </span>
                                                             )}
                                                         </div>
@@ -903,7 +905,7 @@ export default function StatementOfAccount() {
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
                                     <div style={{ fontSize: '2.25rem', fontWeight: 900, letterSpacing: '-0.02em' }}>
-                                        <span style={{ fontSize: '1.25rem', marginRight: '8px', opacity: 0.9 }}>SGD</span>
+                                        <span style={{ fontSize: '1.25rem', marginRight: '8px', opacity: 0.9 }}>{statementCurrency}</span>
                                         {statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </div>
                                 </div>
@@ -976,7 +978,7 @@ export default function StatementOfAccount() {
                                              <td style={{ textAlign: 'right' }}>{(item.aging.ninety || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                              <td style={{ textAlign: 'right', color: item.aging.overNinety > 0 ? '#ef4444' : 'inherit' }}>{(item.aging.overNinety || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                              <td style={{ textAlign: 'right', fontWeight: 700, color: (item.outstanding || 0) > 0 ? '#1e3a8a' : '#10b981' }}>
-                                                 SGD {(item.outstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                 {statementCurrency} {(item.outstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                              </td>
                                              <td style={{ textAlign: 'right' }}>
                                                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
@@ -1004,12 +1006,12 @@ export default function StatementOfAccount() {
                                      {/* Totals Row */}
                                      <tr style={{ background: '#f1f5f9', fontWeight: 900 }}>
                                          <td>TOTAL</td>
-                                         <td style={{ textAlign: 'right' }}>SGD {companyAging.reduce((acc, it) => acc + it.aging.current, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td style={{ textAlign: 'right' }}>SGD {companyAging.reduce((acc, it) => acc + it.aging.thirty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td style={{ textAlign: 'right' }}>SGD {companyAging.reduce((acc, it) => acc + it.aging.sixty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td style={{ textAlign: 'right' }}>SGD {companyAging.reduce((acc, it) => acc + it.aging.ninety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td style={{ textAlign: 'right' }}>SGD {companyAging.reduce((acc, it) => acc + it.aging.overNinety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td style={{ textAlign: 'right', color: '#1e3a8a' }}>SGD {companyAging.reduce((acc, it) => acc + it.outstanding, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                         <td style={{ textAlign: 'right' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.aging.current, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                         <td style={{ textAlign: 'right' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.aging.thirty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                         <td style={{ textAlign: 'right' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.aging.sixty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                         <td style={{ textAlign: 'right' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.aging.ninety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                         <td style={{ textAlign: 'right' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.aging.overNinety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                         <td style={{ textAlign: 'right', color: '#1e3a8a' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.outstanding, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                          <td></td>
                                      </tr>
                                 </tbody>
@@ -1094,7 +1096,7 @@ export default function StatementOfAccount() {
                                 <div style={{ width: '260px', background: 'linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%)', padding: '12px', borderRadius: '10px', color: 'white', display: 'flex', flexDirection: 'column', justifyContent: 'center', boxShadow: '0 4px 10px rgba(30, 58, 138, 0.15)', textAlign: 'right' }}>
                                     <div style={{ fontSize: '0.55rem', fontWeight: 700, color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Outstanding Balance</div>
                                     <div style={{ fontSize: '2.1rem', fontWeight: 900, marginTop: '2px' }}>
-                                        <span style={{ fontSize: '0.9rem', opacity: 0.9, marginRight: '4px' }}>SGD</span>
+                                        <span style={{ fontSize: '0.9rem', opacity: 0.9, marginRight: '4px' }}>{statementCurrency}</span>
                                         {statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </div>
                                     <div style={{ fontSize: '0.55rem', marginTop: '8px', color: 'rgba(255,255,255,0.6)', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '6px' }}>
@@ -1139,7 +1141,9 @@ export default function StatementOfAccount() {
                                                     <div style={{ color: '#1e293b' }}>{row.document_no}</div>
                                                     <div style={{ fontSize: '8px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.02em', marginTop: '1px' }}>{row.document_type}</div>
                                                 </td>
-                                                <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f5f9', color: '#475569', whiteSpace: 'nowrap' }}>{row.customer_po_no || row.order_reference || row.assigned_job_no || '-'}</td>
+                                                <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>
+                                                    <div style={{ fontWeight: 700, color: '#1e3a8a' }}>{row.customer_ref || row.customer_po_no || row.order_reference || '-'}</div>
+                                                </td>
                                                 <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f5f9', color: '#475569', wordBreak: 'break-word', lineHeight: 1.2 }}>{row.vessels?.vessel_name || row.work_locations?.location_name || row.vessel_name || row.work_location || '-'}</td>
                                                 <td style={{ padding: '4px 6px', borderBottom: '1px solid #f1f5f9', textAlign: 'right', color: row.debit > 0 ? '#e11d48' : '#059669', whiteSpace: 'nowrap', fontWeight: 500 }}>
                                                     {row.debit > 0 ? (
@@ -1147,7 +1151,7 @@ export default function StatementOfAccount() {
                                                             <div>{row.debit.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                                                             {row.outstanding !== undefined && row.outstanding !== row.debit && (
                                                                 <div style={{ fontSize: '7px', color: '#64748b', marginTop: '1px' }}>
-                                                                    BAL: SGD {row.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                                    BAL: {row.currency || 'SGD'} {row.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1181,7 +1185,7 @@ export default function StatementOfAccount() {
                                 ].map((bucket, i) => (
                                     <div key={i} style={{ background: bucket.value > 0 ? '#fff1f2' : '#f8fafc', padding: '10px', borderRadius: '8px', border: `1px solid ${bucket.value > 0 ? '#fecdd3' : '#e2e8f0'}`, textAlign: 'center' }}>
                                         <div style={{ fontSize: '0.5rem', fontWeight: 800, color: bucket.value > 0 ? '#e11d48' : '#64748b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '2px' }}>{bucket.label}</div>
-                                        <div style={{ fontSize: '0.8rem', fontWeight: 800, color: bucket.value > 0 ? '#9f1239' : '#0f172a' }}>SGD {bucket.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                                        <div style={{ fontSize: '0.8rem', fontWeight: 800, color: bucket.value > 0 ? '#9f1239' : '#0f172a' }}>{statementCurrency} {bucket.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
                                     </div>
                                 ))}
                                 </div>
@@ -1237,7 +1241,7 @@ export default function StatementOfAccount() {
                                     <tr style={{ background: '#f8fafc', fontWeight: 800 }}>
                                         <td colSpan="3" style={{ padding: '16px', borderRadius: '0 0 0 12px' }}>CALCULATED OPENING BALANCE</td>
                                         <td colSpan="2" style={{ padding: '16px', textAlign: 'right', borderRadius: '0 0 12px 0', color: '#1e3a8a', fontSize: '1.1rem' }}>
-                                            SGD {statementData?.openingBalance?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
+                                            {statementCurrency} {statementData?.openingBalance?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '0.00'}
                                         </td>
                                     </tr>
                                 </tfoot>
@@ -1358,6 +1362,59 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
         attachments: []
     });
 
+    // Inline Contact Add/Edit states
+    const [localContacts, setLocalContacts] = useState(contacts);
+    const [editingContact, setEditingContact] = useState(null);
+    const [isAddingContact, setIsAddingContact] = useState(false);
+    const [contactFormName, setContactFormName] = useState('');
+    const [contactFormEmail, setContactFormEmail] = useState('');
+    const [isSavingContact, setIsSavingContact] = useState(false);
+
+    useEffect(() => {
+        setLocalContacts(contacts);
+    }, [contacts]);
+
+    const handleSaveInlineContact = async (e) => {
+        if (e) e.preventDefault();
+        if (!contactFormName.trim() || !contactFormEmail.trim()) {
+            alert('Please enter both Name and Email.');
+            return;
+        }
+        
+        setIsSavingContact(true);
+        try {
+            const { saveContact, getContacts } = await import('../../lib/store');
+            const contactData = {
+                name: contactFormName.trim(),
+                email: contactFormEmail.trim(),
+                partnerId: partner?.id,
+            };
+            
+            if (editingContact) {
+                contactData.id = editingContact.id;
+            }
+            
+            await saveContact(contactData);
+            
+            // Reload contacts list
+            const allContacts = await getContacts();
+            if (allContacts) {
+                setLocalContacts(allContacts);
+            }
+            
+            // Reset state
+            setEditingContact(null);
+            setIsAddingContact(false);
+            setContactFormName('');
+            setContactFormEmail('');
+        } catch (err) {
+            console.error('Failed to save contact:', err);
+            alert('Failed to save contact: ' + (err.message || err));
+        } finally {
+            setIsSavingContact(false);
+        }
+    };
+
     const formatDate = (d) => {
         if (!d) return '-';
         const date = new Date(d);
@@ -1370,7 +1427,7 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
     useEffect(() => {
         if (isOpen) {
             const periodStr = dateRange ? `Period: ${formatDate(dateRange.start)} - ${formatDate(dateRange.end)}\n\n` : '';
-            const defaultMsg = `Dear ${partner?.name || 'Accounts Team'},\n\n${periodStr}Please find the ${documentData.document_type} (${documentData.document_no}) for your review and reference.\n\nAwaiting for your valuable payment.\n\nTotal Due: SGD ${documentData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}.\n\nKind Regards,\nANITHA (Ms)\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6581962270\nweb: www.celron.net / www.celron.shop`;
+            const defaultMsg = `Dear ${partner?.name || 'Accounts Team'},\n\n${periodStr}Please find the ${documentData.document_type} (${documentData.document_no}) for your review and reference.\n\nAwaiting for your valuable payment.\n\nTotal Due: SGD ${documentData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}.\n\nBest Regards,\n\nANITHA HP:+65 81962270\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, " Sim Lim Tower" #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6591090347\nweb: www.celron.net / www.celron.shop`;
             setEmailPreview(prev => ({ ...prev, body: defaultMsg }));
         }
     }, [isOpen, partner, documentData, dateRange]);
@@ -1384,10 +1441,10 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
         }
         
         // 2. Individual Contacts
-        const companyContacts = partner ? contacts.filter(c => c.partnerId === partner.id) : [];
+        const companyContacts = partner ? localContacts.filter(c => c.partnerId === partner.id) : [];
         companyContacts.forEach(c => {
             if (c.email && !suggestions.find(s => s.email === c.email)) {
-                suggestions.push({ name: c.name, email: c.email, type: 'Contact' });
+                suggestions.push({ id: c.id, name: c.name, email: c.email, type: 'Contact' });
             }
         });
         
@@ -1458,11 +1515,154 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
                             </div>
                         </div>
 
-                        {getSuggestedEmails().length > 0 && (
-                            <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                        {/* CONTACT SELECTOR SECTION */}
+                        <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', margin: 0 }}>
                                     SELECT CONTACTS FROM COMPANY
                                 </label>
+                                {!isAddingContact && !editingContact && partner?.id && (
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setIsAddingContact(true);
+                                            setEditingContact(null);
+                                            setContactFormName('');
+                                            setContactFormEmail('');
+                                        }}
+                                        style={{ 
+                                            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
+                                            color: '#fff', 
+                                            border: 'none', 
+                                            borderRadius: '4px', 
+                                            padding: '2px 8px', 
+                                            fontSize: '10px', 
+                                            fontWeight: 700, 
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            boxShadow: '0 1px 2px rgba(37,99,235,0.2)',
+                                            transition: 'all 0.2s'
+                                        }}
+                                    >
+                                        + Add Contact
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Inline Form */}
+                            {(isAddingContact || editingContact) ? (
+                                <div style={{ 
+                                    background: '#fff', 
+                                    border: '1px solid #e2e8f0', 
+                                    borderRadius: '8px', 
+                                    padding: '12px', 
+                                    marginTop: '4px',
+                                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '8px'
+                                }}>
+                                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b' }}>
+                                        {editingContact ? '✏️ Edit Contact' : '➕ Add Contact'}
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                        <input 
+                                            type="text" 
+                                            placeholder="Contact Name"
+                                            value={contactFormName}
+                                            onChange={e => setContactFormName(e.target.value)}
+                                            style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
+                                        />
+                                        <input 
+                                            type="email" 
+                                            placeholder="Contact Email"
+                                            value={contactFormEmail}
+                                            onChange={e => setContactFormEmail(e.target.value)}
+                                            style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
+                                        />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '4px' }}>
+                                        <button 
+                                            type="button" 
+                                            onClick={() => {
+                                                setIsAddingContact(false);
+                                                setEditingContact(null);
+                                                setContactFormName('');
+                                                setContactFormEmail('');
+                                            }}
+                                            style={{ padding: '4px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#fff', color: '#475569', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            onClick={handleSaveInlineContact}
+                                            disabled={isSavingContact}
+                                            style={{ padding: '4px 10px', border: 'none', borderRadius: '4px', background: '#10b981', color: '#fff', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                        >
+                                            {isSavingContact ? 'Saving...' : 'Save'}
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                    {getSuggestedEmails().map((contact, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            style={{ 
+                                                background: '#fff', 
+                                                border: '1px solid #cbd5e1', 
+                                                borderRadius: '6px', 
+                                                padding: '4px 8px', 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: '8px',
+                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                            }}
+                                        >
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b' }}>{contact.name}</span>
+                                                <span style={{ fontSize: '10px', color: '#64748b' }}>{contact.email}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid #e2e8f0', paddingLeft: '8px', marginLeft: '4px', alignItems: 'center' }}>
+                                                {contact.type === 'Contact' && (
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditingContact(contact);
+                                                            setIsAddingContact(false);
+                                                            setContactFormName(contact.name);
+                                                            setContactFormEmail(contact.email);
+                                                        }}
+                                                        title="Edit Contact"
+                                                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px', color: '#64748b' }}
+                                                    >
+                                                        <Edit2 size={12} />
+                                                    </button>
+                                                )}
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => addEmailToField('to', contact.email)}
+                                                    style={{ background: '#eef2ff', color: '#6366f1', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
+                                                >
+                                                    To
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => addEmailToField('cc', contact.email)}
+                                                    style={{ background: '#f0fdf4', color: '#16a34a', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
+                                                >
+                                                    Cc
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        {false && (
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                     {getSuggestedEmails().map((contact, idx) => (
                                         <div 
@@ -1501,7 +1701,6 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
                                         </div>
                                     ))}
                                 </div>
-                            </div>
                         )}
                     </div>
 
@@ -1648,6 +1847,9 @@ function ReceivePaymentModal({ prefill, onClose, onSuccess, partners, company_id
         }
     };
 
+    const selectedInv = outstandingInvoices.find(i => i.id === formData.related_document_id);
+    const remainingBalance = selectedInv ? selectedInv.outstanding - (parseFloat(formData.total_amount) || 0) : 0;
+
     return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', padding: '24px', backdropFilter: 'blur(4px)' }}>
             <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '1000px', background: '#fff', borderRadius: '20px', padding: 0, overflow: 'hidden' }}>
@@ -1673,6 +1875,34 @@ function ReceivePaymentModal({ prefill, onClose, onSuccess, partners, company_id
                             <input type="number" className="form-input" value={formData.total_amount} onChange={e => setFormData({ ...formData, total_amount: e.target.value })} />
                         </div>
                     </div>
+
+                    {selectedInv && (
+                        <div style={{
+                            background: '#ecfdf5',
+                            padding: '14px 20px',
+                            borderRadius: '12px',
+                            border: '1px solid #a7f3d0',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            boxShadow: '0 2px 4px rgba(16,185,129,0.05)',
+                            marginTop: '-4px'
+                        }}>
+                            <div>
+                                <span style={{ color: '#065f46', fontWeight: 600, fontSize: '0.85rem' }}>Current Outstanding Balance: </span>
+                                <span style={{ fontWeight: 800, color: '#047857', fontSize: '0.95rem', fontFamily: "'Inter', sans-serif" }}>
+                                    SGD {selectedInv.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                            <div style={{ borderLeft: '1px solid #d1fae5', height: '24px' }}></div>
+                            <div>
+                                <span style={{ color: '#065f46', fontWeight: 600, fontSize: '0.85rem' }}>Remaining Balance: </span>
+                                <span style={{ fontWeight: 900, color: remainingBalance <= 0 ? '#10b981' : '#f59e0b', fontSize: '1rem', fontFamily: "'Inter', sans-serif" }}>
+                                    SGD {Math.max(0, remainingBalance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                        </div>
+                    )}
                     <div className="grid-2">
                         <div className="form-item" style={{ margin: 0 }}>
                             <label>Payment Method</label>

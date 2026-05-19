@@ -98,6 +98,9 @@ export default function ReceivePaymentModal({ prefill, onClose, onSuccess, partn
         }
     };
 
+    const selectedInv = outstandingInvoices.find(i => i.id === formData.related_document_id);
+    const remainingBalance = selectedInv ? selectedInv.outstanding - (parseFloat(formData.total_amount) || 0) : 0;
+
     return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 10000, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', padding: '24px', backdropFilter: 'blur(4px)' }}>
             <div className="glass-panel animate-fade-in" style={{ width: '100%', maxWidth: '1000px', background: '#fff', borderRadius: '20px', padding: 0, overflow: 'hidden' }}>
@@ -123,6 +126,34 @@ export default function ReceivePaymentModal({ prefill, onClose, onSuccess, partn
                             <input type="number" className="form-input" value={formData.total_amount} onChange={e => setFormData({ ...formData, total_amount: e.target.value })} />
                         </div>
                     </div>
+
+                    {selectedInv && (
+                        <div style={{
+                            background: '#ecfdf5',
+                            padding: '14px 20px',
+                            borderRadius: '12px',
+                            border: '1px solid #a7f3d0',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            boxShadow: '0 2px 4px rgba(16,185,129,0.05)',
+                            marginTop: '-4px'
+                        }}>
+                            <div>
+                                <span style={{ color: '#065f46', fontWeight: 600, fontSize: '0.85rem' }}>Current Outstanding Balance: </span>
+                                <span style={{ fontWeight: 800, color: '#047857', fontSize: '0.95rem', fontFamily: "'Inter', sans-serif" }}>
+                                    SGD {selectedInv.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                            <div style={{ borderLeft: '1px solid #d1fae5', height: '24px' }}></div>
+                            <div>
+                                <span style={{ color: '#065f46', fontWeight: 600, fontSize: '0.85rem' }}>Remaining Balance: </span>
+                                <span style={{ fontWeight: 900, color: remainingBalance <= 0 ? '#10b981' : '#f59e0b', fontSize: '1rem', fontFamily: "'Inter', sans-serif" }}>
+                                    SGD {Math.max(0, remainingBalance).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </span>
+                            </div>
+                        </div>
+                    )}
                     <div className="grid-2">
                         <div className="form-item" style={{ margin: 0 }}>
                             <label>Payment Method</label>

@@ -151,6 +151,52 @@ export default function WorkflowEditor() {
     const [paynowBase64, setPaynowBase64] = useState('');
     const printRef = useRef();
 
+    // Inline Contact Editing States
+    const [editingContact, setEditingContact] = useState(null);
+    const [isAddingContact, setIsAddingContact] = useState(false);
+    const [contactFormName, setContactFormName] = useState('');
+    const [contactFormEmail, setContactFormEmail] = useState('');
+    const [isSavingContact, setIsSavingContact] = useState(false);
+
+    const handleSaveInlineContact = async (e) => {
+        if (e) e.preventDefault();
+        if (!contactFormName.trim() || !contactFormEmail.trim()) {
+            alert('Please enter both Name and Email.');
+            return;
+        }
+        
+        setIsSavingContact(true);
+        try {
+            const { saveContact } = await import('../../lib/store');
+            const contactData = {
+                name: contactFormName.trim(),
+                email: contactFormEmail.trim(),
+                partnerId: formData.partner_id,
+                company_id: profile.company_id
+            };
+            
+            if (editingContact) {
+                contactData.id = editingContact.id;
+            }
+            
+            await saveContact(contactData);
+            
+            // Reload contacts list
+            await fetchMasterData();
+            
+            // Reset state
+            setEditingContact(null);
+            setIsAddingContact(false);
+            setContactFormName('');
+            setContactFormEmail('');
+        } catch (err) {
+            console.error('Failed to save contact:', err);
+            alert('Failed to save contact: ' + (err.message || err));
+        } finally {
+            setIsSavingContact(false);
+        }
+    };
+
     const getSuggestedEmails = () => {
         const selectedPartner = partners.find(p => p.id === formData.partner_id);
         const suggestions = [];
@@ -163,17 +209,19 @@ export default function WorkflowEditor() {
                     type: 'HQ' 
                 });
             }
-            if (selectedPartner.contacts && Array.isArray(selectedPartner.contacts)) {
-                selectedPartner.contacts.forEach(contact => {
-                    if (contact.email) {
-                        suggestions.push({ 
-                            name: contact.name, 
-                            email: contact.email, 
-                            type: 'Contact' 
-                        });
-                    }
-                });
-            }
+            
+            // Filter from global contacts state (which is reactive and updates instantly when we add/edit contacts!)
+            const companyContacts = contacts.filter(c => c.partnerId === formData.partner_id);
+            companyContacts.forEach(contact => {
+                if (contact.email) {
+                    suggestions.push({ 
+                        id: contact.id,
+                        name: contact.name, 
+                        email: contact.email, 
+                        type: 'Contact' 
+                    });
+                }
+            });
         }
         
         const officeEmail = isAnithaType ? 'accounts@celron.net' : (settings?.email || 'sales@celron.net');
@@ -233,6 +281,13 @@ export default function WorkflowEditor() {
     const [staff, setStaff] = useState([]);
     const [catalogSearch, setCatalogSearch] = useState('');
     const [showCatalogDropdown, setShowCatalogDropdown] = useState(false);
+    const [originalJobNo, setOriginalJobNo] = useState('');
+    const [attachmentUploadProgress, setAttachmentUploadProgress] = useState(null); // { fileName, percent }
+    const [modalItemIndex, setModalItemIndex] = useState(null);
+    const [modalItemDetails, setModalItemDetails] = useState('');
+    const [showDetailsModal, setShowDetailsModal] = useState(false);
+
+
 
     // Default Dates
     const defaultIssue = new Date();
@@ -283,6 +338,7 @@ export default function WorkflowEditor() {
         customer_po_attachment_url: '',
         is_job: false,
         assigned_job_no: '',
+        payment_terms: '',
         original_document_id: '',
         revision_no: 0,
         attachment_urls: [],
@@ -876,6 +932,7 @@ export default function WorkflowEditor() {
 
                 // Fetch other docs in the same job suite
                 if (data.assigned_job_no) {
+                    setOriginalJobNo(data.assigned_job_no);
                     const { data: suiteData } = await supabase
                         .from('workflow_documents')
                         .select('id, document_no, document_type, status, total_amount, currency, issue_date')
@@ -964,6 +1021,7 @@ export default function WorkflowEditor() {
                     currency: sourceDoc.currency || 'SGD',
                     enquiry_id: sourceDoc.enquiry_id || '',
                     job_id: sourceDoc.job_id || '',
+                    assigned_job_no: sourceDoc.assigned_job_no || (sourceDoc.document_type === 'Job' ? sourceDoc.document_no : ''),
                     notes: sourceDoc.notes || defaultNotes,
                     terms_conditions: sourceDoc.terms_conditions || (TC_PRESETS[docType === 'QUOTATION' ? 'Quotation' : ''] || '')
                 }));
@@ -1000,6 +1058,7 @@ export default function WorkflowEditor() {
                     work_location_id: job.work_location_id || enq.work_location_id || '',
                     subject: prev.subject || job.subject || enq.subject || `Ref: ${job.job_no}`,
                     customer_ref: prev.customer_ref || job.customer_ref || enq.customer_ref || '',
+                    assigned_job_no: job.job_no || '',
                     notes: prev.notes || defaultNotes,
                     terms_conditions: prev.terms_conditions || (TC_PRESETS[docType === 'QUOTATION' ? 'Quotation' : ''] || '')
                 }));
@@ -1312,6 +1371,74 @@ export default function WorkflowEditor() {
             });
             setLineItems(uniqueItems);
 
+            if (originalJobNo && formData.assigned_job_no && formData.assigned_job_no !== originalJobNo) {
+                const confirmRename = confirm(`You are changing the Assigned Job Number from "${originalJobNo}" to "${formData.assigned_job_no}".\n\nThis will update all associated documents in this Job suite to remain linked under the new job number.\n\nDo you want to proceed?`);
+                if (!confirmRename) {
+                    setSaving(false);
+                    return;
+                }
+                
+                // 1. Update assigned_job_no for all associated documents in the suite
+                const { error: renameError } = await supabase
+                    .from('workflow_documents')
+                    .update({ assigned_job_no: formData.assigned_job_no })
+                    .eq('assigned_job_no', originalJobNo)
+                    .eq('company_id', profile.company_id);
+                    
+                if (renameError) {
+                    throw new Error('Failed to rename suite job number: ' + renameError.message);
+                }
+
+                // 2. ALSO update the Job document itself (both document_no and assigned_job_no)
+                const { error: jobRenameError } = await supabase
+                    .from('workflow_documents')
+                    .update({ 
+                        document_no: formData.assigned_job_no,
+                        assigned_job_no: formData.assigned_job_no
+                    })
+                    .eq('document_no', originalJobNo)
+                    .eq('document_type', 'Job')
+                    .eq('company_id', profile.company_id);
+
+                if (jobRenameError) {
+                    console.error('Failed to rename Job document number:', jobRenameError);
+                }
+
+                // 3. Rename Google Drive folder if linked
+                if (formData.drive_folder_id) {
+                    const token = await getStoredToken();
+                    if (token) {
+                        try {
+                            const driveRenameRes = await fetch(`https://www.googleapis.com/drive/v3/files/${formData.drive_folder_id}`, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Authorization': 'Bearer ' + token,
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    name: formData.assigned_job_no
+                                })
+                            });
+                            if (driveRenameRes.ok) {
+                                console.log('Successfully renamed Google Drive folder to', formData.assigned_job_no);
+                            } else {
+                                console.warn('Google Drive folder rename failed:', await driveRenameRes.text());
+                            }
+                        } catch (driveErr) {
+                            console.error('Error renaming Google Drive folder:', driveErr);
+                        }
+                    }
+                }
+
+                // If the current saved document is the Job document itself, sync document_no
+                if (formData.document_type === 'Job') {
+                    setFormData(prev => ({ ...prev, document_no: formData.assigned_job_no }));
+                    formData.document_no = formData.assigned_job_no;
+                }
+                
+                setOriginalJobNo(formData.assigned_job_no);
+            }
+
             const dataToSave = { ...formData, company_id: profile.company_id };
             
             const { data, error } = await saveWorkflowDocument(dataToSave, uniqueItems);
@@ -1451,7 +1578,24 @@ export default function WorkflowEditor() {
             const prefix = prefixMap[targetType] || 'DOC';
             const nextNo = `${prefix}-${jobNoPart}`;
 
-            // 2. Prepare Header
+            // 2. Check if already exists
+            const { supabase } = await import('../../lib/supabase');
+            const { data: existingDoc } = await supabase
+                .from('workflow_documents')
+                .select('id')
+                .eq('document_no', nextNo)
+                .maybeSingle();
+
+            if (existingDoc) {
+                if (window.confirm(`${targetType} (${nextNo}) already exists! Do you want to open it instead?`)) {
+                    const slug = targetType.toLowerCase().replace(/ /g, '-');
+                    navigate(`/workflows/editor/${slug}/${existingDoc.id}`);
+                }
+                setSaving(false);
+                return;
+            }
+
+            // 3. Prepare Header
             const newDocData = {
                 ...formData,
                 id: undefined,
@@ -1464,7 +1608,7 @@ export default function WorkflowEditor() {
                 updated_at: new Date().toISOString()
             };
 
-            // 3. Save Document
+            // 4. Save Document
             const { data: savedDoc, error } = await saveWorkflowDocument(newDocData, lineItems);
             if (error) throw error;
 
@@ -1631,7 +1775,10 @@ export default function WorkflowEditor() {
 
         const defaultAddress = '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787';
         const webInfo = isAnithaType ? '\nweb: www.celron.net / www.celron.shop' : '';
-        const footer = `\n\nBest Regards,\n\n${effectiveSalesperson}\n${settings?.company_name || 'CELRON ENTERPRISES PTE LTD'}\n${settings?.address || defaultAddress}\nEmail: ${effectiveEmail} | Tel: ${effectivePhone}${webInfo}`;
+        let footer = `\n\nBest Regards,\n\n${effectiveSalesperson}\n${settings?.company_name || 'CELRON ENTERPRISES PTE LTD'}\n${settings?.address || defaultAddress}\nEmail: ${effectiveEmail} | Tel: ${effectivePhone}${webInfo}`;
+        if (effectiveSalesperson.toUpperCase().includes('ANITHA')) {
+            footer = `\n\nBest Regards,\n\nANITHA HP:+65 81962270\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, " Sim Lim Tower" #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6591090347\nweb: www.celron.net / www.celron.shop`;
+        }
 
         const effectiveType = (formData.document_type === 'Quotation' && (formData.document_no || '').startsWith('ORA')) ? 'Order Acknowledgment' : formData.document_type;
         const body = `Dear ${contact?.name || 'Customer'},\n\nPlease find attached the ${effectiveType} (${formData.document_no}) for your review.${itemsContent}${footer}`;
@@ -1795,7 +1942,10 @@ export default function WorkflowEditor() {
             const effectivePhone = (formData.salesperson_phone === '+65 97686891' || formData.salesperson_phone === '+65 81962270' || !formData.salesperson_phone) ? '+65 91090347' : (formData.salesperson_phone || '+65 81962270');
 
             const defaultAddress = '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787';
-            const footer = `\n\nBest Regards,\n\n${effectiveSalesperson}\n${settings?.company_name || 'CELRON ENTERPRISES PTE LTD'}\n${settings?.address || defaultAddress}\nEmail: ${effectiveEmail} | Tel: ${effectivePhone}`;
+            let footer = `\n\nBest Regards,\n\n${effectiveSalesperson}\n${settings?.company_name || 'CELRON ENTERPRISES PTE LTD'}\n${settings?.address || defaultAddress}\nEmail: ${effectiveEmail} | Tel: ${effectivePhone}`;
+            if (effectiveSalesperson.toUpperCase().includes('ANITHA')) {
+                footer = `\n\nBest Regards,\n\nANITHA HP:+65 81962270\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, " Sim Lim Tower" #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6591090347\nweb: www.celron.net / www.celron.shop`;
+            }
             const body = `Dear ${supplier?.name || 'Supplier'},\n\nPlease find attached our Request for Quotation (${newDoc.document_no}) for your review.\n\nPlease provide your best pricing and lead time.\n\n${footer}`;
 
             // We need to set the current document context for the PDF generator in sendEmail
@@ -2070,7 +2220,16 @@ export default function WorkflowEditor() {
                                 <input 
                                     type="text" 
                                     value={formData.document_no || ''} 
-                                    onChange={(e) => setFormData({...formData, document_no: e.target.value.toUpperCase()})}
+                                    onChange={(e) => {
+                                        const nextVal = e.target.value.toUpperCase();
+                                        setFormData(prev => {
+                                            const updated = { ...prev, document_no: nextVal };
+                                            if (prev.document_type === 'Job') {
+                                                updated.assigned_job_no = nextVal;
+                                            }
+                                            return updated;
+                                        });
+                                    }}
                                     className="doc-no-input"
                                     style={{
                                         fontSize: '1.25rem',
@@ -2275,6 +2434,8 @@ export default function WorkflowEditor() {
                                             name="partner_id"
                                             placeholder={`Choose ${formData.document_type === 'Purchase Order' ? 'supplier' : 'partner'}...`}
                                             className="flex-1"
+                                            onAddNew={() => setModal({ isOpen: true, type: 'partner_id' })}
+                                            addNewText={formData.document_type === 'Purchase Order' ? "Add New Supplier" : "Add New Customer"}
                                         />
                                         {formData.partner_id && (
                                             <button 
@@ -2369,15 +2530,61 @@ export default function WorkflowEditor() {
                         </div>
 
                         <div className="col-right">
-                            {formData.is_job && (
+                            {(formData.is_job || ['Job', 'Order Acknowledgment', 'Delivery Order', 'Packing List', 'Proforma Invoice', 'Tax Invoice', 'Certificate', 'Service Report'].includes(formData.document_type) || formData.assigned_job_no) && (
                                 <div className="form-item" style={{ background: '#f0fdf4', padding: '12px', borderRadius: '8px', border: '1px solid #bbf7d0', marginBottom: '16px' }}>
-                                    <label style={{ color: '#166534' }}><Package size={14} /> Assigned Job Number</label>
-                                    <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#15803d' }}>{formData.assigned_job_no}</div>
-                                    <div style={{ fontSize: '0.7rem', color: '#166534', marginTop: '4px' }}>
-                                        Linked Project Folder: {formData.drive_folder_id ? (
-                                            <a href={`https://drive.google.com/drive/folders/${formData.drive_folder_id}`} target="_blank" rel="noreferrer" className="text-accent underline">Open Drive</a>
-                                        ) : 'Provisioning on save...'}
-                                    </div>
+                                    <label style={{ color: '#166534', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                                        <Package size={14} /> Assigned Job Number
+                                    </label>
+                                    <input 
+                                        type="text" 
+                                        className="form-input" 
+                                        style={{ 
+                                            fontSize: '1.2rem', 
+                                            fontWeight: 800, 
+                                            color: '#15803d', 
+                                            background: '#ffffff', 
+                                            border: '1px solid #86efac',
+                                            borderRadius: '6px',
+                                            padding: '4px 8px',
+                                            marginTop: '6px',
+                                            width: '100%',
+                                            boxSizing: 'border-box'
+                                        }} 
+                                        value={formData.assigned_job_no || ''} 
+                                        onChange={(e) => setFormData(prev => ({ ...prev, assigned_job_no: e.target.value }))}
+                                        placeholder="e.g. CEL-2605-6059"
+                                    />
+                                    { (formData.drive_folder_id || formData.gdrive_folder_id) ? (
+                                        <div style={{ marginTop: '8px' }}>
+                                            <a 
+                                                href={`https://drive.google.com/drive/folders/${formData.drive_folder_id || formData.gdrive_folder_id}`} 
+                                                target="_blank" 
+                                                rel="noreferrer" 
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: '6px',
+                                                    fontSize: '0.8rem',
+                                                    fontWeight: 600,
+                                                    color: '#fff',
+                                                    background: '#16a34a',
+                                                    padding: '6px 12px',
+                                                    borderRadius: '6px',
+                                                    textDecoration: 'none',
+                                                    transition: 'background 0.2s',
+                                                    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                                }}
+                                                onMouseOver={(e) => e.currentTarget.style.background = '#15803d'}
+                                                onMouseOut={(e) => e.currentTarget.style.background = '#16a34a'}
+                                            >
+                                                <Folder size={14} /> Open Project Folder (Google Drive)
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <div style={{ fontSize: '0.7rem', color: '#166534', marginTop: '6px', fontStyle: 'italic' }}>
+                                            Folder will be provisioned on save.
+                                        </div>
+                                    )}
                                 </div>
                             )}
                             <div className="form-item">
@@ -2555,6 +2762,47 @@ export default function WorkflowEditor() {
                                     <div style={{ fontSize: '10px', color: 'var(--text-secondary)', marginTop: '4px', fontWeight: 600 }}>
                                         1 {formData.currency} = {formData.exchange_rate} SGD
                                     </div>
+                                )}
+                            </div>
+
+                            <div className="form-item">
+                                <label>Payment Terms</label>
+                                <select 
+                                    className="form-select" 
+                                    name="payment_terms_select" 
+                                    value={formData.payment_terms && !['COD', 'Immediate', '7 Days', '14 Days', '30 Days', '60 Days', '90 Days', 'Advance Payment', '50% on Order and 50% on COD'].includes(formData.payment_terms) ? "CUSTOM" : (formData.payment_terms || "")} 
+                                    onChange={(e) => {
+                                        const val = e.target.value;
+                                        if (val === "CUSTOM") {
+                                            setFormData(prev => ({ ...prev, payment_terms: "50% Advance, Balance COD" }));
+                                        } else {
+                                            setFormData(prev => ({ ...prev, payment_terms: val }));
+                                        }
+                                    }}
+                                >
+                                    <option value="">-- Select Payment Terms --</option>
+                                    <option value="COD">COD - Cash on Delivery</option>
+                                    <option value="Immediate">Immediate / Cash</option>
+                                    <option value="7 Days">7 Days</option>
+                                    <option value="14 Days">14 Days</option>
+                                    <option value="30 Days">30 Days</option>
+                                    <option value="60 Days">60 Days</option>
+                                    <option value="90 Days">90 Days</option>
+                                    <option value="Advance Payment">Advance Payment</option>
+                                    <option value="50% on Order and 50% on COD">50% on Order and 50% on COD</option>
+                                    <option value="CUSTOM">Custom...</option>
+                                </select>
+                                
+                                {formData.payment_terms && !['COD', 'Immediate', '7 Days', '14 Days', '30 Days', '60 Days', '90 Days', 'Advance Payment', '50% on Order and 50% on COD'].includes(formData.payment_terms) && (
+                                    <input 
+                                        type="text" 
+                                        className="form-input" 
+                                        name="payment_terms" 
+                                        value={formData.payment_terms} 
+                                        onChange={(e) => setFormData(prev => ({ ...prev, payment_terms: e.target.value }))}
+                                        placeholder="e.g. 50% Advance, Balance COD"
+                                        style={{ marginTop: '8px', fontSize: '12px' }}
+                                    />
                                 )}
                             </div>
                         </div>
@@ -2823,20 +3071,81 @@ export default function WorkflowEditor() {
                                                     rows={2}
                                                 />
                                             ) : (
-                                                <input
+                                                <textarea
                                                     className="table-input"
+                                                    style={{ 
+                                                        resize: 'none', 
+                                                        height: '42px', 
+                                                        minHeight: '42px',
+                                                        overflow: 'hidden',
+                                                        whiteSpace: 'nowrap',
+                                                        transition: 'height 0.2s ease, white-space 0.2s'
+                                                    }}
                                                     value={item.description}
-                                                    onChange={(e) => updateLineItem(index, 'description', e.target.value)}
+                                                    onChange={(e) => {
+                                                        updateLineItem(index, 'description', e.target.value);
+                                                        if (document.activeElement === e.target) {
+                                                            e.target.style.height = 'auto';
+                                                            e.target.style.height = `${e.target.scrollHeight}px`;
+                                                        }
+                                                    }}
+                                                    onFocus={(e) => {
+                                                        e.target.style.whiteSpace = 'normal';
+                                                        e.target.style.height = 'auto';
+                                                        e.target.style.height = `${e.target.scrollHeight}px`;
+                                                    }}
+                                                    onBlur={(e) => {
+                                                        e.target.style.whiteSpace = 'nowrap';
+                                                        e.target.style.height = '42px';
+                                                        e.target.scrollTop = 0;
+                                                    }}
                                                     placeholder={item.is_section ? "SECTION: e.g. Spare Parts" : "Select product or enter description..."}
                                                 />
                                             )}
                                             {!item.is_section && !item.is_note && (
-                                                <textarea
-                                                    className="table-textarea"
-                                                    value={item.details || ''}
-                                                    onChange={(e) => updateLineItem(index, 'details', e.target.value)}
-                                                    placeholder="Add technical details, specifications..."
-                                                />
+                                                <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', width: '100%', marginTop: '4px' }}>
+                                                    <textarea
+                                                        className="table-textarea"
+                                                        style={{ 
+                                                            minHeight: '48px', 
+                                                            height: 'auto',
+                                                            resize: 'vertical',
+                                                            borderBottom: '1px dashed #cbd5e1', 
+                                                            paddingRight: '28px',
+                                                            borderRadius: '4px',
+                                                            padding: '4px'
+                                                        }}
+                                                        value={item.details || ''}
+                                                        onChange={(e) => updateLineItem(index, 'details', e.target.value)}
+                                                        placeholder="Add technical details, specifications..."
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setModalItemIndex(index);
+                                                            setModalItemDetails(item.details || '');
+                                                            setShowDetailsModal(true);
+                                                        }}
+                                                        style={{
+                                                            position: 'absolute',
+                                                            right: '4px',
+                                                            top: '4px',
+                                                            border: 'none',
+                                                            background: 'rgba(255,255,255,0.8)',
+                                                            cursor: 'pointer',
+                                                            color: 'var(--accent)',
+                                                            padding: '4px',
+                                                            borderRadius: '4px',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                                        }}
+                                                        title="Edit in full screen modal"
+                                                    >
+                                                        <ExternalLink size={12} />
+                                                    </button>
+                                                </div>
                                             )}
                                         </td>
                                         <td>
@@ -3261,24 +3570,175 @@ export default function WorkflowEditor() {
                                         <Paperclip size={16} className="text-accent" />
                                         <span>Documents & Attachments (Saved to GDrive)</span>
                                     </div>
-                                    <label style={{ cursor: 'pointer', color: 'var(--accent)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                        <Plus size={14} /> Upload File
-                                        <input type="file" multiple style={{ display: 'none' }} onChange={async (e) => {
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                        {formData.drive_folder_id && (
+                                            <a 
+                                                href={`https://drive.google.com/drive/folders/${formData.drive_folder_id}`} 
+                                                target="_blank" 
+                                                rel="noreferrer" 
+                                                style={{ color: '#16a34a', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px', textDecoration: 'none', fontWeight: 600 }}
+                                                className="hover:underline"
+                                            >
+                                                <Folder size={14} /> Open Folder in GDrive
+                                            </a>
+                                        )}
+                                        <label style={{ cursor: 'pointer', color: 'var(--accent)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            <Plus size={14} /> Upload File
+                                            <input type="file" multiple style={{ display: 'none' }} onChange={async (e) => {
                                             const files = Array.from(e.target.files);
-                                            // Handle file upload to GDrive here via workflowV2Service/driveService
-                                            alert('GDrive upload integration in progress. Files will be saved to: ' + getGDriveFolderIdForStage(formData.document_type));
+                                            if (files.length === 0) return;
+                                            
+                                            try {
+                                                const token = await getStoredToken();
+                                                if (!token) {
+                                                    alert('Please make sure you are logged into Google Drive via the Google Drive panel on the left side of the screen.');
+                                                    return;
+                                                }
+                                                
+                                                let parentFolderId = formData.drive_folder_id;
+                                                if (!parentFolderId && formData.assigned_job_no) {
+                                                    const { data: suiteDocs } = await supabase
+                                                        .from('workflow_documents')
+                                                        .select('drive_folder_id, gdrive_folder_id')
+                                                        .eq('assigned_job_no', formData.assigned_job_no)
+                                                        .not('drive_folder_id', 'is', null);
+                                                    
+                                                    const found = suiteDocs?.find(d => d.drive_folder_id || d.gdrive_folder_id);
+                                                    if (found) {
+                                                        parentFolderId = found.drive_folder_id || found.gdrive_folder_id;
+                                                    }
+                                                }
+                                                
+                                                if (!parentFolderId) {
+                                                    const confirmProvision = confirm("No Google Drive folder structure exists for this Job yet.\n\nWould you like to provision the folder structure now?");
+                                                    if (!confirmProvision) return;
+                                                    
+                                                    const { getDocumentSettings } = await import('../../lib/store');
+                                                    const settings = await getDocumentSettings(profile.company_id);
+                                                    let celronRootId = settings?.gdrive_celron_root_id || settings?.google_drive_folder_id;
+                                                    if (!celronRootId) {
+                                                        alert('Google Drive Root Folder ID not configured in Settings.');
+                                                        return;
+                                                    }
+                                                    
+                                                    if (celronRootId.includes('drive.google.com')) {
+                                                        const match = celronRootId.match(/\/folders\/([a-zA-Z0-9_-]+)/) || celronRootId.match(/\/d\/([a-zA-Z0-9_-]+)/);
+                                                        if (match) celronRootId = match[1];
+                                                    }
+                                                    
+                                                    setAttachmentUploadProgress({ fileName: 'Creating Google Drive Project folders...', percent: 20 });
+                                                    
+                                                    const year = new Date(formData.issue_date || new Date()).getFullYear().toString();
+                                                    const projName = formData.assigned_job_no || formData.document_no || 'Job Folder';
+                                                    
+                                                    const newFolderId = await provisionFullProjectStructure(token, celronRootId, year, projName);
+                                                    parentFolderId = newFolderId;
+                                                    
+                                                    setFormData(prev => ({ ...prev, drive_folder_id: newFolderId }));
+                                                    await supabase
+                                                        .from('workflow_documents')
+                                                        .update({ drive_folder_id: newFolderId })
+                                                        .eq('id', formData.id);
+                                                }
+                                                
+                                                const subfolderName = getGDriveFolderIdForStage(formData.document_type) || '7. Correspondence & Admin';
+                                                setAttachmentUploadProgress({ fileName: `Finding stage folder "${subfolderName}"...`, percent: 40 });
+                                                
+                                                const subfolderId = await getOrCreateFolder(token, subfolderName, parentFolderId);
+                                                const newUrls = [...(formData.attachment_urls || [])];
+                                                
+                                                for (let i = 0; i < files.length; i++) {
+                                                    const file = files[i];
+                                                    setAttachmentUploadProgress({ fileName: file.name, percent: 0 });
+                                                    
+                                                    const response = await uploadFileToDrive(token, file, {
+                                                        folderId: subfolderId,
+                                                        title: file.name,
+                                                        onProgress: (percent) => {
+                                                            setAttachmentUploadProgress({ fileName: file.name, percent });
+                                                        }
+                                                    });
+                                                    
+                                                    if (response && response.id) {
+                                                        const { makeFilePublic } = await import('../../lib/driveService');
+                                                        await makeFilePublic(token, response.id);
+                                                        
+                                                        const webViewLink = `https://drive.google.com/file/d/${response.id}/view?usp=drivesdk&filename=${encodeURIComponent(file.name)}`;
+                                                        newUrls.push(webViewLink);
+                                                    }
+                                                }
+                                                
+                                                setAttachmentUploadProgress(null);
+                                                setFormData(prev => ({ ...prev, attachment_urls: newUrls }));
+                                                
+                                                const { error: saveErr } = await supabase
+                                                    .from('workflow_documents')
+                                                    .update({ attachment_urls: newUrls })
+                                                    .eq('id', formData.id);
+                                                    
+                                                if (saveErr) throw saveErr;
+                                                toast.success('Successfully uploaded all files to Google Drive!');
+                                            } catch (err) {
+                                                console.error(err);
+                                                setAttachmentUploadProgress(null);
+                                                alert('Upload failed: ' + err.message);
+                                            }
                                         }} />
                                     </label>
-                                </label>
+                                </div>
+                            </label>
+                                
+                                {attachmentUploadProgress && (
+                                    <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px', borderRadius: '8px', marginBottom: '12px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#166534', fontWeight: 600 }}>
+                                            <span>Uploading: {attachmentUploadProgress.fileName}</span>
+                                            <span>{attachmentUploadProgress.percent}%</span>
+                                        </div>
+                                        <div style={{ background: '#cbd5e1', height: '6px', borderRadius: '3px', overflow: 'hidden' }}>
+                                            <div style={{ background: '#22c55e', height: '100%', width: `${attachmentUploadProgress.percent}%`, transition: 'width 0.15s ease-in-out' }}></div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px dashed #cbd5e1', minHeight: '60px' }}>
                                     {formData.attachment_urls?.length > 0 ? (
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            {formData.attachment_urls.map((url, idx) => (
-                                                <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-                                                    <span style={{ fontSize: '0.85rem' }}>{url.split('/').pop()}</span>
-                                                    <a href={url} target="_blank" rel="noreferrer" className="text-accent">View</a>
-                                                </div>
-                                            ))}
+                                            {formData.attachment_urls.map((url, idx) => {
+                                                let fileName = 'Attachment';
+                                                try {
+                                                    const u = new URL(url);
+                                                    const fn = u.searchParams.get('filename');
+                                                    if (fn) fileName = decodeURIComponent(fn);
+                                                    else fileName = url.split('/').pop();
+                                                } catch (e) {
+                                                    fileName = url.split('/').pop() || 'Attachment';
+                                                }
+                                                
+                                                return (
+                                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                                                        <span style={{ fontSize: '0.85rem', color: '#334155', fontWeight: 500 }}>{fileName}</span>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                            <a href={url} target="_blank" rel="noreferrer" className="text-accent hover:underline" style={{ fontSize: '0.8rem', fontWeight: 600 }}>View</a>
+                                                            <button 
+                                                                type="button" 
+                                                                style={{ fontSize: '0.8rem', fontWeight: 600, color: '#ef4444', border: 'none', background: 'none', cursor: 'pointer' }}
+                                                                onClick={async () => {
+                                                                    if (!confirm(`Are you sure you want to remove the attachment "${fileName}"?`)) return;
+                                                                    const updatedUrls = formData.attachment_urls.filter((_, i) => i !== idx);
+                                                                    setFormData(prev => ({ ...prev, attachment_urls: updatedUrls }));
+                                                                    await supabase
+                                                                        .from('workflow_documents')
+                                                                        .update({ attachment_urls: updatedUrls })
+                                                                        .eq('id', formData.id);
+                                                                    toast.success('Attachment removed');
+                                                                }}
+                                                            >
+                                                                Remove
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     ) : (
                                         <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>No attachments yet. Click 'Upload' to add.</div>
@@ -4082,11 +4542,153 @@ export default function WorkflowEditor() {
                                 </div>
 
                                 {/* CONTACT SELECTOR SECTION */}
-                                {getSuggestedEmails().length > 0 && (
-                                    <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                                        <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                        <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', margin: 0 }}>
                                             SELECT CONTACTS FROM COMPANY
                                         </label>
+                                        {!isAddingContact && !editingContact && formData.partner_id && (
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsAddingContact(true);
+                                                    setEditingContact(null);
+                                                    setContactFormName('');
+                                                    setContactFormEmail('');
+                                                }}
+                                                style={{ 
+                                                    background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
+                                                    color: '#fff', 
+                                                    border: 'none', 
+                                                    borderRadius: '4px', 
+                                                    padding: '2px 8px', 
+                                                    fontSize: '10px', 
+                                                    fontWeight: 700, 
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    boxShadow: '0 1px 2px rgba(37,99,235,0.2)',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                + Add Contact
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Inline Form */}
+                                    {(isAddingContact || editingContact) ? (
+                                        <div style={{ 
+                                            background: '#fff', 
+                                            border: '1px solid #e2e8f0', 
+                                            borderRadius: '8px', 
+                                            padding: '12px', 
+                                            marginTop: '4px',
+                                            boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '8px'
+                                        }}>
+                                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b' }}>
+                                                {editingContact ? '✏️ Edit Contact' : '➕ Add Contact'}
+                                            </div>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                                                <input 
+                                                    type="text" 
+                                                     placeholder="Contact Name"
+                                                     value={contactFormName}
+                                                     onChange={e => setContactFormName(e.target.value)}
+                                                     style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
+                                                 />
+                                                 <input 
+                                                     type="email" 
+                                                     placeholder="Contact Email"
+                                                     value={contactFormEmail}
+                                                     onChange={e => setContactFormEmail(e.target.value)}
+                                                     style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
+                                                 />
+                                             </div>
+                                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '4px' }}>
+                                                 <button 
+                                                     type="button" 
+                                                     onClick={() => {
+                                                         setIsAddingContact(false);
+                                                         setEditingContact(null);
+                                                         setContactFormName('');
+                                                         setContactFormEmail('');
+                                                     }}
+                                                     style={{ padding: '4px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#fff', color: '#475569', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                                 >
+                                                     Cancel
+                                                 </button>
+                                                 <button 
+                                                     type="button" 
+                                                     onClick={handleSaveInlineContact}
+                                                     disabled={isSavingContact}
+                                                     style={{ padding: '4px 10px', border: 'none', borderRadius: '4px', background: '#10b981', color: '#fff', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
+                                                 >
+                                                     {isSavingContact ? 'Saving...' : 'Save'}
+                                                 </button>
+                                             </div>
+                                         </div>
+                                     ) : (
+                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                             {getSuggestedEmails().map((contact, idx) => (
+                                                 <div 
+                                                     key={idx} 
+                                                     style={{ 
+                                                         background: '#fff', 
+                                                         border: '1px solid #cbd5e1', 
+                                                         borderRadius: '6px', 
+                                                         padding: '4px 8px', 
+                                                         display: 'flex', 
+                                                         alignItems: 'center', 
+                                                         gap: '8px',
+                                                         boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                                     }}
+                                                 >
+                                                     <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                         <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b' }}>{contact.name}</span>
+                                                         <span style={{ fontSize: '10px', color: '#64748b' }}>{contact.email}</span>
+                                                     </div>
+                                                     <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid #e2e8f0', paddingLeft: '8px', marginLeft: '4px', alignItems: 'center' }}>
+                                                         {contact.type === 'Contact' && (
+                                                             <button 
+                                                                 type="button"
+                                                                 onClick={() => {
+                                                                     setEditingContact(contact);
+                                                                     setIsAddingContact(false);
+                                                                     setContactFormName(contact.name);
+                                                                     setContactFormEmail(contact.email);
+                                                                 }}
+                                                                 title="Edit Contact"
+                                                                 style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px', color: '#64748b' }}
+                                                             >
+                                                                 <Pencil size={12} />
+                                                             </button>
+                                                         )}
+                                                         <button 
+                                                             type="button"
+                                                             onClick={() => addEmailToField('to', contact.email)}
+                                                             style={{ background: '#eef2ff', color: '#6366f1', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
+                                                         >
+                                                             To
+                                                         </button>
+                                                         <button 
+                                                             type="button"
+                                                             onClick={() => addEmailToField('cc', contact.email)}
+                                                             style={{ background: '#f0fdf4', color: '#16a34a', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
+                                                         >
+                                                             Cc
+                                                         </button>
+                                                     </div>
+                                                 </div>
+                                             ))}
+                                         </div>
+                                     )}
+                                 </div>
+                                 {false && (
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                                             {getSuggestedEmails().map((contact, idx) => (
                                                 <div 
@@ -4125,7 +4727,6 @@ export default function WorkflowEditor() {
                                                 </div>
                                             ))}
                                         </div>
-                                    </div>
                                 )}
                             </div>
 
@@ -4390,6 +4991,106 @@ export default function WorkflowEditor() {
                                 </label>
                             </div>
                             <button onClick={() => setShowOCRModal(false)} className="btn btn-outline" style={{ width: '100%', padding: '12px', borderRadius: '12px' }}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showDetailsModal && modalItemIndex !== null && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(15, 23, 42, 0.45)',
+                    backdropFilter: 'blur(8px)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 9999,
+                    animation: 'fadeIn 0.2s ease-out'
+                }}>
+                    <div style={{
+                        background: '#ffffff',
+                        width: '90%',
+                        maxWidth: '700px',
+                        borderRadius: '24px',
+                        padding: '32px',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '20px'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <Sparkles size={18} className="text-accent" />
+                                    Technical Specifications
+                                </h3>
+                                <p style={{ margin: '4px 0 0', fontSize: '0.85rem', color: '#64748b', fontWeight: 500 }}>
+                                    Line Item: <span style={{ color: 'var(--accent)', fontWeight: 600 }}>{lineItems[modalItemIndex]?.description || 'Selected Line Item'}</span>
+                                </p>
+                            </div>
+                            <button 
+                                onClick={() => setShowDetailsModal(false)}
+                                style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', padding: '4px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                className="hover:bg-slate-100"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <textarea
+                                value={modalItemDetails}
+                                onChange={(e) => setModalItemDetails(e.target.value)}
+                                rows={10}
+                                style={{
+                                    width: '100%',
+                                    padding: '16px',
+                                    borderRadius: '12px',
+                                    border: '1px solid #cbd5e1',
+                                    fontSize: '0.95rem',
+                                    fontFamily: 'inherit',
+                                    resize: 'vertical',
+                                    background: '#f8fafc',
+                                    color: '#1e293b',
+                                    outline: 'none',
+                                    transition: 'border-color 0.2s',
+                                    lineHeight: '1.5'
+                                }}
+                                onFocus={(e) => e.target.style.borderColor = 'var(--accent)'}
+                                onBlur={(e) => e.target.style.borderColor = '#cbd5e1'}
+                                placeholder="Enter full specifications, model numbers, dimensions, scope of work, and other technical details..."
+                                autoFocus
+                            />
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#64748b' }}>
+                                <span>💡 Pro-tip: Press Enter to add bullet points or start new lines.</span>
+                                <span>{modalItemDetails.length} characters</span>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '8px' }}>
+                            <button 
+                                onClick={() => setShowDetailsModal(false)} 
+                                className="btn btn-outline"
+                                style={{ padding: '10px 20px', borderRadius: '10px' }}
+                            >
+                                Cancel
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    updateLineItem(modalItemIndex, 'details', modalItemDetails);
+                                    setShowDetailsModal(false);
+                                    toast.success('Specifications updated successfully!');
+                                }} 
+                                className="btn btn-primary"
+                                style={{ padding: '10px 20px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                            >
+                                <CheckCircle size={16} /> Save Specifications
+                            </button>
                         </div>
                     </div>
                 </div>

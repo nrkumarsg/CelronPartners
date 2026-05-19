@@ -404,7 +404,7 @@ export const saveWorkflowDocument = async (docData, lineItems) => {
         'internal_notes',
         'discount_amount', 'discount_percent',
         'customer_po_no', 'customer_po_date', 'customer_po_by_id', 'customer_po_attachment_url',
-        'is_job', 'assigned_job_no',
+        'is_job', 'assigned_job_no', 'payment_terms',
         'original_document_id', 'revision_no', 'enquiry_id', 'job_id',
         'attachment_urls', 'delivery_verification', 'gdrive_folder_id', 'drive_folder_id',
         'signature_url', 'signed_by', 'is_signed'
@@ -450,6 +450,27 @@ export const saveWorkflowDocument = async (docData, lineItems) => {
     sanitizedHeader.tax_amount = parseFloat(sanitizedHeader.tax_amount) || 0;
     sanitizedHeader.total_amount = parseFloat(sanitizedHeader.total_amount) || 0;
 
+    // Sync assigned_job_no for Job documents
+    if (sanitizedHeader.document_type === 'Job') {
+        sanitizedHeader.assigned_job_no = sanitizedHeader.document_no;
+    }
+
+    let oldJobNo = null;
+    if (!isNew && sanitizedHeader.document_type === 'Job') {
+        try {
+            const { data: existingDoc } = await supabase
+                .from('workflow_documents')
+                .select('document_no')
+                .eq('id', headerData.id)
+                .single();
+            if (existingDoc) {
+                oldJobNo = existingDoc.document_no;
+            }
+        } catch (err) {
+            console.error("Failed to fetch existing job document for renaming:", err);
+        }
+    }
+
     let savedDoc;
     if (isNew) {
         // Double check document_no is set
@@ -473,6 +494,19 @@ export const saveWorkflowDocument = async (docData, lineItems) => {
             .single();
         if (error) throw error;
         savedDoc = data;
+
+        if (oldJobNo && oldJobNo !== savedDoc.document_no) {
+            // Propagate the renamed job number to all other associated documents in the suite
+            const { error: renameError } = await supabase
+                .from('workflow_documents')
+                .update({ assigned_job_no: savedDoc.document_no })
+                .eq('assigned_job_no', oldJobNo);
+            if (renameError) {
+                console.error("Failed to propagate renamed assigned_job_no:", renameError);
+            } else {
+                console.log(`Propagated job suite rename from ${oldJobNo} to ${savedDoc.document_no} successfully.`);
+            }
+        }
     }
 
     // Handle Line Items

@@ -22,6 +22,7 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 import CustomerEnquiryForm from '../../components/CustomerEnquiryForm';
 import JobEditV2Modal from '../../components/workflows/JobEditV2Modal';
 import ReceivePaymentModal from '../../components/workflow/ReceivePaymentModal';
+import SearchableSelect from '../../components/common/SearchableSelect';
 import { getPartners } from '../../lib/store';
 
 const DOC_TYPES = [
@@ -158,10 +159,27 @@ export default function WorkflowV2Board() {
         if (activeType === 'Quotation' || activeType === 'Order Acknowledgment') {
             typeFilter = ['Quotation', 'Order Acknowledgment'];
         }
+        const isInvoiceView = activeType === 'Tax Invoice' || activeType === 'Proforma Invoice';
+        if (isInvoiceView) {
+            typeFilter = [activeType, 'Payment Received'];
+        }
         const { data, error } = await getWorkflowDocuments(profile.company_id, typeFilter);
         
         if (data) {
             let filtered = data;
+            
+            // Build a payment map for ALL docs to calculate invoice balances
+            const paymentsMap = {};
+            data.filter(d => d.document_type === 'Payment Received').forEach(payment => {
+                try {
+                    const notes = JSON.parse(payment.internal_notes || '{}');
+                    const relatedId = notes.related_document_id;
+                    if (relatedId) {
+                        paymentsMap[relatedId] = (paymentsMap[relatedId] || 0) + (parseFloat(payment.total_amount) || 0);
+                    }
+                } catch (e) {}
+            });
+
             if (activeType === 'Job') {
                 // Show everything that has is_job: true, but group by job number to avoid duplicates in the list
                 const jobs = data.filter(d => d.is_job === true && d.assigned_job_no);
@@ -206,6 +224,21 @@ export default function WorkflowV2Board() {
                 });
                 setSoaGroups(Object.values(groups));
             }
+            
+            // Map the balance to all invoices
+            filtered = filtered.map(doc => {
+                if (doc.document_type === 'Tax Invoice' || doc.document_type === 'Proforma Invoice') {
+                    const paid = paymentsMap[doc.id] || 0;
+                    return { ...doc, total_paid: paid, balance: Math.max(0, parseFloat(doc.total_amount || 0) - paid) };
+                }
+                return doc;
+            });
+
+            if (isInvoiceView) {
+                // Filter out the Payment Received records from the actual list view so they don't show up in the table
+                filtered = filtered.filter(d => d.document_type === activeType);
+            }
+            
             setDocuments(filtered);
         }
         setLoading(false);
@@ -544,7 +577,11 @@ export default function WorkflowV2Board() {
             return;
         }
 
-        if (!window.confirm(`No folder linked for ${doc.document_no}. Provision folder for ${jobNo} now?`)) return;
+        const confirmMsg = doc.document_type === 'Job'
+            ? `No Google Drive folder linked for Job ${jobNo}. Would you like to provision a new project folder structure for it now?`
+            : `No Google Drive folder linked for ${doc.document_no}. Would you like to provision a project folder for Job ${jobNo} now?`;
+            
+        if (!window.confirm(confirmMsg)) return;
 
         try {
             setLoading(true);
@@ -856,18 +893,14 @@ export default function WorkflowV2Board() {
                         </div>
 
                         {/* Customer Filter Dropdown */}
-                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 16px', minWidth: '250px' }}>
-                            <Filter size={18} color="var(--text-secondary)" style={{ marginRight: '8px' }} />
-                            <select
-                                style={{ border: 'none', background: 'transparent', outline: 'none', flex: 1, color: 'var(--text-primary)', cursor: 'pointer' }}
+                        <div style={{ minWidth: '300px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Filter size={18} color="var(--text-secondary)" style={{ marginLeft: '8px' }} />
+                            <SearchableSelect
+                                options={partners}
                                 value={selectedPartnerId}
                                 onChange={(e) => setSelectedPartnerId(e.target.value)}
-                            >
-                                <option value="">All Customers</option>
-                                {partners.map(p => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
-                            </select>
+                                placeholder="All Customers"
+                            />
                         </div>
                     </div>
 
@@ -893,7 +926,7 @@ export default function WorkflowV2Board() {
                                     <th>Customer</th>
                                     <th>Purchase Order Info</th>
                                     <th>Description</th>
-                                    <th>Value (SGD)</th>
+                                    <th style={{ textAlign: 'right' }}>Value (SGD)</th>
                                     <th>Attachment</th>
                                     <th style={{ textAlign: 'center' }}>Folder</th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
@@ -904,8 +937,9 @@ export default function WorkflowV2Board() {
                                     <th>Document No</th>
                                     <th>Issue Date</th>
                                     <th>Customer</th>
+                                    <th>Cust. Ref</th>
                                     <th>Vessel / Work Location</th>
-                                    <th>Total</th>
+                                    <th style={{ textAlign: 'right' }}>Total</th>
                                     <th>Status</th>
                                     <th style={{ textAlign: 'center' }}>Folder</th>
                                     <th style={{ textAlign: 'right' }}>Actions</th>
@@ -1005,7 +1039,7 @@ export default function WorkflowV2Board() {
                                                     {doc.subject || '-'}
                                                 </div>
                                             </td>
-                                            <td className="font-bold">SGD {doc.delivery_verification?.po_value?.toLocaleString(undefined, { minimumFractionDigits: 2 }) || '-'}</td>
+                                            <td className="font-bold" style={{ textAlign: 'right' }}>SGD {(doc.total_amount || doc.delivery_verification?.po_value || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                             <td>
                                                 {doc.customer_po_attachment_url ? (
                                                     <a href={doc.customer_po_attachment_url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent)', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1032,6 +1066,19 @@ export default function WorkflowV2Board() {
                                                         onClick={() => navigate(`/workflows/editor/${doc.document_type.toLowerCase().replace(/\s+/g, '-')}/${doc.id}`)}
                                                     >
                                                         <Eye size={14} /> Open
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-sm btn-secondary"
+                                                        style={{ color: '#6366f1' }}
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            handleDuplicate(doc.id);
+                                                        }}
+                                                        title="Duplicate Job Document"
+                                                    >
+                                                        <Copy size={14} />
                                                     </button>
                                                     <button
                                                         type="button"
@@ -1129,14 +1176,36 @@ export default function WorkflowV2Board() {
                                                     <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px', opacity: 0.8 }}>
                                                         {doc.subject || '-'}
                                                     </div>
-                                                    {doc.customer_ref && <div style={{ opacity: 0.6, fontSize: '0.7rem' }}>Ref: {doc.customer_ref}</div>}
                                                 </div>
+                                            </td>
+                                            <td>
+                                                {doc.customer_ref ? (
+                                                    <span style={{ 
+                                                        background: 'rgba(99, 102, 241, 0.1)', 
+                                                        color: '#4f46e5', 
+                                                        padding: '4px 10px', 
+                                                        borderRadius: '8px', 
+                                                        fontSize: '0.75rem', 
+                                                        fontWeight: 700,
+                                                        display: 'inline-block',
+                                                        border: '1px solid rgba(99, 102, 241, 0.2)'
+                                                    }}>
+                                                        {doc.customer_ref}
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: 'var(--text-secondary)', opacity: 0.5 }}>-</span>
+                                                )}
                                             </td>
                                             <td>
                                                 {doc.vessels?.vessel_name || doc.work_locations?.location_name || '-'}
                                             </td>
-                                            <td className="font-bold">
+                                            <td className="font-bold" style={{ textAlign: 'right' }}>
                                                 {doc.currency} {doc.total_amount?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                {doc.total_paid > 0 && (
+                                                    <div style={{ fontSize: '0.75rem', color: doc.balance > 0 ? '#f59e0b' : '#10b981', marginTop: '4px' }}>
+                                                        {doc.balance <= 0 ? 'Paid' : `Bal: ${doc.currency} ${doc.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td>
                                                 <span style={{
@@ -1177,6 +1246,19 @@ export default function WorkflowV2Board() {
                                                         }}
                                                     >
                                                         <Eye size={14} /> {doc.notes?.startsWith('http') ? 'View' : 'Open'}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-sm btn-secondary"
+                                                        style={{ position: 'relative', zIndex: 20, cursor: 'pointer', color: '#6366f1' }}
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            handleDuplicate(doc.id);
+                                                        }}
+                                                        title="Duplicate Document"
+                                                    >
+                                                        <Copy size={14} />
                                                     </button>
                                                     <button
                                                         type="button"
@@ -1440,6 +1522,19 @@ export default function WorkflowV2Board() {
                                     ))))
                                 }
                             </tbody>
+                            {activeType !== 'Statement of Account' && filteredDocs.length > 0 && (
+                                <tfoot style={{ background: '#f8fafc', fontWeight: 'bold', borderTop: '2px solid var(--border-color)' }}>
+                                    <tr>
+                                        <td colSpan={activeType === 'Job' ? 4 : 5} style={{ textAlign: 'right', paddingRight: '20px', color: 'var(--text-secondary)' }}>
+                                            Total for {filteredDocs.length} {filteredDocs.length === 1 ? 'Record' : 'Records'}:
+                                        </td>
+                                        <td style={{ color: 'var(--text-primary)', fontSize: '1.05em', textAlign: 'right' }}>
+                                            SGD {filteredDocs.reduce((sum, doc) => sum + (parseFloat(activeType === 'Job' ? doc.delivery_verification?.po_value : doc.total_amount) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        </td>
+                                        <td colSpan={3}></td>
+                                    </tr>
+                                </tfoot>
+                            )}
                     </table>
                 </div>
             </div>

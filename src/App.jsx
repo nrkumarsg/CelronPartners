@@ -116,6 +116,7 @@ function App() {
             <Routes>
               {/* Base Dashboard (Accessible if logged in and active, handled by wildcard ProtectedRoute) */}
               <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
               <Route path="/search" element={<ProtectedRoute><SearchResults /></ProtectedRoute>} />
 
               {/* User Management (Superadmins & Admins only) */}

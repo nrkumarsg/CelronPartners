@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, ChevronDown, Check, X } from 'lucide-react';
+import { Search, ChevronDown, Check, X, Plus } from 'lucide-react';
 
 /**
  * A premium searchable select component for internal datasets.
@@ -11,7 +11,9 @@ const SearchableSelect = ({
     placeholder = "Select an option...", 
     className = "",
     name = "searchable_select",
-    renderOption = null
+    renderOption = null,
+    onAddNew = null,
+    addNewText = "Add New"
 }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [isOpen, setIsOpen] = useState(false);
@@ -123,6 +125,39 @@ const SearchableSelect = ({
                     </div>
                     
                     <div className="options-list">
+                        {onAddNew && (
+                            <div 
+                                onClick={() => {
+                                    onAddNew();
+                                    setIsOpen(false);
+                                    setSearchTerm('');
+                                }}
+                                style={{
+                                    padding: '10px 12px',
+                                    cursor: 'pointer',
+                                    borderRadius: '8px',
+                                    background: 'transparent',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    transition: 'all 0.15s ease',
+                                    marginBottom: '6px',
+                                    borderBottom: '1px dashed #e2e8f0',
+                                    color: '#6366f1',
+                                    fontWeight: 700,
+                                    fontSize: '0.9rem'
+                                }}
+                                className="option-item add-new-option"
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.background = 'rgba(99, 102, 241, 0.05)';
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.background = 'transparent';
+                                }}
+                            >
+                                <Plus size={16} style={{ marginRight: '8px' }} />
+                                {addNewText}
+                            </div>
+                        )}
                         {filteredOptions.length > 0 ? (
                             filteredOptions.map(opt => (
                                 <div 
@@ -164,7 +199,34 @@ const SearchableSelect = ({
                             ))
                         ) : (
                             <div style={{ padding: '20px 8px', textAlign: 'center', color: '#94a3b8', fontSize: '0.85rem' }}>
-                                No matches found for "{searchTerm}"
+                                <div style={{ marginBottom: '12px' }}>No matches found for "{searchTerm}"</div>
+                                {onAddNew && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            onAddNew();
+                                            setIsOpen(false);
+                                            setSearchTerm('');
+                                        }}
+                                        style={{
+                                            background: '#6366f1',
+                                            color: '#fff',
+                                            border: 'none',
+                                            padding: '8px 16px',
+                                            borderRadius: '6px',
+                                            cursor: 'pointer',
+                                            fontWeight: 600,
+                                            fontSize: '0.85rem',
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            boxShadow: '0 2px 4px rgba(99, 102, 241, 0.2)'
+                                        }}
+                                    >
+                                        <Plus size={14} />
+                                        {addNewText}
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>

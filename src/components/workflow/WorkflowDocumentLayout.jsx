@@ -69,7 +69,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
         return `${dd}/${mm}/${yy}`;
     };
     
-    const todayFormatted = formatDate(new Date());
+    const documentDateFormatted = formatDate(doc.issue_date || new Date());
     let itemCounter = 0;
 
     const isEffectiveORA = doc.document_type?.toUpperCase() === 'ORDER ACKNOWLEDGMENT' || (doc.document_type?.toUpperCase() === 'QUOTATION' && (doc.document_no || '').startsWith('ORA')) || doc.document_type === 'ORA';
@@ -83,6 +83,10 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
     const isFinancial = isInvoice || isProforma || isPayment;
     const isEnquiry = doc.document_type?.toUpperCase() === 'ENQUIRY';
     const isAnithaType = ['Tax Invoice', 'Purchase Order', 'Delivery Order', 'Proforma Invoice', 'Packing List', 'Statement Of Account', 'Order Acknowledgment'].includes(doc.document_type);
+    const isKumar = doc.salesperson_name?.toUpperCase() === 'N.R.KUMAR' || doc.salesperson_name?.toUpperCase() === 'KUMAR';
+    const effectiveSalesperson = isKumar ? 'N.R.KUMAR' : ((isAnithaType && (!doc.salesperson_name)) ? 'ANITHA (Ms)' : (doc.salesperson_name || 'ANITHA (Ms)'));
+    const effectivePhone = isKumar ? '+65 97685891' : ((isAnithaType && (!doc.salesperson_phone)) ? '+6581962270' : (doc.salesperson_phone || '+6581962270'));
+    const effectiveEmail = isKumar ? 'kumar@celron.net' : ((isAnithaType && (!doc.salesperson_email)) ? 'accounts@celron.net' : (doc.salesperson_email || 'sales@celron.net'));
 
     const docNoLabel = isQuotation ? 'Q.NO' : 
                        isJob ? 'JOB.NO' :
@@ -170,7 +174,7 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                 <h1 style={{ ...styles.h1, textAlign: 'center', width: '40%', margin: 0 }}>
                     {isJob ? 'JOB DETAIL' : (isORA ? 'ORDER ACKNOWLEDGMENT' : (isPayment ? 'OFFICIAL RECEIPT' : doc.document_type?.toUpperCase()))}
                 </h1>
-                <div style={{ ...styles.h3, width: '30%', textAlign: 'right' }}>{isPayment ? 'RECEIPT DATE' : 'DATE'}: {todayFormatted}</div>
+                <div style={{ ...styles.h3, width: '30%', textAlign: 'right' }}>{isPayment ? 'RECEIPT DATE' : 'DATE'}: {documentDateFormatted}</div>
             </div>
 
             {/* Recipient & Metadata Grid (Balanced) */}
@@ -236,6 +240,12 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                                 <td style={{ padding: '4px 10px', background: '#f8fafc', ...styles.h3, borderRight: styles.border }}>{vesselLabel}</td>
                                 <td style={{ padding: '4px 10px', ...styles.bodyBold }}>{vesselValue}</td>
                             </tr>
+                            {doc.payment_terms && (
+                                <tr style={{ borderBottom: styles.border }}>
+                                    <td style={{ padding: '4px 10px', background: '#f8fafc', ...styles.h3, borderRight: styles.border }}>PAYMENT TERMS</td>
+                                    <td style={{ padding: '4px 10px', ...styles.bodyBold, color: '#1e3a8a' }}>{doc.payment_terms.toUpperCase()}</td>
+                                </tr>
+                            )}
                             {doc.customer_ref && (
                                 <tr style={{ borderBottom: styles.border }}>
                                     <td style={{ padding: '4px 10px', background: '#f8fafc', ...styles.h3, borderRight: styles.border }}>REFERENCE</td>
@@ -251,9 +261,9 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                             <tr>
                                 <td style={{ padding: '4px 10px', background: '#f8fafc', ...styles.h3, borderRight: styles.border, verticalAlign: 'top' }}>SALESPERSON</td>
                                 <td style={{ padding: '4px 10px', ...styles.bodyBold }}>
-                                    {((isAnithaType && (doc.salesperson_name === 'N.R.KUMAR' || doc.salesperson_name === 'KUMAR' || !doc.salesperson_name)) ? 'ANITHA (Ms)' : (doc.salesperson_name || 'ANITHA (Ms)')).toUpperCase()}<br/>
-                                    <span style={{ fontWeight: 600 }}>{(isAnithaType && (doc.salesperson_phone === '+65 97686891' || doc.salesperson_phone === '+65 81962270' || !doc.salesperson_phone)) ? '+6581962270' : (doc.salesperson_phone || '+6581962270')}</span>
-                                    <span style={{ fontWeight: 400, fontSize: '9px', color: '#64748b', marginLeft: '10px' }}>| {(isAnithaType && (doc.salesperson_email === 'sales@celron.net' || doc.salesperson_email === 'kumar@celron.net' || !doc.salesperson_email)) ? 'accounts@celron.net' : (doc.salesperson_email || 'sales@celron.net')}</span>
+                                    {effectiveSalesperson.toUpperCase()}<br/>
+                                    <span style={{ fontWeight: 600 }}>{effectivePhone}</span>
+                                    <span style={{ fontWeight: 400, fontSize: '9px', color: '#64748b', marginLeft: '10px' }}>| {effectiveEmail.toLowerCase()}</span>
                                 </td>
                             </tr>
                         </tbody>

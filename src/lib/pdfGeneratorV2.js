@@ -19,14 +19,17 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
         tax_amount = 0,
         total_amount = 0,
         notes,
-        terms_conditions
+        terms_conditions,
+        payment_terms,
+        assigned_job_no,
+        customer_ref
     } = documentData;
 
     const companyLogo = settings?.logo_url || 'https://celron.net/wp-content/uploads/2023/12/celronlogowithtranslogorotating.gif';
     const companyName = settings?.company_name || 'CELRON ENTERPRISES PTE LTD';
     const companyAddress = settings?.address || '10, Jln, Besar, "Sim Lim Tower", #03-05, Singapore 208787';
     const companyUen = settings?.gst_uen || '201436227C';
-    const companySignature = settings?.signature_url;
+    const companySignature = settings?.signature_url || '/nrkumarsign.png';
     const companyPaynow = settings?.paynow_url;
 
     const formatDate = (d) => d ? new Date(d).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }) : '-';
@@ -36,9 +39,9 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
 
     const isAnithaType = ['Tax Invoice', 'Purchase Order', 'Delivery Order', 'Proforma Invoice', 'Packing List', 'Statement Of Account', 'Order Acknowledgment'].includes(document_type);
     
-    const effectiveSalesperson = (isAnithaType && (salesperson_name === 'N.R.KUMAR' || salesperson_name === 'KUMAR' || !salesperson_name)) ? 'ANITHA (Ms)' : (salesperson_name || 'ANITHA (Ms)');
-    const effectiveEmail = (isAnithaType && (documentData.salesperson_email === 'sales@celron.net' || documentData.salesperson_email === 'kumar@celron.net' || !documentData.salesperson_email)) ? 'accounts@celron.net' : (documentData.salesperson_email || 'sales@celron.net');
-    const effectivePhone = (isAnithaType && (documentData.salesperson_phone === '+65 97686891' || documentData.salesperson_phone === '+65 81962270' || !documentData.salesperson_phone)) ? '+6581962270' : (documentData.salesperson_phone || '+6581962270');
+    const effectiveSalesperson = isKumar ? 'N.R.KUMAR' : ((isAnithaType && (!salesperson_name)) ? 'ANITHA (Ms)' : (salesperson_name || 'ANITHA (Ms)'));
+    const effectiveEmail = isKumar ? 'kumar@celron.net' : ((isAnithaType && (!documentData.salesperson_email)) ? 'accounts@celron.net' : (documentData.salesperson_email || 'sales@celron.net'));
+    const effectivePhone = isKumar ? '+65 97685891' : ((isAnithaType && (!documentData.salesperson_phone)) ? '+6581962270' : (documentData.salesperson_phone || '+6581962270'));
 
     // Helper to convert image URL to base64 for reliable rendering
     const getBase64Image = async (url) => {
@@ -122,6 +125,8 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
                 <div style="background: #f1f5f9; padding: 12px 40px; border-radius: 40px 0 0 40px; min-width: 400px; text-align: right;">
                     <h1 style="margin: 0; font-size: 24px; color: #1e3a8a; font-weight: 700; letter-spacing: -0.5px;">${document_type} # ${document_no}</h1>
                     ${vessels ? `<div style="margin-top: 4px; font-size: 13px; font-weight: 600; color: #1e293b;">Vessel Name : <span style="font-weight: 400;">${vessels.vessel_name}</span></div>` : ''}
+                    ${assigned_job_no ? `<div style="margin-top: 4px; font-size: 13px; font-weight: 700; color: #10b981;">Job No: <span style="font-weight: 700;">${assigned_job_no}</span></div>` : ''}
+                    ${customer_ref ? `<div style="margin-top: 4px; font-size: 11px; font-weight: 600; color: #475569;">Reference: <span style="font-weight: 400;">${customer_ref}</span></div>` : ''}
                 </div>
             </div>
 
@@ -141,18 +146,24 @@ export const generateSleekPDF = async (documentData, settings, action = 'downloa
 
                 <!-- Horizontal Context Bar -->
                 <div style="background: #f8fafc; border-radius: 10px; display: flex; padding: 12px 0; border: 1px solid #e2e8f0;">
-                    <div style="flex: 1; padding: 0 20px; border-right: 1px solid #e2e8f0;">
+                    <div style="flex: 1; padding: 0 15px; border-right: 1px solid #e2e8f0;">
                         <div style="font-size: 9px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Date</div>
-                        <div style="font-size: 12px; font-weight: 600; color: #1e293b; margin-top: 3px;">${formatDate(issue_date)}</div>
+                        <div style="font-size: 11px; font-weight: 600; color: #1e293b; margin-top: 3px;">${formatDate(issue_date)}</div>
                     </div>
-                    <div style="flex: 1; padding: 0 20px; border-right: 1px solid #e2e8f0;">
+                    <div style="flex: 1; padding: 0 15px; border-right: 1px solid #e2e8f0;">
                         <div style="font-size: 9px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Due Date</div>
-                        <div style="font-size: 12px; font-weight: 600; color: #1e293b; margin-top: 3px;">${formatDate(expiry_date)}</div>
+                        <div style="font-size: 11px; font-weight: 600; color: #1e293b; margin-top: 3px;">${formatDate(expiry_date)}</div>
                     </div>
-                    <div style="flex: 1.5; padding: 0 20px;">
+                    ${payment_terms ? `
+                    <div style="flex: 1.2; padding: 0 15px; border-right: 1px solid #e2e8f0;">
+                        <div style="font-size: 9px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Payment Terms</div>
+                        <div style="font-size: 11px; font-weight: 700; color: #1e3a8a; margin-top: 3px;">${payment_terms.toUpperCase()}</div>
+                    </div>
+                    ` : ''}
+                    <div style="flex: 1.5; padding: 0 15px;">
                         <div style="font-size: 9px; color: #94a3b8; font-weight: 700; text-transform: uppercase;">Salesperson</div>
                         <div style="font-size: 11px; font-weight: 700; color: #1e293b; margin-top: 3px;">${effectiveSalesperson.toUpperCase()}</div>
-                        <div style="font-size: 9px; color: #64748b; margin-top: 1px;">${effectiveEmail} | ${effectivePhone}</div>
+                        <div style="font-size: 8px; color: #64748b; margin-top: 1px;">${effectiveEmail} | ${effectivePhone}</div>
                     </div>
                 </div>
             </div>

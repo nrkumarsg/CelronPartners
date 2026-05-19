@@ -77,9 +77,8 @@ export default function WorkflowPrintPreview() {
                 if (settingsRes.logo_url) {
                     toBase64(settingsRes.logo_url).then(setLogoBase64).catch(e => console.error("Logo B64 error:", e));
                 }
-                if (settingsRes.signature_url) {
-                    toBase64(settingsRes.signature_url).then(setSignatureBase64).catch(e => console.error("Signature B64 error:", e));
-                }
+                const sigUrl = settingsRes.signature_url || '/nrkumarsign.png';
+                toBase64(sigUrl).then(setSignatureBase64).catch(e => console.error("Signature B64 error:", e));
                 if (settingsRes.paynow_url) {
                     toBase64(settingsRes.paynow_url).then(setPaynowBase64).catch(e => console.error("PayNow B64 error:", e));
                 }

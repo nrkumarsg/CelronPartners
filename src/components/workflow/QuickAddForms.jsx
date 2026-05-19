@@ -677,7 +677,7 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                 )}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '7fr 3fr', gap: '20px', marginBottom: '20px' }}>
                 <div className="form-group">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
                         <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b', margin: 0 }}>Company Name *</label>
@@ -715,6 +715,9 @@ export const QuickPartnerAdd = ({ company_id, initialData, onSuccess, onCancel, 
                         style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0', outline: 'none' }}
                     />
                 </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
 
                 <div className="form-group" style={{ gridColumn: 'span 2' }}>
                     <label className="form-label" style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', color: '#64748b' }}>HQ Address</label>
@@ -989,6 +992,16 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
         }
     }, [initialData]);
 
+    useEffect(() => {
+        if (partner_id) {
+            setFormData(prev => {
+                const updated = { ...prev, partnerId: partner_id };
+                if (onDataChange) onDataChange(updated);
+                return updated;
+            });
+        }
+    }, [partner_id, onDataChange]);
+
     const handleOCR = async (text) => {
         if (!text) return;
         setIsAiResearching(true);
@@ -1255,6 +1268,7 @@ export const QuickContactAdd = ({ company_id, partner_id, partners, initialData,
 // NEW: Combined Partner & Contact Dual Add
 export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initialContact, partners, onSuccess, onCancel, title, defaultType = 'Supplier' }) => {
     const [activeTab, setActiveTab] = useState('details'); // 'details' | 'documents'
+    const [smartPasteEnabled, setSmartPasteEnabled] = useState(true);
     const [partnerData, setPartnerData] = useState(initialPartner || {
         name: '',
         uen: '',
@@ -1280,6 +1294,35 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
     const [isExtracting, setIsExtracting] = useState(false);
     const [aiResult, setAiResult] = useState(null);
     const [showReview, setShowReview] = useState(false);
+    const [showLookupModal, setShowLookupModal] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const loadContact = (c) => {
+        setContactData({
+            id: c.id,
+            name: c.name || '',
+            email: c.email || '',
+            handphone: c.handphone || '',
+            phone: c.phone || '',
+            post: c.post || '',
+            department: c.department || '',
+            address: c.address || '',
+            partnerId: c.partnerId || ''
+        });
+    };
+
+    const clearContact = () => {
+        setContactData({
+            name: '',
+            email: '',
+            handphone: '',
+            type: 'Main',
+            department: '',
+            post: '',
+            address: '',
+            phone: ''
+        });
+    };
 
     const processExtractedData = async (data) => {
         if (!data) return;
@@ -1312,6 +1355,7 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
     };
 
     const handlePaste = async (e) => {
+        if (!smartPasteEnabled) return;
         // Only allow paste on the details tab
         if (activeTab !== 'details') return;
 
@@ -1581,9 +1625,30 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
                                     <div style={{ background: '#e0e7ff', padding: '6px', borderRadius: '8px' }}><Users size={18} /></div>
                                     <span style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>STEP 1: PARTNER INFORMATION</span>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#f5f3ff', padding: '4px 10px', borderRadius: '20px', border: '1px solid #ddd6fe', color: '#7c3aed', fontSize: '0.65rem', fontWeight: 700 }}>
-                                    <Sparkles size={12} /> SMART PASTE ACTIVE
-                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSmartPasteEnabled(!smartPasteEnabled)}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        background: smartPasteEnabled ? '#f5f3ff' : '#f1f5f9',
+                                        padding: '4px 10px',
+                                        borderRadius: '20px',
+                                        border: smartPasteEnabled ? '1px solid #ddd6fe' : '1px solid #cbd5e1',
+                                        color: smartPasteEnabled ? '#7c3aed' : '#64748b',
+                                        fontSize: '0.65rem',
+                                        fontWeight: 800,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s',
+                                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                                        outline: 'none'
+                                    }}
+                                    title={smartPasteEnabled ? "Click to turn OFF Smart Paste" : "Click to turn ON Smart Paste"}
+                                >
+                                    <Sparkles size={12} style={{ color: smartPasteEnabled ? '#7c3aed' : '#64748b' }} />
+                                    {smartPasteEnabled ? 'SMART PASTE ACTIVE' : 'SMART PASTE INACTIVE'}
+                                </button>
                             </div>
 
                             <QuickPartnerAdd 
@@ -1596,9 +1661,40 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
                             />
                         </div>
                         <div>
-                            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#10b981' }}>
-                                <div style={{ background: '#d1fae5', p: '6px', borderRadius: '8px' }}><User size={18} /></div>
-                                <span style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>STEP 2: PRIMARY CONTACT (OPTIONAL)</span>
+                            <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#10b981' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <div style={{ background: '#d1fae5', padding: '6px', borderRadius: '8px' }}><User size={18} /></div>
+                                    <span style={{ fontWeight: 800, textTransform: 'uppercase', fontSize: '0.75rem', letterSpacing: '0.05em' }}>STEP 2: PRIMARY CONTACT (OPTIONAL)</span>
+                                </div>
+                                {existingContacts.length > 0 && (
+                                    <button 
+                                        type="button"
+                                        onClick={() => setShowLookupModal(true)}
+                                        style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '6px',
+                                            background: '#ecfdf5',
+                                            border: '1px solid #a7f3d0',
+                                            color: '#059669',
+                                            padding: '6px 12px',
+                                            borderRadius: '20px',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                            transition: 'all 0.2s',
+                                            boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                                        }}
+                                        onMouseEnter={(e) => {
+                                            e.currentTarget.style.background = '#d1fae5';
+                                        }}
+                                        onMouseLeave={(e) => {
+                                            e.currentTarget.style.background = '#ecfdf5';
+                                        }}
+                                    >
+                                        <Users size={12} /> Select Contact ({existingContacts.length})
+                                    </button>
+                                )}
                             </div>
 
                             {existingContacts.length > 0 && (
@@ -1615,13 +1711,82 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
                                         <Users size={14} />
                                         <span style={{ fontWeight: 700 }}>{existingContacts.length} Contacts already linked</span>
                                     </div>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                         {existingContacts.map(c => (
-                                            <div key={c.id} style={{ fontSize: '0.7rem', color: '#14532d', padding: '4px 8px', background: '#fff', borderRadius: '4px', border: '1px solid #dcfce7' }}>
-                                                {c.name} ({c.post || 'Contact'})
+                                            <div 
+                                                key={c.id} 
+                                                onClick={() => loadContact(c)}
+                                                style={{ 
+                                                    fontSize: '0.75rem', 
+                                                    color: '#14532d', 
+                                                    padding: '8px 12px', 
+                                                    background: '#fff', 
+                                                    borderRadius: '8px', 
+                                                    border: '1px solid #dcfce7',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    transition: 'all 0.2s',
+                                                    boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    e.currentTarget.style.background = '#dcfce7';
+                                                    e.currentTarget.style.transform = 'translateX(2px)';
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    e.currentTarget.style.background = '#fff';
+                                                    e.currentTarget.style.transform = 'none';
+                                                }}
+                                                title="Click to load contact details"
+                                            >
+                                                <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                    <span style={{ fontWeight: 700 }}>{c.name}</span>
+                                                    {c.post && <span style={{ fontSize: '0.65rem', opacity: 0.8 }}>{c.post}</span>}
+                                                </div>
+                                                <span style={{ fontSize: '0.65rem', color: '#059669', fontWeight: 600 }}>Load Details →</span>
                                             </div>
                                         ))}
                                     </div>
+                                </div>
+                            )}
+
+                            {contactData.id && (
+                                <div style={{ 
+                                    marginBottom: '16px', 
+                                    padding: '12px 16px', 
+                                    background: '#e0f2fe', 
+                                    border: '1px solid #bae6fd', 
+                                    borderRadius: '12px',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <Sparkles size={16} color="#0369a1" />
+                                        <div style={{ fontSize: '0.8rem', color: '#0369a1', fontWeight: 500 }}>
+                                            Editing contact: <strong style={{ color: '#0369a1' }}>{contactData.name}</strong>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        type="button"
+                                        onClick={clearContact}
+                                        style={{
+                                            background: '#0284c7',
+                                            border: 'none',
+                                            color: '#fff',
+                                            padding: '4px 10px',
+                                            borderRadius: '6px',
+                                            fontSize: '0.7rem',
+                                            fontWeight: 700,
+                                            cursor: 'pointer',
+                                            transition: 'background 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.background = '#0369a1'}
+                                        onMouseLeave={(e) => e.currentTarget.style.background = '#0284c7'}
+                                    >
+                                        Add New Instead
+                                    </button>
                                 </div>
                             )}
 
@@ -1633,6 +1798,145 @@ export const QuickPartnerContactDualAdd = ({ company_id, initialPartner, initial
                                 hideActions={true} 
                                 onDataChange={setContactData} 
                             />
+
+                            {showLookupModal && (
+                                <Modal 
+                                    isOpen={showLookupModal} 
+                                    onClose={() => {
+                                        setShowLookupModal(false);
+                                        setSearchTerm('');
+                                    }} 
+                                    title={`Select Contact for ${partnerData.name || 'Partner'}`}
+                                    icon={Users}
+                                    size="md"
+                                >
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                                            <Search size={16} style={{ position: 'absolute', left: '12px', color: '#94a3b8' }} />
+                                            <input
+                                                className="form-input premium-input"
+                                                style={{ paddingLeft: '40px', width: '100%', boxSizing: 'border-box' }}
+                                                placeholder="Search contacts by name, email, department..."
+                                                value={searchTerm}
+                                                onChange={(e) => setSearchTerm(e.target.value)}
+                                                autoFocus
+                                            />
+                                            {searchTerm && (
+                                                <button
+                                                    onClick={() => setSearchTerm('')}
+                                                    style={{
+                                                        position: 'absolute',
+                                                        right: '12px',
+                                                        background: 'none',
+                                                        border: 'none',
+                                                        cursor: 'pointer',
+                                                        color: '#94a3b8',
+                                                        padding: 0
+                                                    }}
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div style={{ 
+                                            maxHeight: '350px', 
+                                            overflowY: 'auto', 
+                                            display: 'flex', 
+                                            flexDirection: 'column', 
+                                            gap: '10px',
+                                            paddingRight: '4px'
+                                        }}>
+                                            {existingContacts.filter(c => {
+                                                const term = searchTerm.toLowerCase().trim();
+                                                if (!term) return true;
+                                                return (c.name || '').toLowerCase().includes(term) ||
+                                                       (c.email || '').toLowerCase().includes(term) ||
+                                                       (c.post || '').toLowerCase().includes(term) ||
+                                                       (c.department || '').toLowerCase().includes(term);
+                                            }).map(c => (
+                                                <div 
+                                                    key={c.id}
+                                                    onClick={() => {
+                                                        loadContact(c);
+                                                        setShowLookupModal(false);
+                                                        setSearchTerm('');
+                                                    }}
+                                                    style={{
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center',
+                                                        padding: '12px 16px',
+                                                        background: '#f8fafc',
+                                                        border: '1px solid #e2e8f0',
+                                                        borderRadius: '10px',
+                                                        cursor: 'pointer',
+                                                        transition: 'all 0.2s',
+                                                        boxShadow: '0 1px 2px rgba(0,0,0,0.02)'
+                                                    }}
+                                                    onMouseEnter={(e) => {
+                                                        e.currentTarget.style.background = '#f0f9ff';
+                                                        e.currentTarget.style.borderColor = '#bae6fd';
+                                                    }}
+                                                    onMouseLeave={(e) => {
+                                                        e.currentTarget.style.background = '#f8fafc';
+                                                        e.currentTarget.style.borderColor = '#e2e8f0';
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                                            <span style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.95rem' }}>{c.name}</span>
+                                                            {c.post && (
+                                                                <span style={{ fontSize: '0.7rem', background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                                                                    {c.post}
+                                                                </span>
+                                                            )}
+                                                            {c.department && (
+                                                                <span style={{ fontSize: '0.7rem', background: '#f5f3ff', color: '#7c3aed', padding: '2px 8px', borderRadius: '12px', fontWeight: 600 }}>
+                                                                    {c.department}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div style={{ display: 'flex', gap: '16px', fontSize: '0.75rem', color: '#64748b', marginTop: '2px', flexWrap: 'wrap' }}>
+                                                            {c.email && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Mail size={12} /> {c.email}</span>}
+                                                            {c.handphone && <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Phone size={12} /> {c.handphone}</span>}
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        style={{
+                                                            padding: '6px 12px',
+                                                            background: '#fff',
+                                                            border: '1px solid #cbd5e1',
+                                                            borderRadius: '8px',
+                                                            fontSize: '0.75rem',
+                                                            fontWeight: 600,
+                                                            color: '#6366f1',
+                                                            cursor: 'pointer',
+                                                            marginLeft: '12px'
+                                                        }}
+                                                    >
+                                                        Select
+                                                    </button>
+                                                </div>
+                                            ))}
+
+                                            {existingContacts.length > 0 && existingContacts.filter(c => {
+                                                const term = searchTerm.toLowerCase().trim();
+                                                if (!term) return true;
+                                                return (c.name || '').toLowerCase().includes(term) ||
+                                                       (c.email || '').toLowerCase().includes(term) ||
+                                                       (c.post || '').toLowerCase().includes(term) ||
+                                                       (c.department || '').toLowerCase().includes(term);
+                                            }).length === 0 && (
+                                                <div style={{ textAlign: 'center', padding: '32px', color: '#64748b', fontSize: '0.85rem' }}>
+                                                    No contacts match your search query.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </Modal>
+                            )}
 
                             {/* Financials Section as per Image */}
                             <div style={{ marginTop: '24px', padding: '16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
