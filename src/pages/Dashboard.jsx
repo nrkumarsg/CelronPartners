@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import StageReminders from '../components/dashboard/StageReminders';
 import TodoReminder from '../components/dashboard/TodoReminder';
+import SystemReminders from '../components/dashboard/SystemReminders';
 
 export default function Dashboard() {
     const navigate = useNavigate();
@@ -271,7 +272,7 @@ export default function Dashboard() {
                         { label: 'Tax Invoice', icon: Receipt, path: '/workflows?type=Tax Invoice', color: '#1e3a8a' },
                         { label: 'Certificate', icon: Award, path: '/workflows?type=Certificate', color: '#d946ef' },
                         { label: 'Payment Received', icon: CheckCircle, path: '/workflows?type=Payment Received', color: '#22c55e' },
-                        { label: 'Statement of Account', icon: List, path: '/workflows?type=SOA', color: '#475569' }
+                        { label: 'Statement of Account', icon: List, path: '/soa', color: '#475569' }
                     ].map((item, idx) => (
                         <button
                             key={idx}
@@ -312,6 +313,7 @@ export default function Dashboard() {
             </div>
 
             {/* AI Workflow Action Reminders */}
+            {!searchTerm && <SystemReminders />}
             {!searchTerm && <TodoReminder />}
             {!searchTerm && <StageReminders />}
 

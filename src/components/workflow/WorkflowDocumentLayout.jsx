@@ -157,8 +157,9 @@ const WorkflowDocumentLayout = ({ doc, settings, logoBase64, signatureBase64, pa
                         <span style={{ color: '#ef4444' }}>{companyName.split(' ')[0]}</span> <span style={{ color: '#000000' }}>{companyName.split(' ').slice(1).join(' ')}</span>
                     </div>
                     <div style={{ ...styles.h4, marginTop: '2px' }}>UEN NO. {companyUen}</div>
-                    <div style={{ ...styles.small, lineHeight: '1.4', marginTop: '2px' }}>
-                        {companyAddress}<br />
+                    <div style={{ ...styles.small, lineHeight: '1.5', marginTop: '2px' }}>
+                        <span style={{ fontWeight: 700 }}>&quot;Sim Lim Tower&quot;</span><br />
+                        10, Jln, Besar, &quot;Sim Lim Tower&quot; #03-05, Singapore 208787<br />
                         Phone: {settings?.phone || '+65 8196 2270'} &nbsp; Email: {settings?.sales_email || 'sales@celron.net'}<br />
                         {settings?.website || 'www.celron.net'}
                     </div>

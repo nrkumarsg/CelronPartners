@@ -399,7 +399,7 @@ export const saveWorkflowDocument = async (docData, lineItems) => {
     const validDocKeys = [
         'id', 'company_id', 'document_type', 'document_no', 'issue_date', 'expiry_date',
         'partner_id', 'contact_id', 'vessel_id', 'work_location_id',
-        'salesperson_name', 'subject', 'customer_ref', 'currency',
+        'salesperson_name', 'subject', 'customer_ref', 'currency', 'exchange_rate',
         'terms_conditions', 'notes', 'status', 'subtotal', 'tax_amount', 'total_amount',
         'internal_notes',
         'discount_amount', 'discount_percent',
@@ -449,6 +449,7 @@ export const saveWorkflowDocument = async (docData, lineItems) => {
     sanitizedHeader.subtotal = parseFloat(sanitizedHeader.subtotal) || 0;
     sanitizedHeader.tax_amount = parseFloat(sanitizedHeader.tax_amount) || 0;
     sanitizedHeader.total_amount = parseFloat(sanitizedHeader.total_amount) || 0;
+    sanitizedHeader.exchange_rate = parseFloat(sanitizedHeader.exchange_rate) || 1.0;
 
     // Sync assigned_job_no for Job documents
     if (sanitizedHeader.document_type === 'Job') {

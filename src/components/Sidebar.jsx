@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate, Link, NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, FileText, Settings, Smartphone, Ship, MapPin, Building2, Package, ShieldCheck, Search, Tags, Hexagon, CheckSquare, StickyNote, CalendarDays, Database, Folder, Wrench, Pin, PinOff, Book, HardDrive, Sparkles, Calculator, Navigation2, Briefcase, DollarSign, ShoppingCart, Truck, Receipt, ClipboardList, FileCheck, RefreshCcw, QrCode, AlertCircle, Download, ArrowRightLeft, MessageSquare, Globe } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Settings, Smartphone, Ship, MapPin, Building2, Package, ShieldCheck, Search, Tags, Hexagon, CheckSquare, CheckCircle, StickyNote, CalendarDays, Database, Folder, Wrench, Pin, PinOff, Book, HardDrive, Sparkles, Calculator, Navigation2, Briefcase, DollarSign, ShoppingCart, Truck, Receipt, ClipboardList, FileCheck, RefreshCcw, QrCode, AlertCircle, Download, ArrowRightLeft, MessageSquare, Globe } from 'lucide-react';
 
 import { useAuth } from '../contexts/AuthContext';
 import { getTodos } from '../lib/todoService';
@@ -263,9 +263,31 @@ export default function Sidebar() {
                     <span className="nav-text" style={{ fontWeight: 800, color: '#14b8a6' }}>Invoices</span>
                 </NavLink>
 
+                <NavLink 
+                    to="/workflows?type=Payment Received" 
+                    className={`nav-link ${(location.pathname === '/workflows' && location.search.includes('type=Payment+Received')) ? 'active' : ''}`} 
+                    title="Payment Received"
+                >
+                    <CheckCircle size={20} color="#22c55e" />
+                    <span className="nav-text" style={{ fontWeight: 800, color: '#22c55e' }}>Payment Received</span>
+                </NavLink>
+
                 <NavLink to="/soa" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Statement of Account">
                     <ClipboardList size={20} color="#ec4899" />
                     <span className="nav-text" style={{ fontWeight: 800, color: '#ec4899' }}>Statement of Account</span>
+                </NavLink>
+
+                <div className="nav-separator" />
+                <span className="nav-group-header">Finance &amp; Accounts</span>
+
+                <NavLink to="/accounts/bills" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Accounts Payable (Suppliers)">
+                    <Receipt size={20} color="#f97316" />
+                    <span className="nav-text" style={{ fontWeight: 800, color: '#f97316' }}>Accounts Payable</span>
+                </NavLink>
+
+                <NavLink to="/gst-reporting" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="GST Reporting">
+                    <Calculator size={20} color="#10b981" />
+                    <span className="nav-text" style={{ fontWeight: 800, color: '#10b981' }}>GST Reporting</span>
                 </NavLink>
 
                 <div className="nav-separator" />
@@ -311,12 +333,6 @@ export default function Sidebar() {
                     {isPinned ? "2. JOB & QUOTATION PHASE" : "2."}
                 </div>
 
-                <NavLink to="/workflows?type=Job" className={`nav-link ${(location.pathname === '/workflows' && location.search.includes('type=Job')) ? 'active' : ''}`} title="Active Jobs (Job Details)">
-                    <ShieldCheck size={20} color="#10b981" />
-                    <span className="nav-text">Active Jobs</span>
-                </NavLink>
-
-
                 <NavLink 
                     to="/workflows" 
                     className={({ isActive }) => `nav-link ${isActive ? (isActive && !location.search.includes('view=depository') ? 'active' : '') : ''}`} 
@@ -353,21 +369,6 @@ export default function Sidebar() {
                 <NavLink to="/proforma-invoices" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Proforma Invoices">
                     <Receipt size={20} color="#ef4444" />
                     <span className="nav-text">Proforma Invoices</span>
-                </NavLink>
-
-                <NavLink to="/invoices" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Tax Invoices">
-                    <DollarSign size={20} color="#14b8a6" />
-                    <span className="nav-text">Tax Invoices</span>
-                </NavLink>
-                
-                <NavLink to="/soa" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Cust. Payments & S.O.A">
-                    <ClipboardList size={20} color="#3b82f6" />
-                    <span className="nav-text">Cust. Payments & S.O.A</span>
-                </NavLink>
-
-                <NavLink to="/payment-received" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Payment Received">
-                    <CheckSquare size={20} color="#10b981" />
-                    <span className="nav-text">Payment Received</span>
                 </NavLink>
 
                 <NavLink to="/accounts/bills" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`} title="Accounts Payable">

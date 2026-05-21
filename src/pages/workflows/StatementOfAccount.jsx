@@ -15,7 +15,229 @@ import { getStoredToken } from '../../lib/googleAuthService';
 import { useAuth } from '../../contexts/AuthContext';
 import { getStatementData, saveWorkflowDocument, deleteWorkflowDocument } from '../../lib/workflowV2Service';
 import { getPartners, getDocumentSettings } from '../../lib/store';
-// import html2pdf from 'html2pdf.js';
+import * as XLSX from 'xlsx-js-style';
+
+const generateExcelBlob = (statementData, dateRange, activeCompany) => {
+    const wb = XLSX.utils.book_new();
+    const data = [];
+
+    const formatDateStr = (d) => {
+        if (!d) return '-';
+        const date = new Date(d);
+        const dd = String(date.getDate()).padStart(2, '0');
+        const mm = String(date.getMonth() + 1).padStart(2, '0');
+        const yyyy = date.getFullYear();
+        return `${dd}/${mm}/${yyyy}`;
+    };
+
+    // Styling Definitions
+    const fontHeader = { name: 'Calibri', sz: 11, bold: true, color: { rgb: 'FFFFFF' } };
+    const fontBold = { name: 'Calibri', sz: 11, bold: true };
+    const fontRegular = { name: 'Calibri', sz: 11 };
+
+    const borderThin = {
+        top: { style: 'thin', color: { rgb: '000000' } },
+        bottom: { style: 'thin', color: { rgb: '000000' } },
+        left: { style: 'thin', color: { rgb: '000000' } },
+        right: { style: 'thin', color: { rgb: '000000' } }
+    };
+
+    const borderLightGray = {
+        top: { style: 'thin', color: { rgb: 'A0A0A0' } },
+        bottom: { style: 'thin', color: { rgb: 'A0A0A0' } },
+        left: { style: 'thin', color: { rgb: 'A0A0A0' } },
+        right: { style: 'thin', color: { rgb: 'A0A0A0' } }
+    };
+
+    const styleHeader = {
+        fill: { fgColor: { rgb: '1F4E78' } }, // Deep Navy Blue
+        font: fontHeader,
+        alignment: { vertical: 'center', horizontal: 'left' },
+        border: borderThin
+    };
+
+    const styleHeaderCenter = {
+        fill: { fgColor: { rgb: '1F4E78' } }, // Deep Navy Blue
+        font: fontHeader,
+        alignment: { vertical: 'center', horizontal: 'center' },
+        border: borderThin
+    };
+
+    const styleDataLeft = {
+        font: fontRegular,
+        alignment: { vertical: 'center', horizontal: 'left' },
+        border: borderLightGray
+    };
+
+    const styleDataCenter = {
+        font: fontRegular,
+        alignment: { vertical: 'center', horizontal: 'center' },
+        border: borderLightGray
+    };
+
+    const styleDataRight = {
+        font: fontRegular,
+        alignment: { vertical: 'center', horizontal: 'right' },
+        border: borderLightGray
+    };
+
+    const styleTotalYellowLeft = {
+        fill: { fgColor: { rgb: 'FFFF00' } }, // Bright Yellow
+        font: fontBold,
+        alignment: { vertical: 'center', horizontal: 'left' },
+        border: borderThin
+    };
+
+    const styleTotalYellowCenter = {
+        fill: { fgColor: { rgb: 'FFFF00' } }, // Bright Yellow
+        font: fontBold,
+        alignment: { vertical: 'center', horizontal: 'center' },
+        border: borderThin
+    };
+
+    const styleTotalYellowRight = {
+        fill: { fgColor: { rgb: 'FFFF00' } }, // Bright Yellow
+        font: fontBold,
+        alignment: { vertical: 'center', horizontal: 'right' },
+        border: borderThin
+    };
+
+    const makeCell = (val, style = styleDataLeft) => {
+        const isNum = typeof val === 'number';
+        return {
+            v: val === null || val === undefined ? '' : val,
+            t: isNum ? 'n' : 's',
+            s: style
+        };
+    };
+
+    // 1. Corporate Header Block
+    data.push([makeCell('CEL-RON ENTERPRISES PTE LTD', { font: { name: 'Calibri', sz: 12, bold: true } })]);
+    data.push([makeCell('STATEMENT OF ACCOUNT', { font: { name: 'Calibri', sz: 12, bold: true } })]);
+    data.push([makeCell(`Period: ${formatDateStr(dateRange.start)} - ${formatDateStr(dateRange.end)}`, { font: { name: 'Calibri', sz: 11, bold: true } })]);
+    data.push([makeCell(`Generated on: ${new Date().toLocaleString()}`, { font: fontRegular })]);
+    data.push([]); 
+
+    // 2. Customer details Block
+    const partner = statementData?.partner || {};
+    data.push([makeCell('CUSTOMER DETAILS:', { font: fontBold })]);
+    data.push([
+        makeCell('Name:', fontBold),
+        makeCell(partner.name || 'N/A', fontRegular)
+    ]);
+    data.push([
+        makeCell('Email:', fontBold),
+        makeCell(partner.email || 'N/A', fontRegular)
+    ]);
+    data.push([
+        makeCell('Terms:', fontBold),
+        makeCell(partner.terms || 'C.O.D', fontRegular)
+    ]);
+    data.push([]);
+
+    // 3. Aging Summary
+    const aging = statementData?.agingBuckets || { current: 0, '31_60': 0, '61_90': 0, '90_plus': 0 };
+    data.push([makeCell('AGING SUMMARY:', { font: fontBold })]);
+    data.push([
+        makeCell('Current (0-30 Days)', styleHeaderCenter),
+        makeCell('31-60 Days', styleHeaderCenter),
+        makeCell('61-90 Days', styleHeaderCenter),
+        makeCell('90+ Days Due', styleHeaderCenter),
+        makeCell('Total Outstanding', styleHeaderCenter)
+    ]);
+    data.push([
+        makeCell(aging.current || 0, styleDataCenter),
+        makeCell(aging['31_60'] || 0, styleDataCenter),
+        makeCell(aging['61_90'] || 0, styleDataCenter),
+        makeCell(aging['90_plus'] || 0, styleDataCenter),
+        makeCell(statementData?.closingBalance || 0, styleDataCenter)
+    ]);
+    data.push([]);
+
+    // 4. Transaction Ledger Table
+    data.push([makeCell('TRANSACTION LEDGER:', { font: fontBold })]);
+    data.push([
+        makeCell('Date', styleHeader),
+        makeCell('Document No', styleHeader),
+        makeCell('Document Type', styleHeader),
+        makeCell('Reference (Cust PO)', styleHeader),
+        makeCell('Vessel / Workplace', styleHeader),
+        makeCell('Debit (SGD)', styleHeader),
+        makeCell('Credit (SGD)', styleHeader),
+        makeCell('Running Balance (SGD)', styleHeader),
+        makeCell('Remark', styleHeader)
+    ]);
+
+    let running = statementData?.openingBalance || 0;
+    
+    data.push([
+        makeCell('-', styleDataCenter),
+        makeCell('OPENING BALANCE', styleDataLeft),
+        makeCell('-', styleDataCenter),
+        makeCell('-', styleDataCenter),
+        makeCell('-', styleDataCenter),
+        makeCell('-', styleDataCenter),
+        makeCell('-', styleDataCenter),
+        makeCell(running, styleDataRight),
+        makeCell('-', styleDataCenter)
+    ]);
+
+    let totalDebit = 0;
+    let totalCredit = 0;
+
+    if (statementData?.ledger) {
+        statementData.ledger.forEach((doc) => {
+            running += (doc.debit - doc.credit);
+            totalDebit += (doc.debit || 0);
+            totalCredit += (doc.credit || 0);
+            
+            data.push([
+                makeCell(formatDateStr(doc.issue_date), styleDataLeft),
+                makeCell(doc.document_no || '-', styleDataLeft),
+                makeCell(doc.document_type || '-', styleDataLeft),
+                makeCell(doc.customer_ref || doc.customer_po_no || doc.order_reference || '-', styleDataLeft),
+                makeCell(doc.vessels?.vessel_name || doc.work_locations?.location_name || doc.vessel_name || doc.work_location || '-', styleDataLeft),
+                makeCell(doc.debit || 0, styleDataRight),
+                makeCell(doc.credit || 0, styleDataRight),
+                makeCell(running, styleDataRight),
+                makeCell(doc.remarks || doc.remark || doc.description || doc.subject || '-', styleDataLeft)
+            ]);
+        });
+    }
+
+    data.push([]);
+    data.push([
+        makeCell('TOTALS', styleTotalYellowLeft),
+        makeCell('-', styleTotalYellowCenter),
+        makeCell('-', styleTotalYellowCenter),
+        makeCell('-', styleTotalYellowCenter),
+        makeCell('-', styleTotalYellowCenter),
+        makeCell(totalDebit, styleTotalYellowRight),
+        makeCell(totalCredit, styleTotalYellowRight),
+        makeCell(statementData?.closingBalance || 0, styleTotalYellowRight),
+        makeCell('-', styleTotalYellowCenter)
+    ]);
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    const wscols = [
+        { wch: 12 }, 
+        { wch: 18 }, 
+        { wch: 20 }, 
+        { wch: 25 }, 
+        { wch: 22 }, 
+        { wch: 15 }, 
+        { wch: 15 }, 
+        { wch: 20 },
+        { wch: 25 }
+    ];
+    ws['!cols'] = wscols;
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Statement of Account');
+
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
 
 export default function StatementOfAccount() {
     const navigate = useNavigate();
@@ -29,6 +251,8 @@ export default function StatementOfAccount() {
     });
     const [statementData, setStatementData] = useState(null);
     const [hideSettled, setHideSettled] = useState(false);
+    const [activeTab, setActiveTab] = useState('overdue');
+    const [ledgerTab, setLedgerTab] = useState('overdue');
     const [openingBalanceModal, setOpeningBalanceModal] = useState({ isOpen: false, items: [] });
     const [paymentModal, setPaymentModal] = useState({ isOpen: false, prefill: null });
     const [settings, setSettings] = useState(null);
@@ -43,6 +267,11 @@ export default function StatementOfAccount() {
     const printSummaryRef = useRef();
 
     const statementCurrency = statementData?.ledger?.find(d => d.currency)?.currency || 'SGD';
+    const summaryCurrency = companyAging.length > 0 ? (companyAging.find(it => it.currency)?.currency || 'SGD') : 'SGD';
+
+    const overdueItems = companyAging.filter(item => item.outstanding > 0.01);
+    const paidItems = companyAging.filter(item => item.outstanding <= 0.01);
+    const displayedItems = activeTab === 'overdue' ? overdueItems : paidItems;
 
     const formatDate = (dateStr) => {
         if (!dateStr) return '-';
@@ -65,6 +294,41 @@ export default function StatementOfAccount() {
     useEffect(() => {
         fetchInitialData();
     }, []);
+
+    const getGlobalOldestInvoiceDate = () => {
+        let oldest = null;
+        companyAging.forEach(item => {
+            if (item.oldest_invoice_date) {
+                if (!oldest || new Date(item.oldest_invoice_date) < new Date(oldest)) {
+                    oldest = item.oldest_invoice_date;
+                }
+            }
+        });
+        return oldest ? oldest.split('T')[0] : new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
+    };
+
+    useEffect(() => {
+        if (selectedPartner) {
+            const partnerSummary = companyAging.find(item => item.id === selectedPartner);
+            if (partnerSummary && partnerSummary.oldest_invoice_date) {
+                setDateRange({
+                    start: partnerSummary.oldest_invoice_date.split('T')[0],
+                    end: new Date().toISOString().split('T')[0]
+                });
+            } else {
+                setDateRange({
+                    start: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0],
+                    end: new Date().toISOString().split('T')[0]
+                });
+            }
+        } else {
+            const globalOldest = getGlobalOldestInvoiceDate();
+            setDateRange({
+                start: globalOldest,
+                end: new Date().toISOString().split('T')[0]
+            });
+        }
+    }, [selectedPartner, companyAging]);
 
     const fetchInitialData = async () => {
         const { getContacts } = await import('../../lib/store');
@@ -111,6 +375,7 @@ export default function StatementOfAccount() {
 
                 const groups = {};
                 const today = new Date();
+                let absoluteOldestInvoiceDate = null;
                 
                 filteredData.forEach(doc => {
                     const pid = doc.partner_id;
@@ -124,6 +389,7 @@ export default function StatementOfAccount() {
                             total_invoiced: 0, 
                             total_paid: 0,
                             last_date: doc.issue_date,
+                            currency: doc.currency || 'SGD',
                             aging: {
                                 current: 0,
                                 thirty: 0,
@@ -132,6 +398,9 @@ export default function StatementOfAccount() {
                                 overNinety: 0
                             }
                         };
+                    }
+                    if (doc.currency) {
+                        groups[pid].currency = doc.currency;
                     }
                     
                     const amount = parseFloat(doc.total_amount) || 0;
@@ -142,12 +411,23 @@ export default function StatementOfAccount() {
                         groups[pid].outstanding += amount;
                         groups[pid].total_invoiced += amount;
                         
-                        // Age the invoice
-                        if (diffDays <= 0) groups[pid].aging.current += amount;
-                        else if (diffDays <= 30) groups[pid].aging.thirty += amount;
-                        else if (diffDays <= 60) groups[pid].aging.sixty += amount;
-                        else if (diffDays <= 90) groups[pid].aging.ninety += amount;
+                        // Age from invoice issue date (Option B)
+                        // Current = 0-30 days old, 31-60, 61-90, 91+
+                        if (diffDays <= 30) groups[pid].aging.current += amount;
+                        else if (diffDays <= 60) groups[pid].aging.thirty += amount;
+                        else if (diffDays <= 90) groups[pid].aging.sixty += amount;
+                        else if (diffDays <= 180) groups[pid].aging.ninety += amount;
                         else groups[pid].aging.overNinety += amount;
+                        
+                        // Track oldest invoice date per customer
+                        if (!groups[pid].oldest_invoice_date || new Date(doc.issue_date) < new Date(groups[pid].oldest_invoice_date)) {
+                            groups[pid].oldest_invoice_date = doc.issue_date;
+                        }
+                        
+                        // Track global oldest invoice date
+                        if (!absoluteOldestInvoiceDate || new Date(doc.issue_date) < new Date(absoluteOldestInvoiceDate)) {
+                            absoluteOldestInvoiceDate = doc.issue_date;
+                        }
                         
                     } else if (doc.document_type === 'Payment Received') {
                         groups[pid].outstanding -= amount;
@@ -172,10 +452,18 @@ export default function StatementOfAccount() {
                 });
 
                 const summary = Object.values(groups)
-                    .filter(g => Math.abs(g.outstanding) > 0.01)
+                    .filter(g => g.total_invoiced > 0 || g.total_paid > 0)
                     .sort((a, b) => b.outstanding - a.outstanding);
                 
                 setCompanyAging(summary);
+
+                // Dynamically update default start date range to absolute oldest invoice date
+                if (absoluteOldestInvoiceDate) {
+                    setDateRange(prev => ({
+                        ...prev,
+                        start: absoluteOldestInvoiceDate.split('T')[0]
+                    }));
+                }
             }
         } catch (err) {
             console.error('Overall summary failed:', err);
@@ -184,19 +472,21 @@ export default function StatementOfAccount() {
         }
     };
 
-    const handleGenerate = async (partnerOverride = null) => {
+    const handleGenerate = async (partnerOverride = null, startOverride = null, endOverride = null) => {
         const partnerId = partnerOverride || selectedPartner;
         if (!partnerId) {
             alert('Please select a customer first.');
             return;
         }
+        const start = startOverride || dateRange.start;
+        const end = endOverride || dateRange.end;
         setLoading(true);
         try {
             const { data, partner, error: fetchErr } = await getStatementData(
                 profile?.company_id, 
                 partnerId, 
-                dateRange.start, 
-                dateRange.end
+                start, 
+                end
             );
 
             if (fetchErr || !data) {
@@ -326,16 +616,14 @@ export default function StatementOfAccount() {
                 }
                 
                 // Only count outstanding amounts in aging buckets
+                // Option B: Age from invoice issue date
+                // Current = 0-30 days old, 31-60 DAYS, 61-90 DAYS, 90+ DAYS
                 if (outstanding > 0.01) {
-                    const creditDays = parseInt(partner?.customerCreditTime) || 0;
-                    const dueDate = new Date(inv.issue_date);
-                    dueDate.setDate(dueDate.getDate() + creditDays);
+                    const daysSinceIssue = Math.floor((today - new Date(inv.issue_date)) / (1000 * 60 * 60 * 24));
                     
-                    const diffDaysFromDue = Math.ceil((today - dueDate) / (1000 * 60 * 60 * 24));
-                    
-                    if (diffDaysFromDue <= 0) aging.current += outstanding;
-                    else if (diffDaysFromDue <= 30) aging.thirty += outstanding;
-                    else if (diffDaysFromDue <= 60) aging.sixty += outstanding;
+                    if (daysSinceIssue <= 30) aging.current += outstanding;
+                    else if (daysSinceIssue <= 60) aging.thirty += outstanding;
+                    else if (daysSinceIssue <= 90) aging.sixty += outstanding;
                     else aging.ninety += outstanding;
                 }
             });
@@ -353,6 +641,26 @@ export default function StatementOfAccount() {
             alert('Failed to generate statement.');
 } finally {
             setLoading(false);
+        }
+    };
+
+    const handleExportExcel = () => {
+        if (!statementData) return toast.error('Please generate a statement first.');
+        try {
+            const companyName = settings?.company_name || profile?.company_name || 'CEL-RON ENTERPRISES PTE LTD';
+            const blob = generateExcelBlob(statementData, dateRange, { name: companyName });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `Statement_${statementData.partner?.name || 'Customer'}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            toast.success('Excel Statement downloaded successfully!');
+        } catch (err) {
+            console.error('Excel Export failed:', err);
+            toast.error('Failed to export Excel: ' + err.message);
         }
     };
 
@@ -414,7 +722,7 @@ export default function StatementOfAccount() {
         handleGenerate();
     };
 
-    const handleShareFile = async (type = 'whatsapp', message = '', recipient = '', cc = '', bcc = '', subjectOverride = '') => {
+    const handleShareFile = async (type = 'whatsapp', message = '', recipient = '', cc = '', bcc = '', subjectOverride = '', attachExcel = false) => {
         setLoading(true);
         try {
             const token = await getStoredToken();
@@ -455,10 +763,65 @@ export default function StatementOfAccount() {
                 } else {
                     const subject = subjectOverride || `Statement of Account - ${statementData.partner?.name}`;
                     const body = `${message}\n\nView/Download Statement: ${link}`;
-                    let mailtoUrl = `mailto:${recipient || ''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                    if (cc) mailtoUrl += `&cc=${encodeURIComponent(cc)}`;
-                    if (bcc) mailtoUrl += `&bcc=${encodeURIComponent(bcc)}`;
-                    window.location.href = mailtoUrl;
+                    
+                    // Convert PDF blob to base64 for attachment
+                    const reader = new FileReader();
+                    const b64Pdf = await new Promise((resolve) => {
+                        reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                        reader.readAsDataURL(pdfBlob);
+                    });
+
+                    const systemPdf = {
+                        name: `Statement_${statementData.partner?.name || 'Customer'}_${new Date().toISOString().split('T')[0]}.pdf`,
+                        content: `base64,${b64Pdf}`,
+                        type: 'application/pdf'
+                    };
+
+                    const attachments = [systemPdf];
+
+                    if (attachExcel) {
+                        const companyName = settings?.company_name || profile?.company_name || 'CEL-RON ENTERPRISES PTE LTD';
+                        const excelBlob = generateExcelBlob(statementData, dateRange, { name: companyName });
+                        
+                        const readerExcel = new FileReader();
+                        const b64Excel = await new Promise((resolve) => {
+                            readerExcel.onloadend = () => resolve(readerExcel.result.split(',')[1]);
+                            readerExcel.readAsDataURL(excelBlob);
+                        });
+
+                        attachments.push({
+                            name: `Statement_${statementData.partner?.name || 'Customer'}_${new Date().toISOString().split('T')[0]}.xlsx`,
+                            content: `base64,${b64Excel}`,
+                            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                        });
+                    }
+
+                    const fromEmail = settings?.accounts_email || 'accounts@celron.net';
+
+                    const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/send-email`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            company_id: profile?.company_id,
+                            from_email: fromEmail,
+                            to: recipient,
+                            cc: cc,
+                            bcc: bcc,
+                            subject: subject,
+                            body: body,
+                            attachments: attachments
+                        })
+                    });
+
+                    const contentType = response.headers.get("content-type");
+                    if (contentType && contentType.indexOf("application/json") !== -1) {
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Server error');
+                    } else {
+                        if (!response.ok) throw new Error('Failed to send email');
+                    }
+                    
+                    toast.success(`Statement email sent successfully!`);
                 }
             }
         } catch (err) {
@@ -617,6 +980,9 @@ export default function StatementOfAccount() {
                     <button className="btn-vibrant-secondary" onClick={handlePrint}>
                         <Printer size={18} /> Print PDF
                     </button>
+                    <button className="btn-vibrant-secondary" style={{ background: '#10b981', color: '#fff', border: 'none' }} onClick={handleExportExcel}>
+                        <Download size={18} /> Export Excel
+                    </button>
                     <button className="btn-vibrant-secondary" onClick={() => setShowEmailModal(true)}>
                         <Mail size={18} /> Send by Email
                     </button>
@@ -689,49 +1055,16 @@ export default function StatementOfAccount() {
                             {loading ? <Loader2 className="animate-spin" /> : 'Generate'}
                         </button>
 
-                        <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '12px', 
-                            background: '#f0fdf4', 
-                            padding: '0 16px', 
-                            borderRadius: '12px', 
-                            border: '1px solid #bbf7d0',
-                            height: '48px'
-                        }}>
-                            <div 
-                                onClick={() => setHideSettled(!hideSettled)}
-                                style={{ 
-                                    width: '44px', 
-                                    height: '24px', 
-                                    background: hideSettled ? '#10b981' : '#cbd5e1', 
-                                    borderRadius: '12px', 
-                                    position: 'relative', 
-                                    cursor: 'pointer',
-                                    transition: 'all 0.3s'
-                                }}
-                            >
-                                <div style={{ 
-                                    width: '18px', 
-                                    height: '18px', 
-                                    background: 'white', 
-                                    borderRadius: '50%', 
-                                    position: 'absolute', 
-                                    top: '3px', 
-                                    left: hideSettled ? '23px' : '3px',
-                                    transition: 'all 0.3s'
-                                }} />
-                            </div>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: '#166534' }}>Hide Settled</span>
-                        </div>
+
 
                         <button 
                             className="btn-vibrant-secondary" 
                             onClick={() => { 
                                 setSelectedPartner(''); 
                                 setStatementData(null); 
+                                const globalOldest = getGlobalOldestInvoiceDate();
                                 setDateRange({
-                                    start: new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0],
+                                    start: globalOldest,
                                     end: new Date().toISOString().split('T')[0]
                                 });
                             }}
@@ -790,6 +1123,81 @@ export default function StatementOfAccount() {
                                 </div>
                             )}
                         </div>
+
+                        {/* Beautiful Card-Embedded Tab Selector */}
+                        <div style={{ 
+                            display: 'flex', 
+                            gap: '8px', 
+                            background: '#f1f5f9', 
+                            padding: '4px', 
+                            borderRadius: '12px', 
+                            margin: '20px 24px 0 24px',
+                            width: 'fit-content',
+                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)',
+                            border: '1px solid #e2e8f0'
+                        }}>
+                            <button 
+                                onClick={() => setLedgerTab('overdue')}
+                                style={{
+                                    padding: '8px 20px',
+                                    fontWeight: 700,
+                                    fontSize: '0.8rem',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    background: ledgerTab === 'overdue' ? 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)' : 'transparent',
+                                    color: ledgerTab === 'overdue' ? '#ffffff' : '#64748b',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    boxShadow: ledgerTab === 'overdue' ? '0 4px 10px rgba(79, 70, 229, 0.25)' : 'none'
+                                }}
+                            >
+                                <AlertCircle size={14} /> Outstanding / Overdue
+                                <span style={{ 
+                                    background: ledgerTab === 'overdue' ? 'rgba(255,255,255,0.2)' : '#cbd5e1', 
+                                    color: ledgerTab === 'overdue' ? '#ffffff' : '#475569', 
+                                    padding: '1px 6px', 
+                                    borderRadius: '12px', 
+                                    fontSize: '0.7rem',
+                                    fontWeight: 800
+                                }}>
+                                    {statementData?.ledger?.filter(d => !d.isSettled).length || 0}
+                                </span>
+                            </button>
+                            <button 
+                                onClick={() => setLedgerTab('paid')}
+                                style={{
+                                    padding: '8px 20px',
+                                    fontWeight: 700,
+                                    fontSize: '0.8rem',
+                                    borderRadius: '8px',
+                                    border: 'none',
+                                    background: ledgerTab === 'paid' ? 'linear-gradient(135deg, #10b981 0%, #047857 100%)' : 'transparent',
+                                    color: ledgerTab === 'paid' ? '#ffffff' : '#64748b',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                    boxShadow: ledgerTab === 'paid' ? '0 4px 10px rgba(16, 185, 129, 0.25)' : 'none'
+                                }}
+                            >
+                                <CreditCard size={14} /> Paid / Settled
+                                <span style={{ 
+                                    background: ledgerTab === 'paid' ? 'rgba(255,255,255,0.2)' : '#cbd5e1', 
+                                    color: ledgerTab === 'paid' ? '#ffffff' : '#475569', 
+                                    padding: '1px 6px', 
+                                    borderRadius: '12px', 
+                                    fontSize: '0.7rem',
+                                    fontWeight: 800
+                                }}>
+                                    {statementData?.ledger?.filter(d => d.isSettled).length || 0}
+                                </span>
+                            </button>
+                        </div>
+
                         <div style={{ overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
@@ -813,7 +1221,8 @@ export default function StatementOfAccount() {
                                         </tr>
                                     )}
                                     {statementData && statementData.ledger.map((doc, idx) => {
-                                        if (hideSettled && doc.isSettled) return null;
+                                        if (ledgerTab === 'overdue' && doc.isSettled) return null;
+                                        if (ledgerTab === 'paid' && !doc.isSettled) return null;
                                         
                                         const running = statementData.openingBalance + statementData.ledger.slice(0, idx + 1).reduce((acc, d) => acc + (d.debit - d.credit), 0);
                                         
@@ -933,92 +1342,172 @@ export default function StatementOfAccount() {
                     </div>
                 </div>
             </>
-                ) : companyAging.length > 0 ? (
-                    <div className="animate-fade-in">
-                        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div>
-                                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e293b' }}>Company-Wide Aging Summary Report</h2>
-                                <p style={{ color: '#64748b' }}>Overview of all customers with detailed aging buckets (Current to 91+ Days).</p>
+                ) : companyAging.length > 0 ? (() => {
+                    return (
+                        <div className="animate-fade-in">
+                            <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#1e293b' }}>Company-Wide Aging Summary Report</h2>
+                                    <p style={{ color: '#64748b' }}>Overview of all customers with detailed aging buckets (Current to 91+ Days).</p>
+                                </div>
+                                <button 
+                                    className="btn-vibrant" 
+                                    onClick={() => handlePrintSummary()}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                                >
+                                    <Printer size={18} /> Print Summary Report
+                                </button>
                             </div>
-                            <button 
-                                className="btn-vibrant" 
-                                onClick={() => handlePrintSummary()}
-                                style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-                            >
-                                <Printer size={18} /> Print Summary Report
-                            </button>
-                        </div>
-                        
-                        <div className="table-container" style={{ background: 'white' }}>
-                            <table>
-                                <thead>
-                                    <tr style={{ background: '#f8fafc' }}>
-                                         <th>Customer Name</th>
-                                         <th style={{ textAlign: 'right' }}>Current</th>
-                                         <th style={{ textAlign: 'right' }}>1-30 Days</th>
-                                         <th style={{ textAlign: 'right' }}>31-60 Days</th>
-                                         <th style={{ textAlign: 'right' }}>61-90 Days</th>
-                                         <th style={{ textAlign: 'right' }}>91+ Days</th>
-                                         <th style={{ textAlign: 'right' }}>Total Due</th>
-                                         <th style={{ textAlign: 'right' }}>Action</th>
-                                     </tr>
-                                 </thead>
-                                 <tbody>
-                                     {companyAging.map(item => (
-                                         <tr key={item.id} className="table-row">
-                                             <td 
-                                                 style={{ fontWeight: 600, color: 'var(--accent)', cursor: 'pointer' }}
-                                                 onClick={() => setSelectedPartner(item.id)}
-                                             >
-                                                 {item.name}
-                                             </td>
-                                             <td style={{ textAlign: 'right' }}>{(item.aging.current || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                             <td style={{ textAlign: 'right' }}>{(item.aging.thirty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                             <td style={{ textAlign: 'right' }}>{(item.aging.sixty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                             <td style={{ textAlign: 'right' }}>{(item.aging.ninety || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                             <td style={{ textAlign: 'right', color: item.aging.overNinety > 0 ? '#ef4444' : 'inherit' }}>{(item.aging.overNinety || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                             <td style={{ textAlign: 'right', fontWeight: 700, color: (item.outstanding || 0) > 0 ? '#1e3a8a' : '#10b981' }}>
-                                                 {statementCurrency} {(item.outstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                             </td>
-                                             <td style={{ textAlign: 'right' }}>
-                                                 <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                                                     <button 
-                                                         className="btn-vibrant-secondary"
-                                                         style={{ padding: '6px 16px', fontSize: '0.8rem' }}
-                                                         onClick={() => {
-                                                             setSelectedPartner(item.id);
-                                                             handleGenerate(item.id);
-                                                         }}
-                                                     >
-                                                         SOA
-                                                     </button>
-                                                     <button 
-                                                         className="btn-primary"
-                                                         style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px' }}
-                                                         onClick={() => setPaymentModal({ isOpen: true, prefill: { partner_id: item.id } })}
-                                                     >
-                                                         <CreditCard size={14} /> Payment Entry
-                                                     </button>
-                                                 </div>
-                                             </td>
+
+                            {/* Elegant Glassmorphic Tab Selector */}
+                            <div style={{ 
+                                display: 'flex', 
+                                gap: '8px', 
+                                background: '#f1f5f9', 
+                                padding: '6px', 
+                                borderRadius: '14px', 
+                                marginBottom: '24px',
+                                width: 'fit-content',
+                                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.05)',
+                                border: '1px solid #e2e8f0'
+                            }}>
+                                <button 
+                                    onClick={() => setActiveTab('overdue')}
+                                    style={{
+                                        padding: '10px 24px',
+                                        fontWeight: 700,
+                                        fontSize: '0.85rem',
+                                        borderRadius: '10px',
+                                        border: 'none',
+                                        background: activeTab === 'overdue' ? 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)' : 'transparent',
+                                        color: activeTab === 'overdue' ? '#ffffff' : '#64748b',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        boxShadow: activeTab === 'overdue' ? '0 4px 12px rgba(79, 70, 229, 0.25)' : 'none'
+                                    }}
+                                >
+                                    <AlertCircle size={15} /> Overdue / Outstanding
+                                    <span style={{ 
+                                        background: activeTab === 'overdue' ? 'rgba(255,255,255,0.2)' : '#e2e8f0', 
+                                        color: activeTab === 'overdue' ? '#ffffff' : '#475569', 
+                                        padding: '2px 8px', 
+                                        borderRadius: '20px', 
+                                        fontSize: '0.75rem',
+                                        fontWeight: 800
+                                    }}>
+                                        {overdueItems.length}
+                                    </span>
+                                </button>
+                                <button 
+                                    onClick={() => setActiveTab('paid')}
+                                    style={{
+                                        padding: '10px 24px',
+                                        fontWeight: 700,
+                                        fontSize: '0.85rem',
+                                        borderRadius: '10px',
+                                        border: 'none',
+                                        background: activeTab === 'paid' ? 'linear-gradient(135deg, #10b981 0%, #047857 100%)' : 'transparent',
+                                        color: activeTab === 'paid' ? '#ffffff' : '#64748b',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        boxShadow: activeTab === 'paid' ? '0 4px 12px rgba(16, 185, 129, 0.25)' : 'none'
+                                    }}
+                                >
+                                    <CreditCard size={15} /> Paid / Settled
+                                    <span style={{ 
+                                        background: activeTab === 'paid' ? 'rgba(255,255,255,0.2)' : '#e2e8f0', 
+                                        color: activeTab === 'paid' ? '#ffffff' : '#475569', 
+                                        padding: '2px 8px', 
+                                        borderRadius: '20px', 
+                                        fontSize: '0.75rem',
+                                        fontWeight: 800
+                                    }}>
+                                        {paidItems.length}
+                                    </span>
+                                </button>
+                            </div>
+                            
+                            <div className="table-container" style={{ background: 'white' }}>
+                                <table>
+                                    <thead>
+                                        <tr style={{ background: '#f8fafc' }}>
+                                             <th>Customer Name</th>
+                                             <th style={{ textAlign: 'right' }}>Current</th>
+                                             <th style={{ textAlign: 'right' }}>1-30 Days</th>
+                                             <th style={{ textAlign: 'right' }}>31-60 Days</th>
+                                             <th style={{ textAlign: 'right' }}>61-90 Days</th>
+                                             <th style={{ textAlign: 'right' }}>91+ Days</th>
+                                             <th style={{ textAlign: 'right' }}>Total Due</th>
+                                             <th style={{ textAlign: 'right' }}>Action</th>
                                          </tr>
-                                     ))}
-                                     {/* Totals Row */}
-                                     <tr style={{ background: '#f1f5f9', fontWeight: 900 }}>
-                                         <td>TOTAL</td>
-                                         <td style={{ textAlign: 'right' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.aging.current, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td style={{ textAlign: 'right' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.aging.thirty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td style={{ textAlign: 'right' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.aging.sixty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td style={{ textAlign: 'right' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.aging.ninety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td style={{ textAlign: 'right' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.aging.overNinety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td style={{ textAlign: 'right', color: '#1e3a8a' }}>{statementCurrency} {companyAging.reduce((acc, it) => acc + it.outstanding, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                         <td></td>
-                                     </tr>
-                                </tbody>
-                            </table>
+                                     </thead>
+                                     <tbody>
+                                         {displayedItems.map(item => (
+                                             <tr key={item.id} className="table-row">
+                                                 <td 
+                                                     style={{ fontWeight: 600, color: 'var(--accent)', cursor: 'pointer' }}
+                                                     onClick={() => setSelectedPartner(item.id)}
+                                                 >
+                                                     {item.name}
+                                                 </td>
+                                                 <td style={{ textAlign: 'right' }}>{(item.aging.current || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                 <td style={{ textAlign: 'right' }}>{(item.aging.thirty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                 <td style={{ textAlign: 'right' }}>{(item.aging.sixty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                 <td style={{ textAlign: 'right' }}>{(item.aging.ninety || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                 <td style={{ textAlign: 'right', color: item.aging.overNinety > 0 ? '#ef4444' : 'inherit' }}>{(item.aging.overNinety || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                                 <td style={{ textAlign: 'right', fontWeight: 700, color: (item.outstanding || 0) > 0 ? '#1e3a8a' : '#10b981' }}>
+                                                     {item.currency || 'SGD'} {(item.outstanding || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                 </td>
+                                                 <td style={{ textAlign: 'right' }}>
+                                                     <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                                                         <button 
+                                                              className="btn-vibrant-secondary"
+                                                              style={{ padding: '6px 16px', fontSize: '0.8rem' }}
+                                                              onClick={() => {
+                                                                  const oldestDate = item.oldest_invoice_date 
+                                                                      ? item.oldest_invoice_date.split('T')[0]
+                                                                      : new Date(new Date().getFullYear(), 0, 1).toISOString().split('T')[0];
+                                                                  const endDate = new Date().toISOString().split('T')[0];
+                                                                  setSelectedPartner(item.id);
+                                                                  handleGenerate(item.id, oldestDate, endDate);
+                                                              }}
+                                                          >
+                                                              SOA
+                                                          </button>
+                                                         <button 
+                                                             className="btn-primary"
+                                                             style={{ padding: '6px 12px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px' }}
+                                                             onClick={() => setPaymentModal({ isOpen: true, prefill: { partner_id: item.id } })}
+                                                         >
+                                                             <CreditCard size={14} /> Payment Entry
+                                                         </button>
+                                                     </div>
+                                                 </td>
+                                             </tr>
+                                         ))}
+                                         {/* Totals Row */}
+                                         <tr style={{ background: '#f1f5f9', fontWeight: 900 }}>
+                                             <td>TOTAL</td>
+                                             <td style={{ textAlign: 'right' }}>{summaryCurrency} {displayedItems.reduce((acc, it) => acc + it.aging.current, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                             <td style={{ textAlign: 'right' }}>{summaryCurrency} {displayedItems.reduce((acc, it) => acc + it.aging.thirty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                             <td style={{ textAlign: 'right' }}>{summaryCurrency} {displayedItems.reduce((acc, it) => acc + it.aging.sixty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                             <td style={{ textAlign: 'right' }}>{summaryCurrency} {displayedItems.reduce((acc, it) => acc + it.aging.ninety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                             <td style={{ textAlign: 'right' }}>{summaryCurrency} {displayedItems.reduce((acc, it) => acc + it.aging.overNinety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                             <td style={{ textAlign: 'right', color: '#1e3a8a' }}>{summaryCurrency} {displayedItems.reduce((acc, it) => acc + it.outstanding, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                             <td></td>
+                                         </tr>
+                                     </tbody>
+                                </table>
+                            </div>
                         </div>
-                    </div>
-                ) : (
+                    );
+                })() : (
                     <div style={{ padding: '80px 40px', textAlign: 'center', background: '#fff', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
                         <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
                             <Filter size={32} color="#3b82f6" />
@@ -1168,7 +1657,7 @@ export default function StatementOfAccount() {
                                         <td style={{ padding: '15px 10px', textAlign: 'center', fontWeight: 700, color: 'white', fontSize: '13px' }}>-</td>
                                         <td style={{ padding: '15px 10px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'white', fontSize: '13px' }} colSpan={5}>TOTAL OUTSTANDING</td>
                                         <td style={{ padding: '15px 10px', textAlign: 'right', fontWeight: 900, fontSize: '13px', color: 'white', whiteSpace: 'nowrap' }}>
-                                            {statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                            {statementCurrency} {statementData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                         </td>
                                     </tr>
                                 </tbody>
@@ -1191,8 +1680,21 @@ export default function StatementOfAccount() {
                                 </div>
                                 <div style={{ width: '120px', marginLeft: '15px', padding: '8px', border: '1px dashed #cbd5e1', borderRadius: '8px', textAlign: 'center', background: '#f8fafc' }}>
                                     <div style={{ fontSize: '0.45rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>Delivery / Payment Terms</div>
-                                    <div style={{ fontSize: '0.9rem', fontWeight: 900, color: '#1e3a8a' }}>{statementData.partner?.customerCreditTime && statementData.partner.customerCreditTime !== '0' ? `${statementData.partner.customerCreditTime} DAYS` : 'C.O.D'}</div>
-                                    <div style={{ fontSize: '0.4rem', color: '#94a3b8', marginTop: '2px' }}>{statementData.partner?.customerCreditTime && statementData.partner.customerCreditTime !== '0' ? 'From Date of Invoice' : 'Payable upon Delivery'}</div>
+                                    <div style={{ fontSize: '0.9rem', fontWeight: 900, color: '#1e3a8a' }}>
+                                        {(() => {
+                                            const t = statementData.partner?.terms || statementData.partner?.payment_terms || statementData.partner?.customerCreditTime;
+                                            if (!t || t === '0') return 'C.O.D';
+                                            if (/^\d+$/.test(String(t).trim())) return `${t} DAYS`;
+                                            return String(t).toUpperCase();
+                                        })()}
+                                    </div>
+                                    <div style={{ fontSize: '0.4rem', color: '#94a3b8', marginTop: '2px' }}>
+                                        {(() => {
+                                            const t = statementData.partner?.terms || statementData.partner?.payment_terms || statementData.partner?.customerCreditTime;
+                                            if (!t || String(t).toUpperCase().includes('C.O.D') || t === '0') return 'Payable upon Delivery';
+                                            return 'From Date of Invoice';
+                                        })()}
+                                    </div>
                                 </div>
                             </div>
 
@@ -1287,7 +1789,7 @@ export default function StatementOfAccount() {
                             </tr>
                         </thead>
                         <tbody>
-                            {companyAging.map((item, idx) => (
+                            {displayedItems.map((item, idx) => (
                                 <tr key={item.id} style={{ borderBottom: '1px solid #f1f5f9', background: idx % 2 === 0 ? 'white' : '#fcfcfc' }}>
                                     <td style={{ padding: '8px 10px', fontWeight: 600 }}>{item.name}</td>
                                     <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.aging.current.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -1295,17 +1797,17 @@ export default function StatementOfAccount() {
                                     <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.aging.sixty.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                     <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.aging.ninety.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                     <td style={{ padding: '8px 10px', textAlign: 'right' }}>{item.aging.overNinety.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700 }}>{item.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                    <td style={{ padding: '8px 10px', textAlign: 'right', fontWeight: 700 }}>{item.currency || 'SGD'} {item.outstanding.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                 </tr>
                             ))}
                             <tr style={{ background: '#f1f5f9', fontWeight: 900, borderTop: '2px solid #1e3a8a' }}>
                                 <td style={{ padding: '12px 10px' }}>TOTAL</td>
-                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{companyAging.reduce((acc, it) => acc + it.aging.current, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{companyAging.reduce((acc, it) => acc + it.aging.thirty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{companyAging.reduce((acc, it) => acc + it.aging.sixty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{companyAging.reduce((acc, it) => acc + it.aging.ninety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{companyAging.reduce((acc, it) => acc + it.aging.overNinety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>SGD {companyAging.reduce((acc, it) => acc + it.outstanding, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{displayedItems.reduce((acc, it) => acc + it.aging.current, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{displayedItems.reduce((acc, it) => acc + it.aging.thirty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{displayedItems.reduce((acc, it) => acc + it.aging.sixty, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{displayedItems.reduce((acc, it) => acc + it.aging.ninety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{displayedItems.reduce((acc, it) => acc + it.aging.overNinety, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td style={{ padding: '12px 10px', textAlign: 'right' }}>{summaryCurrency} {displayedItems.reduce((acc, it) => acc + it.outstanding, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                             </tr>
                         </tbody>
                     </table>
@@ -1325,7 +1827,7 @@ export default function StatementOfAccount() {
                         document_type: statementData ? 'Statement of Account' : 'Aging Summary Report',
                         document_no: statementData ? `SOA-${new Date().toISOString().split('T')[0]}` : `SUM-${new Date().toISOString().split('T')[0]}`,
                         subject: statementData ? `Statement for period ${formatDate(dateRange.start)} to ${formatDate(dateRange.end)}` : `Company-Wide Aging Summary as of ${new Date().toLocaleDateString()}`,
-                        currency: 'SGD',
+                        currency: statementData ? statementCurrency : summaryCurrency,
                         total_amount: statementData ? statementData.closingBalance : companyAging.reduce((sum, item) => sum + item.outstanding, 0),
                         salesperson_name: profile?.full_name
                     }}
@@ -1343,11 +1845,194 @@ export default function StatementOfAccount() {
                     documentData={{
                         document_type: statementData ? 'Statement of Account' : 'Aging Summary Report',
                         document_no: statementData ? `SOA-${new Date().toISOString().split('T')[0]}` : `SUM-${new Date().toISOString().split('T')[0]}`,
-                        closingBalance: statementData ? statementData.closingBalance : companyAging.reduce((sum, item) => sum + item.outstanding, 0)
+                        closingBalance: statementData ? statementData.closingBalance : companyAging.reduce((sum, item) => sum + item.outstanding, 0),
+                        currency: statementData ? statementCurrency : summaryCurrency
                     }}
-                    onShare={(preview) => handleShareFile('email', preview.body, preview.to, preview.cc, preview.bcc, preview.subject)}
+                    onShare={(preview, attachExcel) => handleShareFile('email', preview.body, preview.to, preview.cc, preview.bcc, preview.subject, attachExcel)}
                 />
             )}
+        </div>
+    );
+}
+
+// Helper Component: SearchableDropdown for contacts
+function SearchableDropdown({ placeholder, searchVal, setSearchVal, isOpen, setIsOpen, options, onSelect }) {
+    return (
+        <div style={{ position: 'relative', width: '100%', zIndex: isOpen ? 9999 : 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <input 
+                    type="text"
+                    placeholder={placeholder}
+                    value={searchVal}
+                    onChange={(e) => { setSearchVal(e.target.value); setIsOpen(true); }}
+                    onFocus={() => setIsOpen(true)}
+                    style={{ 
+                        width: '100%', 
+                        padding: '8px 12px 8px 32px', 
+                        border: '1px solid #cbd5e1', 
+                        borderRadius: '8px', 
+                        fontSize: '12px', 
+                        outline: 'none', 
+                        boxSizing: 'border-box',
+                        transition: 'border-color 0.2s',
+                        background: '#fff',
+                        height: '34px'
+                    }}
+                />
+                <Search size={14} color="#94a3b8" style={{ position: 'absolute', left: '10px' }} />
+                {searchVal && (
+                    <button 
+                        type="button" 
+                        onClick={() => setSearchVal('')}
+                        style={{ position: 'absolute', right: '10px', background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}
+                    >
+                        <X size={14} />
+                    </button>
+                )}
+            </div>
+            {isOpen && (
+                <>
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 9000 }} onClick={() => setIsOpen(false)} />
+                    <div style={{ 
+                        position: 'absolute', 
+                        top: 'calc(100% + 4px)', 
+                        left: 0, 
+                        right: 0, 
+                        background: '#fff', 
+                        border: '1px solid #cbd5e1', 
+                        borderRadius: '8px', 
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)', 
+                        maxHeight: '160px', 
+                        overflowY: 'auto', 
+                        zIndex: 9500,
+                        padding: '4px'
+                    }}>
+                        {options.length === 0 ? (
+                            <div style={{ padding: '8px 12px', fontSize: '11px', color: '#64748b', textAlign: 'center' }}>
+                                No matching contacts found
+                            </div>
+                        ) : (
+                            options.map((opt, i) => (
+                                <DropdownItem 
+                                    key={i} 
+                                    opt={opt} 
+                                    onClick={() => { onSelect(opt); setIsOpen(false); setSearchVal(''); }}
+                                />
+                            ))
+                        )}
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
+// Helper Component: SearchableDropdown Item
+function DropdownItem({ opt, onClick }) {
+    const [hover, setHover] = useState(false);
+    return (
+        <div 
+            onClick={onClick}
+            onMouseEnter={() => setHover(true)}
+            onMouseLeave={() => setHover(false)}
+            style={{ 
+                padding: '6px 10px', 
+                fontSize: '11px', 
+                borderRadius: '6px', 
+                cursor: 'pointer',
+                background: hover ? '#f1f5f9' : 'transparent',
+                transition: 'background 0.2s',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '2px'
+            }}
+        >
+            <div style={{ fontWeight: 600, color: '#1e293b' }}>{opt.name}</div>
+            <div style={{ fontSize: '10px', color: '#64748b' }}>{opt.email}</div>
+        </div>
+    );
+}
+
+// Helper Component: Contact card representation
+function ContactCard({ contact, emailPreview, toggleEmailInField, onEdit }) {
+    const contactEmail = (contact.email || '').trim().toLowerCase();
+    const isToActive = contactEmail ? emailPreview.to.split(';').map(e => e.trim().toLowerCase()).includes(contactEmail) : false;
+    const isCcActive = contactEmail ? emailPreview.cc.split(';').map(e => e.trim().toLowerCase()).includes(contactEmail) : false;
+
+    return (
+        <div style={{
+            background: '#fff',
+            border: '1px solid #e2e8f0',
+            borderRadius: '8px',
+            padding: '6px 10px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '10px',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+            minWidth: '220px'
+        }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={contact.name}>
+                    {contact.name}
+                </span>
+                <span style={{ fontSize: '10px', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={contact.email || 'No email registered'}>
+                    {contact.email || 'No email registered'}
+                </span>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '5px', borderLeft: '1px solid #f1f5f9', paddingLeft: '8px', alignItems: 'center' }}>
+                {contact.id && (
+                    <button 
+                        type="button"
+                        onClick={() => onEdit(contact)}
+                        title="Edit Contact"
+                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '3px', color: '#94a3b8', transition: 'color 0.2s' }}
+                    >
+                        <Edit2 size={12} />
+                    </button>
+                )}
+                
+                {contact.email && (
+                    <>
+                        <button 
+                            type="button"
+                            onClick={() => toggleEmailInField('to', contact.email)}
+                            style={{ 
+                                background: isToActive ? '#eef2ff' : '#f8fafc', 
+                                color: isToActive ? '#4f46e5' : '#64748b', 
+                                border: `1px solid ${isToActive ? '#c7d2fe' : '#e2e8f0'}`, 
+                                borderRadius: '4px', 
+                                padding: '2px 8px', 
+                                fontSize: '10px', 
+                                fontWeight: 800, 
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease-in-out'
+                            }}
+                        >
+                            To
+                        </button>
+                        
+                        <button 
+                            type="button"
+                            onClick={() => toggleEmailInField('cc', contact.email)}
+                            style={{ 
+                                background: isCcActive ? '#f0fdf4' : '#f8fafc', 
+                                color: isCcActive ? '#16a34a' : '#64748b', 
+                                border: `1px solid ${isCcActive ? '#bbf7d0' : '#e2e8f0'}`, 
+                                borderRadius: '4px', 
+                                padding: '2px 8px', 
+                                fontSize: '10px', 
+                                fontWeight: 800, 
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease-in-out'
+                            }}
+                        >
+                            Cc
+                        </button>
+                    </>
+                )}
+            </div>
         </div>
     );
 }
@@ -1357,63 +2042,35 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
         to: partner?.email || 'accounts@celron.net',
         cc: '',
         bcc: '',
-        subject: `${documentData.document_type} - ${partner?.name || 'Customer'}`,
+        subject: `${documentData?.document_type || 'Statement'} - ${partner?.name || 'Customer'}`,
         body: '',
         attachments: []
     });
 
-    // Inline Contact Add/Edit states
     const [localContacts, setLocalContacts] = useState(contacts);
+    const [attachExcel, setAttachExcel] = useState(false);
+
+    // Searchable dropdown states
+    const [companySearch, setCompanySearch] = useState('');
+    const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+    const [officeSearch, setOfficeSearch] = useState('');
+    const [showOfficeDropdown, setShowOfficeDropdown] = useState(false);
+
+    // Lists of extra visible contacts added dynamically
+    const [customVisibleContacts, setCustomVisibleContacts] = useState([]);
+    const [customOfficeContacts, setCustomOfficeContacts] = useState([]);
+
+    // Modal add/edit contact states
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+    const [modalContactType, setModalContactType] = useState('customer'); // 'customer' or 'office'
     const [editingContact, setEditingContact] = useState(null);
-    const [isAddingContact, setIsAddingContact] = useState(false);
-    const [contactFormName, setContactFormName] = useState('');
-    const [contactFormEmail, setContactFormEmail] = useState('');
-    const [isSavingContact, setIsSavingContact] = useState(false);
+    const [modalName, setModalName] = useState('');
+    const [modalEmail, setModalEmail] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         setLocalContacts(contacts);
     }, [contacts]);
-
-    const handleSaveInlineContact = async (e) => {
-        if (e) e.preventDefault();
-        if (!contactFormName.trim() || !contactFormEmail.trim()) {
-            alert('Please enter both Name and Email.');
-            return;
-        }
-        
-        setIsSavingContact(true);
-        try {
-            const { saveContact, getContacts } = await import('../../lib/store');
-            const contactData = {
-                name: contactFormName.trim(),
-                email: contactFormEmail.trim(),
-                partnerId: partner?.id,
-            };
-            
-            if (editingContact) {
-                contactData.id = editingContact.id;
-            }
-            
-            await saveContact(contactData);
-            
-            // Reload contacts list
-            const allContacts = await getContacts();
-            if (allContacts) {
-                setLocalContacts(allContacts);
-            }
-            
-            // Reset state
-            setEditingContact(null);
-            setIsAddingContact(false);
-            setContactFormName('');
-            setContactFormEmail('');
-        } catch (err) {
-            console.error('Failed to save contact:', err);
-            alert('Failed to save contact: ' + (err.message || err));
-        } finally {
-            setIsSavingContact(false);
-        }
-    };
 
     const formatDate = (d) => {
         if (!d) return '-';
@@ -1427,43 +2084,147 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
     useEffect(() => {
         if (isOpen) {
             const periodStr = dateRange ? `Period: ${formatDate(dateRange.start)} - ${formatDate(dateRange.end)}\n\n` : '';
-            const defaultMsg = `Dear ${partner?.name || 'Accounts Team'},\n\n${periodStr}Please find the ${documentData.document_type} (${documentData.document_no}) for your review and reference.\n\nAwaiting for your valuable payment.\n\nTotal Due: SGD ${documentData.closingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}.\n\nBest Regards,\n\nANITHA HP:+65 81962270\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, " Sim Lim Tower" #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6591090347\nweb: www.celron.net / www.celron.shop`;
+            const defaultMsg = `Dear ${partner?.name || 'Accounts Team'},\n\n${periodStr}Please find the ${documentData?.document_type || 'Statement'} (${documentData?.document_no || ''}) for your review and reference.\n\nAwaiting for your valuable payment.\n\nTotal Due: ${documentData?.currency || 'SGD'} ${(documentData?.closingBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}.\n\nBest Regards,\n\nANITHA HP:+65 81962270\nCELRON ENTERPRISES PTE LTD\n10, Jln, Besar, " Sim Lim Tower" #03-05, Singapore 208787\nEmail: accounts@celron.net | Tel: +6591090347\nweb: www.celron.net / www.celron.shop`;
             setEmailPreview(prev => ({ ...prev, body: defaultMsg }));
         }
     }, [isOpen, partner, documentData, dateRange]);
 
-    const getSuggestedEmails = () => {
-        const suggestions = [];
-        
-        // 1. Partner main email (Company)
-        if (partner?.email) {
-            suggestions.push({ name: partner.name, email: partner.email, type: 'Company' });
-        }
-        
-        // 2. Individual Contacts
-        const companyContacts = partner ? localContacts.filter(c => c.partnerId === partner.id) : [];
-        companyContacts.forEach(c => {
-            if (c.email && !suggestions.find(s => s.email === c.email)) {
-                suggestions.push({ id: c.id, name: c.name, email: c.email, type: 'Contact' });
-            }
-        });
-        
-        // 3. Office emails
-        suggestions.push({ name: 'Our Office', email: 'accounts@celron.net', type: 'Internal' });
-        suggestions.push({ name: 'Director Review', email: 'director@celron.net', type: 'Internal' });
-        
-        return suggestions;
-    };
-
-    const addEmailToField = (field, emailToAdd) => {
+    const toggleEmailInField = (field, email) => {
+        if (!email) return;
         setEmailPreview(prev => {
             const current = prev[field] || '';
-            const emails = current.split(';').map(e => e.trim()).filter(Boolean);
-            if (!emails.includes(emailToAdd)) {
-                emails.push(emailToAdd);
+            let emails = current.split(';').map(e => e.trim()).filter(Boolean);
+            const lowerEmail = email.trim().toLowerCase();
+            const matched = emails.find(e => e.toLowerCase() === lowerEmail);
+
+            if (matched) {
+                emails = emails.filter(e => e.toLowerCase() !== lowerEmail);
+            } else {
+                emails.push(email);
             }
             return { ...prev, [field]: emails.join('; ') };
         });
+    };
+
+    // Customer Contacts: direct ones + custom visibilities
+    const getCustomerContacts = () => {
+        const direct = partner ? localContacts.filter(c => c.partnerId === partner.id) : [];
+        const combined = [...direct];
+        customVisibleContacts.forEach(c => {
+            if (c.email && !combined.find(x => x.email && x.email.toLowerCase() === c.email.toLowerCase())) {
+                combined.push(c);
+            }
+        });
+        return combined;
+    };
+
+    // Office Contacts: Our Office default + internal staff + custom office selections
+    const getOfficeContacts = () => {
+        const defaults = [
+            { name: 'Our Office', email: 'accounts@celron.net' }
+        ];
+        const staff = localContacts.filter(c => {
+            if (!c.email) return false;
+            const emailLower = c.email.toLowerCase();
+            const isCelronEmail = emailLower.endsWith('@celron.net') || emailLower.endsWith('@celron.com');
+            const isNoPartner = !c.partnerId;
+            return isCelronEmail || isNoPartner;
+        });
+
+        const combined = [...defaults];
+        staff.forEach(c => {
+            if (c.email && !combined.find(x => x.email && x.email.toLowerCase() === c.email.toLowerCase())) {
+                combined.push({ id: c.id, name: c.name, email: c.email });
+            }
+        });
+        customOfficeContacts.forEach(c => {
+            if (c.email && !combined.find(x => x.email && x.email.toLowerCase() === c.email.toLowerCase())) {
+                combined.push(c);
+            }
+        });
+        return combined;
+    };
+
+    // Filter lists for dropdown searches
+    const getCompanyDropdownOptions = () => {
+        const query = companySearch.trim().toLowerCase();
+        if (!query) {
+            // Show all contacts that have email and are NOT already in the visible customer list
+            const currentEmails = getCustomerContacts().map(c => (c.email || '').toLowerCase()).filter(Boolean);
+            return localContacts.filter(c => c.partnerId && c.email && !currentEmails.includes(c.email.toLowerCase()));
+        }
+        return localContacts.filter(c => 
+            c.email && 
+            (c.name?.toLowerCase().includes(query) || c.email?.toLowerCase().includes(query))
+        );
+    };
+
+    const getOfficeDropdownOptions = () => {
+        const query = officeSearch.trim().toLowerCase();
+        const currentEmails = getOfficeContacts().map(c => (c.email || '').toLowerCase()).filter(Boolean);
+        if (!query) {
+            // Show all contacts with no partner that have email and aren't already visible
+            return localContacts.filter(c => !c.partnerId && c.email && !currentEmails.includes(c.email.toLowerCase()));
+        }
+        return localContacts.filter(c => 
+            !c.partnerId && c.email && !currentEmails.includes(c.email.toLowerCase()) &&
+            (c.name?.toLowerCase().includes(query) || c.email?.toLowerCase().includes(query))
+        );
+    };
+
+    const handleSaveModalContact = async (e) => {
+        if (e) e.preventDefault();
+        if (!modalName.trim() || !modalEmail.trim()) {
+            alert('Please enter both Name and Email.');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            const { saveContact, getContacts } = await import('../../lib/store');
+            const contactData = {
+                name: modalName.trim(),
+                email: modalEmail.trim(),
+                partnerId: modalContactType === 'customer' ? partner?.id : null,
+                company_id: partner?.company_id || null
+            };
+
+            if (editingContact) {
+                contactData.id = editingContact.id;
+            }
+
+            const saved = await saveContact(contactData);
+
+            // Reload database contacts list
+            const allContacts = await getContacts();
+            if (allContacts) {
+                setLocalContacts(allContacts);
+            }
+
+            // Instantly display and active-toggle the newly created contact card
+            if (modalContactType === 'customer') {
+                if (saved) {
+                    setCustomVisibleContacts(prev => [...prev, saved]);
+                    toggleEmailInField('to', saved.email);
+                }
+            } else {
+                if (saved) {
+                    setCustomOfficeContacts(prev => [...prev, saved]);
+                    toggleEmailInField('cc', saved.email);
+                }
+            }
+
+            // Close modal & reset fields
+            setIsAddModalOpen(false);
+            setEditingContact(null);
+            setModalName('');
+            setModalEmail('');
+        } catch (err) {
+            console.error('Failed to save contact:', err);
+            alert('Failed to save contact: ' + (err.message || err));
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     if (!isOpen) return null;
@@ -1515,193 +2276,128 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
                             </div>
                         </div>
 
-                        {/* CONTACT SELECTOR SECTION */}
-                        <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                                <label style={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', margin: 0 }}>
-                                    SELECT CONTACTS FROM COMPANY
-                                </label>
-                                {!isAddingContact && !editingContact && partner?.id && (
+                        {/* SEARCHABLE DUAL-COLUMN CONTACT SELECTOR */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '4px' }}>
+                            
+                            {/* Left Side: Customer Contacts */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        Company Contacts
+                                    </label>
                                     <button 
                                         type="button"
                                         onClick={() => {
-                                            setIsAddingContact(true);
+                                            setModalContactType('customer');
                                             setEditingContact(null);
-                                            setContactFormName('');
-                                            setContactFormEmail('');
+                                            setModalName('');
+                                            setModalEmail('');
+                                            setIsAddModalOpen(true);
                                         }}
-                                        style={{ 
-                                            background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)', 
-                                            color: '#fff', 
-                                            border: 'none', 
-                                            borderRadius: '4px', 
-                                            padding: '2px 8px', 
-                                            fontSize: '10px', 
-                                            fontWeight: 700, 
-                                            cursor: 'pointer',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '4px',
-                                            boxShadow: '0 1px 2px rgba(37,99,235,0.2)',
-                                            transition: 'all 0.2s'
-                                        }}
+                                        style={{ background: 'transparent', border: 'none', color: '#2563eb', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
                                     >
-                                        + Add Contact
+                                        <Plus size={12} /> Add Contact
                                     </button>
-                                )}
+                                </div>
+
+                                <SearchableDropdown 
+                                    placeholder="Search other company contacts..."
+                                    searchVal={companySearch}
+                                    setSearchVal={setCompanySearch}
+                                    isOpen={showCompanyDropdown}
+                                    setIsOpen={setShowCompanyDropdown}
+                                    options={getCompanyDropdownOptions()}
+                                    onSelect={(selected) => {
+                                        setCustomVisibleContacts(prev => {
+                                            if (prev.find(x => x.email.toLowerCase() === selected.email.toLowerCase())) return prev;
+                                            return [...prev, selected];
+                                        });
+                                        toggleEmailInField('to', selected.email);
+                                    }}
+                                />
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '160px', overflowY: 'auto', paddingRight: '4px' }}>
+                                    {getCustomerContacts().length === 0 ? (
+                                        <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '11px', border: '1px dashed #cbd5e1', borderRadius: '8px', background: '#fff' }}>
+                                            No company contacts selected. Click dropdown or "+ Add Contact" to append.
+                                        </div>
+                                    ) : (
+                                        getCustomerContacts().map((contact, idx) => (
+                                            <ContactCard 
+                                                key={idx}
+                                                contact={contact}
+                                                emailPreview={emailPreview}
+                                                toggleEmailInField={toggleEmailInField}
+                                                onEdit={(c) => {
+                                                    setModalContactType('customer');
+                                                    setEditingContact(c);
+                                                    setModalName(c.name);
+                                                    setModalEmail(c.email);
+                                                    setIsAddModalOpen(true);
+                                                }}
+                                            />
+                                        ))
+                                    )}
+                                </div>
                             </div>
 
-                            {/* Inline Form */}
-                            {(isAddingContact || editingContact) ? (
-                                <div style={{ 
-                                    background: '#fff', 
-                                    border: '1px solid #e2e8f0', 
-                                    borderRadius: '8px', 
-                                    padding: '12px', 
-                                    marginTop: '4px',
-                                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px'
-                                }}>
-                                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b' }}>
-                                        {editingContact ? '✏️ Edit Contact' : '➕ Add Contact'}
-                                    </div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                        <input 
-                                            type="text" 
-                                            placeholder="Contact Name"
-                                            value={contactFormName}
-                                            onChange={e => setContactFormName(e.target.value)}
-                                            style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
-                                        />
-                                        <input 
-                                            type="email" 
-                                            placeholder="Contact Email"
-                                            value={contactFormEmail}
-                                            onChange={e => setContactFormEmail(e.target.value)}
-                                            style={{ padding: '6px 10px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '12px', outline: 'none' }}
-                                        />
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginTop: '4px' }}>
-                                        <button 
-                                            type="button" 
-                                            onClick={() => {
-                                                setIsAddingContact(false);
-                                                setEditingContact(null);
-                                                setContactFormName('');
-                                                setContactFormEmail('');
-                                            }}
-                                            style={{ padding: '4px 10px', border: '1px solid #cbd5e1', borderRadius: '4px', background: '#fff', color: '#475569', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                                        >
-                                            Cancel
-                                        </button>
-                                        <button 
-                                            type="button" 
-                                            onClick={handleSaveInlineContact}
-                                            disabled={isSavingContact}
-                                            style={{ padding: '4px 10px', border: 'none', borderRadius: '4px', background: '#10b981', color: '#fff', fontSize: '11px', fontWeight: 600, cursor: 'pointer' }}
-                                        >
-                                            {isSavingContact ? 'Saving...' : 'Save'}
-                                        </button>
-                                    </div>
+                            {/* Right Side: Our Office (Celron Contacts) */}
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', borderLeft: '1px solid #e2e8f0', paddingLeft: '20px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <label style={{ fontSize: '11px', fontWeight: 800, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                                        Our Office Contacts
+                                    </label>
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            setModalContactType('office');
+                                            setEditingContact(null);
+                                            setModalName('');
+                                            setModalEmail('');
+                                            setIsAddModalOpen(true);
+                                        }}
+                                        style={{ background: 'transparent', border: 'none', color: '#2563eb', fontSize: '11px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                    >
+                                        <Plus size={12} /> Add Contact
+                                    </button>
                                 </div>
-                            ) : (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                    {getSuggestedEmails().map((contact, idx) => (
-                                        <div 
-                                            key={idx} 
-                                            style={{ 
-                                                background: '#fff', 
-                                                border: '1px solid #cbd5e1', 
-                                                borderRadius: '6px', 
-                                                padding: '4px 8px', 
-                                                display: 'flex', 
-                                                alignItems: 'center', 
-                                                gap: '8px',
-                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+
+                                <SearchableDropdown 
+                                    placeholder="Search office contacts..."
+                                    searchVal={officeSearch}
+                                    setSearchVal={setOfficeSearch}
+                                    isOpen={showOfficeDropdown}
+                                    setIsOpen={setShowOfficeDropdown}
+                                    options={getOfficeDropdownOptions()}
+                                    onSelect={(selected) => {
+                                        setCustomOfficeContacts(prev => {
+                                            if (prev.find(x => x.email.toLowerCase() === selected.email.toLowerCase())) return prev;
+                                            return [...prev, selected];
+                                        });
+                                        toggleEmailInField('cc', selected.email);
+                                    }}
+                                />
+
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '160px', overflowY: 'auto', paddingRight: '4px' }}>
+                                    {getOfficeContacts().map((contact, idx) => (
+                                        <ContactCard 
+                                            key={idx}
+                                            contact={contact}
+                                            emailPreview={emailPreview}
+                                            toggleEmailInField={toggleEmailInField}
+                                            onEdit={(c) => {
+                                                setModalContactType('office');
+                                                setEditingContact(c);
+                                                setModalName(c.name);
+                                                setModalEmail(c.email);
+                                                setIsAddModalOpen(true);
                                             }}
-                                        >
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b' }}>{contact.name}</span>
-                                                <span style={{ fontSize: '10px', color: '#64748b' }}>{contact.email}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid #e2e8f0', paddingLeft: '8px', marginLeft: '4px', alignItems: 'center' }}>
-                                                {contact.type === 'Contact' && (
-                                                    <button 
-                                                        type="button"
-                                                        onClick={() => {
-                                                            setEditingContact(contact);
-                                                            setIsAddingContact(false);
-                                                            setContactFormName(contact.name);
-                                                            setContactFormEmail(contact.email);
-                                                        }}
-                                                        title="Edit Contact"
-                                                        style={{ background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '2px', color: '#64748b' }}
-                                                    >
-                                                        <Edit2 size={12} />
-                                                    </button>
-                                                )}
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => addEmailToField('to', contact.email)}
-                                                    style={{ background: '#eef2ff', color: '#6366f1', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
-                                                >
-                                                    To
-                                                </button>
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => addEmailToField('cc', contact.email)}
-                                                    style={{ background: '#f0fdf4', color: '#16a34a', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
-                                                >
-                                                    Cc
-                                                </button>
-                                            </div>
-                                        </div>
+                                        />
                                     ))}
                                 </div>
-                            )}
+                            </div>
+
                         </div>
-                        {false && (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                    {getSuggestedEmails().map((contact, idx) => (
-                                        <div 
-                                            key={idx} 
-                                            style={{ 
-                                                background: '#fff', 
-                                                border: '1px solid #cbd5e1', 
-                                                borderRadius: '6px', 
-                                                padding: '4px 8px', 
-                                                display: 'flex', 
-                                                alignItems: 'center', 
-                                                gap: '8px',
-                                                boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                                            }}
-                                        >
-                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                                <span style={{ fontSize: '11px', fontWeight: 700, color: '#1e293b' }}>{contact.name}</span>
-                                                <span style={{ fontSize: '10px', color: '#64748b' }}>{contact.email}</span>
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '4px', borderLeft: '1px solid #e2e8f0', paddingLeft: '8px', marginLeft: '4px' }}>
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => addEmailToField('to', contact.email)}
-                                                    style={{ background: '#eef2ff', color: '#6366f1', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
-                                                >
-                                                    To
-                                                </button>
-                                                <button 
-                                                    type="button"
-                                                    onClick={() => addEmailToField('cc', contact.email)}
-                                                    style={{ background: '#f0fdf4', color: '#16a34a', border: 'none', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', fontWeight: 800, cursor: 'pointer' }}
-                                                >
-                                                    Cc
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                        )}
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1727,6 +2423,40 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
                                 <p style={{ fontSize: '11px', color: '#166534', margin: '2px 0 0 0', opacity: 0.9 }}>The {documentData.document_type || 'Statement'} PDF has been generated and is attached to this email.</p>
                             </div>
                         </div>
+
+                        {/* Optional Excel Attachment option */}
+                        <div style={{ 
+                            background: attachExcel ? '#ecfdf5' : '#f8fafc', 
+                            padding: '16px', 
+                            borderRadius: '12px', 
+                            border: attachExcel ? '1px solid #10b981' : '1px solid #e2e8f0', 
+                            marginTop: '12px', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            transition: 'all 0.2s ease-in-out'
+                        }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div style={{ background: attachExcel ? '#10b981' : '#94a3b8', color: 'white', padding: '6px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <Download size={18} />
+                                </div>
+                                <div>
+                                    <p style={{ fontSize: '12px', color: attachExcel ? '#065f46' : '#475569', margin: 0, fontWeight: 700 }}>Attach Excel Version (.xlsx)</p>
+                                    <p style={{ fontSize: '11px', color: attachExcel ? '#047857' : '#64748b', margin: '2px 0 0 0', opacity: 0.9 }}>Required by some customers for automated reconciliation.</p>
+                                </div>
+                            </div>
+                            <input 
+                                type="checkbox" 
+                                checked={attachExcel}
+                                onChange={(e) => setAttachExcel(e.target.checked)}
+                                style={{ 
+                                    width: '20px', 
+                                    height: '20px', 
+                                    cursor: 'pointer',
+                                    accentColor: '#10b981'
+                                }}
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -1738,13 +2468,69 @@ function EmailShareModal({ isOpen, onClose, partner, documentData, onShare, cont
                         Cancel
                     </button>
                     <button
-                        onClick={() => { onShare(emailPreview); onClose(); }}
+                        onClick={() => { onShare(emailPreview, attachExcel); onClose(); }}
                         style={{ padding: '10px 20px', fontSize: '14px', fontWeight: 600, color: '#fff', background: '#3b82f6', border: 'none', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
                     >
                         <Send size={16} /> Send Email Now
                     </button>
                 </div>
             </div>
+
+            {/* LIGHTWEIGHT CONTACT ADD/EDIT OVERLAY MODAL */}
+            {isAddModalOpen && (
+                <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10005, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(3px)' }}>
+                    <div style={{ background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '400px', padding: '20px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.15)' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                            <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>
+                                {editingContact ? '✏️ Edit Contact' : `➕ Add ${modalContactType === 'office' ? 'Office' : 'Customer'} Contact`}
+                            </h3>
+                            <button onClick={() => { setIsAddModalOpen(false); setEditingContact(null); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#94a3b8', display: 'flex', alignItems: 'center' }}>
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSaveModalContact} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>Full Name</label>
+                                <input 
+                                    type="text" 
+                                    required
+                                    placeholder="e.g. Sunil Salian"
+                                    value={modalName}
+                                    onChange={e => setModalName(e.target.value)}
+                                    style={{ padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', outline: 'none' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>Email Address</label>
+                                <input 
+                                    type="email" 
+                                    required
+                                    placeholder="e.g. sunil@greatship.com"
+                                    value={modalEmail}
+                                    onChange={e => setModalEmail(e.target.value)}
+                                    style={{ padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '13px', outline: 'none' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                                <button 
+                                    type="button"
+                                    onClick={() => { setIsAddModalOpen(false); setEditingContact(null); }}
+                                    style={{ padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', background: '#fff', color: '#475569', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    disabled={isSaving}
+                                    style={{ padding: '6px 12px', border: 'none', borderRadius: '6px', background: '#3b82f6', color: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+                                >
+                                    {isSaving ? 'Saving...' : 'Save Contact'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

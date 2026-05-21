@@ -16,7 +16,7 @@ import {
 import {
     FileCheck, Play, Briefcase, X, Loader2, PlayCircle, Folder, Upload,
     ArrowRightLeft, Filter, Eye, Printer, Search, Trash2, Plus, FileText, Copy, Clock,
-    ArrowUp, ArrowDown, RefreshCw, Download, CreditCard
+    ArrowUp, ArrowDown, RefreshCw, Download, CreditCard, Calendar
 } from 'lucide-react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import CustomerEnquiryForm from '../../components/CustomerEnquiryForm';
@@ -31,6 +31,44 @@ const DOC_TYPES = [
     'Packing List', 'Tax Invoice', 'Certificate',
     'Payment Received', 'Statement of Account'
 ];
+
+const SUB_TABS_CONFIG = {
+    'Job': [
+        { id: 'Ongoing', label: 'Ongoing Jobs', color: '#3b82f6', bgActive: '#3b82f6', textActive: '#ffffff', bgInactive: '#eff6ff', textInactive: '#1e40af', border: '#3b82f6', desc: 'Billed drafts or operational in-progress' },
+        { id: 'Completed', label: 'Completed Jobs', color: '#10b981', bgActive: '#10b981', textActive: '#ffffff', bgInactive: '#ecfdf5', textInactive: '#065f46', border: '#10b981', desc: 'Billed Tax Invoices awaiting payments' },
+        { id: 'Archived', label: 'Archived Jobs', color: '#64748b', bgActive: '#64748b', textActive: '#ffffff', bgInactive: '#f1f5f9', textInactive: '#475569', border: '#94a3b8', desc: 'Fully Paid Tax Invoices or Closed' }
+    ],
+    'Quotation': [
+        { id: 'Sent', label: 'Sent / Awaiting PO', color: '#3b82f6', bgActive: '#3b82f6', textActive: '#ffffff', bgInactive: '#eff6ff', textInactive: '#1e40af', border: '#3b82f6', desc: 'Awaiting customer order confirmation' },
+        { id: 'Draft', label: 'Draft Quotes', color: '#f59e0b', bgActive: '#f59e0b', textActive: '#ffffff', bgInactive: '#fffbeb', textInactive: '#b45309', border: '#fbbf24', desc: 'Internal draft quotes being prepared' },
+        { id: 'Confirmed', label: 'Converted to Job', color: '#10b981', bgActive: '#10b981', textActive: '#ffffff', bgInactive: '#ecfdf5', textInactive: '#065f46', border: '#10b981', desc: 'Successfully approved and ordered' }
+    ],
+    'Tax Invoice': [
+        { id: 'Sent', label: 'Sent (Unpaid)', color: '#ef4444', bgActive: '#ef4444', textActive: '#ffffff', bgInactive: '#fef2f2', textInactive: '#991b1b', border: '#f87171', desc: 'Issued tax invoices awaiting payment' },
+        { id: 'Draft', label: 'Draft Invoices', color: '#f59e0b', bgActive: '#f59e0b', textActive: '#ffffff', bgInactive: '#fffbeb', textInactive: '#b45309', border: '#fbbf24', desc: 'Unissued draft tax invoices' },
+        { id: 'Paid', label: 'Paid Invoices', color: '#10b981', bgActive: '#10b981', textActive: '#ffffff', bgInactive: '#ecfdf5', textInactive: '#065f46', border: '#10b981', desc: 'Fully paid and closed tax invoices' }
+    ],
+    'Proforma Invoice': [
+        { id: 'Sent', label: 'Sent / Unpaid', color: '#ef4444', bgActive: '#ef4444', textActive: '#ffffff', bgInactive: '#fef2f2', textInactive: '#991b1b', border: '#f87171', desc: 'Issued proformas awaiting advance payment' },
+        { id: 'Draft', label: 'Draft Proformas', color: '#f59e0b', bgActive: '#f59e0b', textActive: '#ffffff', bgInactive: '#fffbeb', textInactive: '#b45309', border: '#fbbf24', desc: 'Unissued draft proforma invoices' },
+        { id: 'Paid', label: 'Paid Proformas', color: '#10b981', bgActive: '#10b981', textActive: '#ffffff', bgInactive: '#ecfdf5', textInactive: '#065f46', border: '#10b981', desc: 'Fully settled proforma invoices' }
+    ],
+    'Delivery Order': [
+        { id: 'Active', label: 'Active Transit', color: '#3b82f6', bgActive: '#3b82f6', textActive: '#ffffff', bgInactive: '#eff6ff', textInactive: '#1e40af', border: '#3b82f6', desc: 'Out for delivery or in transit' },
+        { id: 'Draft', label: 'Draft DOs', color: '#f59e0b', bgActive: '#f59e0b', textActive: '#ffffff', bgInactive: '#fffbeb', textInactive: '#b45309', border: '#fbbf24', desc: 'Draft delivery orders being prepared' },
+        { id: 'Confirmed', label: 'Signed & Completed', color: '#10b981', bgActive: '#10b981', textActive: '#ffffff', bgInactive: '#ecfdf5', textInactive: '#065f46', border: '#10b981', desc: 'Goods delivered and proof signed' }
+    ],
+    'Packing List': [
+        { id: 'Active', label: 'Active Shipping', color: '#3b82f6', bgActive: '#3b82f6', textActive: '#ffffff', bgInactive: '#eff6ff', textInactive: '#1e40af', border: '#3b82f6', desc: 'Shipment or packages being processed' },
+        { id: 'Draft', label: 'Draft Packing Lists', color: '#f59e0b', bgActive: '#f59e0b', textActive: '#ffffff', bgInactive: '#fffbeb', textInactive: '#b45309', border: '#fbbf24', desc: 'Unissued packing details' },
+        { id: 'Completed', label: 'Dispatched / Closed', color: '#10b981', bgActive: '#10b981', textActive: '#ffffff', bgInactive: '#ecfdf5', textInactive: '#065f46', border: '#10b981', desc: 'Fully packed and closed' }
+    ],
+    'Order Acknowledgment': [
+        { id: 'Sent', label: 'Sent Acknowledgments', color: '#3b82f6', bgActive: '#3b82f6', textActive: '#ffffff', bgInactive: '#eff6ff', textInactive: '#1e40af', border: '#3b82f6', desc: 'Awaiting shipping or job updates' },
+        { id: 'Draft', label: 'Service / Delivery Date', color: '#f59e0b', bgActive: '#f59e0b', textActive: '#ffffff', bgInactive: '#fffbeb', textInactive: '#b45309', border: '#fbbf24', desc: 'Highlighting delivery date or service date' },
+        { id: 'Confirmed', label: 'Converted to Job', color: '#10b981', bgActive: '#10b981', textActive: '#ffffff', bgInactive: '#ecfdf5', textInactive: '#065f46', border: '#10b981', desc: 'Active in job suite' }
+    ]
+};
 
 export default function WorkflowV2Board() {
     const { profile } = useAuth();
@@ -69,6 +107,7 @@ export default function WorkflowV2Board() {
     const [selectedPartnerId, setSelectedPartnerId] = useState('');
 
     const dropdownRef = useRef(null);
+    const [subTab, setSubTab] = useState('Ongoing'); // General sub-tab state (Ongoing, Completed, Archived, Sent, Draft, Paid, etc.)
 
     const location = useLocation();
     const searchParams = new URLSearchParams(location.search);
@@ -119,6 +158,15 @@ export default function WorkflowV2Board() {
             fetchDocs();
         }
     }, [profile, activeType]);
+
+    useEffect(() => {
+        const config = SUB_TABS_CONFIG[activeType];
+        if (config && config.length > 0) {
+            setSubTab(config[0].id);
+        } else {
+            setSubTab('All');
+        }
+    }, [activeType]);
 
     useEffect(() => {
         function handleClickOutside(event) {
@@ -183,12 +231,45 @@ export default function WorkflowV2Board() {
             if (activeType === 'Job') {
                 // Show everything that has is_job: true, but group by job number to avoid duplicates in the list
                 const jobs = data.filter(d => d.is_job === true && d.assigned_job_no);
+                
+                // Group documents by assigned_job_no to examine their invoice/payment state
+                const docsByJob = {};
+                data.forEach(d => {
+                    if (d.assigned_job_no) {
+                        if (!docsByJob[d.assigned_job_no]) docsByJob[d.assigned_job_no] = [];
+                        docsByJob[d.assigned_job_no].push(d);
+                    }
+                });
+
                 const jobGroups = {};
                 jobs.forEach(d => {
                     const jno = d.assigned_job_no;
                     // Prioritize 'Job' document type, or take the first one found (likely the QTN)
                     if (!jobGroups[jno] || d.document_type === 'Job') {
-                        jobGroups[jno] = d;
+                        // Find invoice and payment state
+                        const suiteDocs = docsByJob[jno] || [];
+                        const taxInvoice = suiteDocs.find(sd => sd.document_type === 'Tax Invoice');
+                        
+                        let tab = 'Ongoing';
+                        if (taxInvoice) {
+                            if (taxInvoice.status === 'Paid') {
+                                tab = 'Archived';
+                            } else if (taxInvoice.status === 'Draft') {
+                                tab = 'Ongoing';
+                            } else {
+                                tab = 'Completed';
+                            }
+                        } else {
+                            // Check if Job itself is marked as Completed/Closed/Inactive
+                            if (d.status === 'Completed' || d.status === 'Closed' || d.status === 'Inactive') {
+                                tab = 'Archived';
+                            }
+                        }
+
+                        jobGroups[jno] = {
+                            ...d,
+                            subTabState: tab
+                        };
                     }
                 });
                 filtered = Object.values(jobGroups).sort((a, b) => b.assigned_job_no.localeCompare(a.assigned_job_no));
@@ -225,13 +306,60 @@ export default function WorkflowV2Board() {
                 setSoaGroups(Object.values(groups));
             }
             
-            // Map the balance to all invoices
+            // Map the balance and assign subTabState to all documents
             filtered = filtered.map(doc => {
-                if (doc.document_type === 'Tax Invoice' || doc.document_type === 'Proforma Invoice') {
-                    const paid = paymentsMap[doc.id] || 0;
-                    return { ...doc, total_paid: paid, balance: Math.max(0, parseFloat(doc.total_amount || 0) - paid) };
+                let state = 'Draft';
+                
+                // Job Tab State Resolution
+                if (doc.document_type === 'Job') {
+                    state = doc.subTabState || 'Ongoing';
                 }
-                return doc;
+                // Quotation & Order Acknowledgment Tab State Resolution
+                else if (doc.document_type === 'Quotation' || doc.document_type === 'Order Acknowledgment') {
+                    if (doc.is_job === true || doc.status === 'Confirmed' || doc.status === 'Approved' || doc.status === 'Active') {
+                        state = 'Confirmed';
+                    } else if (doc.status === 'Sent' || doc.status === 'Waiting') {
+                        state = 'Sent';
+                    } else {
+                        state = 'Draft';
+                    }
+                }
+                // Invoice Tab State Resolution
+                else if (doc.document_type === 'Tax Invoice' || doc.document_type === 'Proforma Invoice') {
+                    const paid = paymentsMap[doc.id] || 0;
+                    const balance = Math.max(0, parseFloat(doc.total_amount || 0) - paid);
+                    
+                    if (doc.status === 'Paid' || balance <= 0.01) {
+                        state = 'Paid';
+                    } else if (doc.status === 'Draft') {
+                        state = 'Draft';
+                    } else {
+                        state = 'Sent';
+                    }
+                    return { ...doc, subTabState: state, total_paid: paid, balance };
+                }
+                // Delivery Order Tab State Resolution
+                else if (doc.document_type === 'Delivery Order') {
+                    if (doc.status === 'Confirmed' || doc.status === 'Completed' || doc.status === 'Received') {
+                        state = 'Confirmed';
+                    } else if (doc.status === 'Draft') {
+                        state = 'Draft';
+                    } else {
+                        state = 'Active';
+                    }
+                }
+                // Packing List Tab State Resolution
+                else if (doc.document_type === 'Packing List') {
+                    if (doc.status === 'Confirmed' || doc.status === 'Completed' || doc.status === 'Closed') {
+                        state = 'Completed';
+                    } else if (doc.status === 'Draft') {
+                        state = 'Draft';
+                    } else {
+                        state = 'Active';
+                    }
+                }
+
+                return { ...doc, subTabState: state };
             });
 
             if (isInvoiceView) {
@@ -533,15 +661,25 @@ export default function WorkflowV2Board() {
     const filteredDocs = documents.filter(doc => {
         let matchesType = activeType === 'All' || doc.document_type === activeType;
         
-        // Special logic for Job vs others
-        if (activeType === 'Job') {
-            matchesType = doc.document_type === 'Job';
-        }
-        // Special logic for Order Acknowledgment vs Quotation (Handling ORA-prefixed Quotations)
-        else if (activeType === 'Order Acknowledgment') {
-            matchesType = doc.document_type === 'Order Acknowledgment' || (doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA'));
-        } else if (activeType === 'Quotation') {
-            matchesType = doc.document_type === 'Quotation' && !(doc.document_no || '').startsWith('ORA');
+        // Special logic for sub-tabbed pages
+        const subTabConfig = SUB_TABS_CONFIG[activeType];
+        if (subTabConfig) {
+            if (activeType === 'Job') {
+                matchesType = doc.document_type === 'Job' && doc.subTabState === subTab;
+            } else if (activeType === 'Quotation') {
+                matchesType = doc.document_type === 'Quotation' && !(doc.document_no || '').startsWith('ORA') && doc.subTabState === subTab;
+            } else if (activeType === 'Order Acknowledgment') {
+                matchesType = (doc.document_type === 'Order Acknowledgment' || (doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA'))) && doc.subTabState === subTab;
+            } else {
+                matchesType = doc.document_type === activeType && doc.subTabState === subTab;
+            }
+        } else {
+            // Special logic for Order Acknowledgment vs Quotation (Handling ORA-prefixed Quotations)
+            if (activeType === 'Order Acknowledgment') {
+                matchesType = doc.document_type === 'Order Acknowledgment' || (doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA'));
+            } else if (activeType === 'Quotation') {
+                matchesType = doc.document_type === 'Quotation' && !(doc.document_no || '').startsWith('ORA');
+            }
         }
 
         const matchesSearch = (doc.document_no || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -671,7 +809,7 @@ export default function WorkflowV2Board() {
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '12px' }}>
-                    {activeType !== 'Payment Received' && (
+                    {activeType !== 'Payment Received' && activeType !== 'Job' && (
                         <button
                         className="btn"
                         style={{ 
@@ -840,8 +978,12 @@ export default function WorkflowV2Board() {
                         <button
                             key={type}
                             onClick={() => {
-                                navigate(`/workflows?type=${encodeURIComponent(type)}`);
-                                setActiveType(type);
+                                if (type === 'Statement of Account') {
+                                    navigate('/soa');
+                                } else {
+                                    navigate(`/workflows?type=${encodeURIComponent(type)}`);
+                                    setActiveType(type);
+                                }
                             }}
                             style={{
                                 padding: '8px 16px',
@@ -879,6 +1021,97 @@ export default function WorkflowV2Board() {
                 </div>
 
             <div className="glass-panel">
+                {SUB_TABS_CONFIG[activeType] && (
+                    <div style={{ 
+                        display: 'flex', 
+                        gap: '12px', 
+                        marginBottom: '20px', 
+                        borderBottom: '1px solid var(--border-color)', 
+                        paddingBottom: '16px' 
+                    }}>
+                        {SUB_TABS_CONFIG[activeType].map(tab => {
+                            const isActive = subTab === tab.id;
+                            // Count documents matching this state in current documents
+                            let count = 0;
+                            if (activeType === 'Job') {
+                                count = documents.filter(d => d.document_type === 'Job' && d.subTabState === tab.id).length;
+                            } else if (activeType === 'Quotation') {
+                                count = documents.filter(d => d.document_type === 'Quotation' && !(d.document_no || '').startsWith('ORA') && d.subTabState === tab.id).length;
+                            } else if (activeType === 'Order Acknowledgment') {
+                                count = documents.filter(d => (d.document_type === 'Order Acknowledgment' || (d.document_type === 'Quotation' && (d.document_no || '').startsWith('ORA'))) && d.subTabState === tab.id).length;
+                            } else {
+                                count = documents.filter(d => d.document_type === activeType && d.subTabState === tab.id).length;
+                            }
+
+                            return (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setSubTab(tab.id)}
+                                    style={{
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'flex-start',
+                                        gap: '6px',
+                                        padding: '14px 20px',
+                                        borderRadius: '12px',
+                                        border: `2px solid ${isActive ? tab.border : 'var(--border-color)'}`,
+                                        background: isActive ? tab.bgActive : tab.bgInactive,
+                                        color: isActive ? tab.textActive : tab.textInactive,
+                                        cursor: 'pointer',
+                                        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                                        flex: 1,
+                                        textAlign: 'left',
+                                        boxShadow: isActive ? '0 4px 12px rgba(0,0,0,0.08)' : 'none',
+                                        transform: isActive ? 'translateY(-2px)' : 'none'
+                                    }}
+                                    onMouseOver={e => {
+                                        if (!isActive) {
+                                            e.currentTarget.style.borderColor = tab.border;
+                                            e.currentTarget.style.transform = 'translateY(-1px)';
+                                            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)';
+                                        }
+                                    }}
+                                    onMouseOut={e => {
+                                        if (!isActive) {
+                                            e.currentTarget.style.borderColor = 'var(--border-color)';
+                                            e.currentTarget.style.transform = 'none';
+                                            e.currentTarget.style.boxShadow = 'none';
+                                        }
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+                                        <span style={{ 
+                                            width: '10px', 
+                                            height: '10px', 
+                                            borderRadius: '50%', 
+                                            background: isActive ? '#ffffff' : tab.color,
+                                            border: isActive ? 'none' : `1px solid ${tab.border}`
+                                        }} />
+                                        <span style={{ fontWeight: 800, fontSize: '1rem', letterSpacing: '0.3px' }}>{tab.label}</span>
+                                        <span style={{ 
+                                            marginLeft: 'auto', 
+                                            background: isActive ? '#ffffff' : tab.color, 
+                                            color: isActive ? tab.color : '#ffffff', 
+                                            padding: '3px 10px', 
+                                            borderRadius: '20px', 
+                                            fontSize: '0.8rem', 
+                                            fontWeight: 800,
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+                                        }}>
+                                            {count}
+                                        </span>
+                                    </div>
+                                    <span style={{ 
+                                        fontSize: '0.8rem', 
+                                        opacity: isActive ? 0.9 : 0.8,
+                                        fontWeight: 500
+                                    }}>{tab.desc}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '8px 16px', minWidth: '350px' }}>
@@ -935,7 +1168,7 @@ export default function WorkflowV2Board() {
                                 <tr>
                                     <th>Type</th>
                                     <th>Document No</th>
-                                    <th>Issue Date</th>
+                                    <th>{activeType === 'Order Acknowledgment' ? 'Delivery / Service Date' : 'Issue Date'}</th>
                                     <th>Customer</th>
                                     <th>Cust. Ref</th>
                                     <th>Vessel / Work Location</th>
@@ -1165,7 +1398,21 @@ export default function WorkflowV2Board() {
                                                 </span>
                                             </td>
                                             <td className="font-medium" style={{ color: 'var(--accent)' }}>{doc.document_no}</td>
-                                            <td>{formatDate(doc.issue_date)}</td>
+                                            <td>
+                                                {doc.document_type === 'Order Acknowledgment' || (doc.document_type === 'Quotation' && (doc.document_no || '').startsWith('ORA')) ? (
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                        <div style={{ fontWeight: 800, color: '#f59e0b', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <Calendar size={14} color="#f59e0b" />
+                                                            {formatDate(doc.expiry_date) !== '-' ? formatDate(doc.expiry_date) : 'TBD'}
+                                                        </div>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', opacity: 0.8 }}>
+                                                            Issued: {formatDate(doc.issue_date)}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    formatDate(doc.issue_date)
+                                                )}
+                                            </td>
                                             <td>
                                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                                                     <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{doc.partners?.name || 'Walk-in'}</div>

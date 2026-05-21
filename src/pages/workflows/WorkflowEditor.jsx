@@ -1202,6 +1202,26 @@ export default function WorkflowEditor() {
             }
             return next;
         });
+
+        if (name === 'currency') {
+            if (value === 'SGD') {
+                setFormData(prev => ({ ...prev, exchange_rate: 1.0 }));
+            } else {
+                (async () => {
+                    setIsFetchingRate(true);
+                    try {
+                        const data = await getExchangeRateWithGemini(value, 'SGD');
+                        if (data.rate) {
+                            setFormData(prev => ({ ...prev, exchange_rate: data.rate }));
+                        }
+                    } catch (err) {
+                        console.error('Failed to auto-fetch exchange rate:', err);
+                    } finally {
+                        setIsFetchingRate(false);
+                    }
+                })();
+            }
+        }
     };
 
     const handleEditorChange = (name, content) => {

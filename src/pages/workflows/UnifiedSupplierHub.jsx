@@ -146,6 +146,8 @@ export default function UnifiedSupplierHub() {
         }
     };
 
+    const filterData = (item) => {
+        const query = searchQuery.toLowerCase();
         const matchesPartner = !selectedPartnerId || 
             (activeTab === 'customer_enquiries' ? item.partner_id === selectedPartnerId :
              activeTab === 'rfq_floats' ? item.partner_id === selectedPartnerId :
@@ -169,6 +171,9 @@ export default function UnifiedSupplierHub() {
                     item.subject?.toLowerCase().includes(query));
         }
         return matchesPartner;
+    };
+
+    const filteredData = data.filter(filterData);
 
     const stripHtml = (html) => {
         if (!html) return '';
